@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/* ── Design tokens (semantic) ───────────────────────────────────────────
+   Dark Mode (OLED) — trust blue + profit green. Maps onto Tailwind palette
+   so components can also use slate/blue/emerald directly. */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: #0b1120;        /* app background (deeper than slate-900) */
+  --color-surface: #0f172a;   /* card base        (slate-900) */
+  --color-surface-2: #131d33; /* raised surface */
+  --color-line: rgba(255, 255, 255, 0.07);
+
+  --color-brand: #3b82f6;     /* secondary blue, used as interactive */
+  --color-brand-strong: #1e40af;
+  --color-growth: #10b981;    /* profit green */
+  --color-warn: #f59e0b;
+  --color-danger: #ef4444;
+}
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: #f8fafc;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum" 1; /* tabular figures for money columns */
+}
+
+/* tabular numerals helper */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* thin scrollbar */
+* { scrollbar-width: thin; scrollbar-color: #1e293b transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

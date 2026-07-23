@@ -1,0 +1,327 @@
+// Prisma schema — espelha db/ddl.sql.
+// Rodar `prisma db pull` se preferir gerar a partir do banco; aqui mantemos
+// a fonte declarativa para `prisma migrate` / `prisma generate`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum TipoMovimentacao {
+  aporte
+  despesa
+
+  @@map("tipo_movimentacao")
+}
+
+enum CartaoShareTipo {
+  linha
+  valor
+
+  @@map("cartao_share_tipo")
+}
+
+// ── Auth (RBAC → PBAC) ───────────────────────────────────────────────────────
+// Usuário tem N roles; role é um conjunto de permissions granulares (strings
+// "recurso:acao", com wildcard: "caixinha:*", "*"). A autorização efetiva é
+// PBAC: middleware checa permission, nunca role. Billing futuro (SaaS) pluga
+// em server/auth/entitlements.ts filtrando as permissions pelo plano — sem
+// mudança de schema aqui (no máximo ganha models Plan/Subscription próprios).
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  nome      String
+  senhaHash String   @map("senha_hash")
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  roles   UserRole[]
+  contato Contato?
+
+  @@map("users")
+}
+
+// Pessoa com quem se compartilha fatura de cartão. Existe sem login; quando ela
+// vira usuário do app, `userId` vincula (por email, lazy). Ver server/modules/cartao-share.
+model Contato {
+  id        String   @id @default(uuid()) @db.Uuid
+  nome      String
+  email     String?
+  userId    String?  @unique @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user   User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shares CartaoShare[]
+
+  @@index([email])
+  @@map("contatos")
+}
+
+// Atribui parte da fatura de um cartão a um contato. Não altera a fatura do dono —
+// camada informativa "quem me deve". Dois modos:
+//   linha: aponta uma DespesaFixa OU DespesaMes; percentual (100 = linha inteira) ou valor fixo.
+//   valor: valor avulso na fatura; mesRef null = recorrente todo mês, YYYY-MM = pontual.
+model CartaoShare {
+  id            String          @id @default(uuid()) @db.Uuid
+  cartaoId      String          @map("cartao_id") @db.Uuid
+  contatoId     String          @map("contato_id") @db.Uuid
+  tipo          CartaoShareTipo
+  descricao     String          @default("")
+  despesaFixaId String?         @map("despesa_fixa_id") @db.Uuid
+  despesaMesId  String?         @map("despesa_mes_id") @db.Uuid
+  percentual    Decimal?        @db.Decimal(5, 2)
+  valor         Decimal?        @db.Decimal(12, 2)
+  mesRef        String?         @map("mes_ref") @db.Char(7)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  cartao      Cartao       @relation(fields: [cartaoId], references: [id], onDelete: Cascade)
+  contato     Contato      @relation(fields: [contatoId], references: [id], onDelete: Cascade)
+  despesaFixa DespesaFixa? @relation(fields: [despesaFixaId], references: [id], onDelete: Cascade)
+  despesaMes  DespesaMes?  @relation(fields: [despesaMesId], references: [id], onDelete: Cascade)
+
+  @@index([cartaoId])
+  @@index([contatoId])
+  @@map("cartao_shares")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  nome        String   @unique
+  descricao   String?
+  permissions String[] @default([])
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String @map("user_id") @db.Uuid
+  roleId String @map("role_id") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Caixinha {
+  id           String   @id @default(uuid()) @db.Uuid
+  nome         String
+  tipo         String?  // discriminador server-controlled: "emergencia" na reserva provisionada; null nas demais
+  aporteMensal Decimal  @default(0) @map("aporte_mensal") @db.Decimal(12, 2)
+  taxaJuros    Decimal  @default(0) @map("taxa_juros") @db.Decimal(6, 2)
+  meta         Decimal? @db.Decimal(12, 2)
+  saldo        Decimal  @default(0) @db.Decimal(12, 2)
+  cor          String   @default("blue")
+  acumulaSobra Boolean  @default(false) @map("acumula_sobra")
+  ordem        Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  movimentacoes Movimentacao[]
+
+  @@map("caixinhas")
+}
+
+model Movimentacao {
+  id         String           @id @default(uuid()) @db.Uuid
+  caixinhaId String           @map("caixinha_id") @db.Uuid
+  tipo       TipoMovimentacao
+  valor      Decimal          @db.Decimal(12, 2)
+  descricao  String           @default("")
+  data       DateTime         @db.Date
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  caixinha Caixinha @relation(fields: [caixinhaId], references: [id], onDelete: Cascade)
+
+  @@index([caixinhaId])
+  @@index([data])
+  @@map("movimentacoes")
+}
+
+model Cartao {
+  id            String   @id @default(uuid()) @db.Uuid
+  nome          String
+  bandeira      String?
+  limite        Decimal  @default(0) @db.Decimal(12, 2)
+  diaFechamento Int?     @map("dia_fechamento")
+  diaVencimento Int      @default(1) @map("dia_vencimento")
+  cor           String   @default("violet")
+  ordem         Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  despesasFixas DespesaFixa[]
+  despesasMes   DespesaMes[]
+  shares        CartaoShare[]
+
+  @@map("cartoes")
+}
+
+model Categoria {
+  id        String   @id @default(uuid()) @db.Uuid
+  nome      String
+  cor       String   @default("blue")
+  ordem     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  despesasFixas DespesaFixa[]
+  despesasMes   DespesaMes[]
+
+  @@map("categorias")
+}
+
+model Espaco {
+  id          String   @id @default(uuid()) @db.Uuid
+  nome        String
+  tipo        String   @default("outro")
+  emoji       String   @default("📁")
+  rendaMensal Decimal  @default(0) @map("renda_mensal") @db.Decimal(12, 2)
+  moeda       String   @default("BRL")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  despesasFixas   DespesaFixa[]
+  despesasMes     DespesaMes[]
+  receitasMes     ReceitaMes[]
+  rendasMensais   RendaMensal[]
+  appSettings     AppSettings[]
+  pagamentosFixas PagamentoFixa[]
+  mesesOcultos    EspacoMesOculto[]
+
+  @@map("espacos")
+}
+
+// Marca que um espaço está oculto num mês específico (exclusão só daquele mês,
+// reversível). Dados do espaço seguem intactos nos outros meses.
+model EspacoMesOculto {
+  espacoId  String   @map("espaco_id") @db.Uuid
+  ym        String   @db.Char(7)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  espaco Espaco @relation(fields: [espacoId], references: [id], onDelete: Cascade)
+
+  @@id([espacoId, ym])
+  @@map("espaco_mes_oculto")
+}
+
+model AppSettings {
+  id             Boolean @id @default(true)
+  activeEspacoId String? @map("active_espaco_id") @db.Uuid
+
+  activeEspaco Espaco? @relation(fields: [activeEspacoId], references: [id], onDelete: SetNull)
+
+  @@map("app_settings")
+}
+
+model DespesaFixa {
+  id            String   @id @default(uuid()) @db.Uuid
+  espacoId      String   @map("espaco_id") @db.Uuid
+  descricao     String
+  valor         Decimal  @db.Decimal(12, 2)
+  diaVencimento Int      @default(1) @map("dia_vencimento")
+  ativa         Boolean  @default(true)
+  cartaoId      String?  @map("cartao_id") @db.Uuid
+  parcelado     Boolean  @default(false)
+  parcelaAtual  Int?     @map("parcela_atual")
+  totalParcelas Int?     @map("total_parcelas")
+  parcelaMesRef String?  @map("parcela_mes_ref") @db.Char(7)
+  categoriaId   String?  @map("categoria_id") @db.Uuid
+  nota          String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  espaco     Espaco          @relation(fields: [espacoId], references: [id], onDelete: Cascade)
+  cartao     Cartao?         @relation(fields: [cartaoId], references: [id], onDelete: SetNull)
+  categoria  Categoria?      @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  pagamentos PagamentoFixa[]
+  shares     CartaoShare[]
+
+  @@index([espacoId])
+  @@index([cartaoId])
+  @@index([categoriaId])
+  @@map("despesas_fixas")
+}
+
+// Marca quanto de uma despesa fixa foi pago num mês específico (fixa recorre todo mês).
+// valorPago acumula pagamentos parciais; quitada quando valorPago >= valor da fixa.
+model PagamentoFixa {
+  id            String   @id @default(uuid()) @db.Uuid
+  espacoId      String   @map("espaco_id") @db.Uuid
+  despesaFixaId String   @map("despesa_fixa_id") @db.Uuid
+  ym            String   @db.Char(7)
+  valorPago     Decimal  @default(0) @map("valor_pago") @db.Decimal(12, 2)
+  pagoEm        DateTime @default(now()) @map("pago_em") @db.Timestamptz(6)
+
+  espaco      Espaco      @relation(fields: [espacoId], references: [id], onDelete: Cascade)
+  despesaFixa DespesaFixa @relation(fields: [despesaFixaId], references: [id], onDelete: Cascade)
+
+  @@unique([despesaFixaId, ym])
+  @@index([espacoId, ym])
+  @@map("pagamentos_fixas")
+}
+
+model DespesaMes {
+  id          String   @id @default(uuid()) @db.Uuid
+  espacoId    String   @map("espaco_id") @db.Uuid
+  mes         String   @db.Char(7)
+  descricao   String
+  valor       Decimal  @db.Decimal(12, 2)
+  data        DateTime @db.Date
+  paga        Boolean  @default(false)
+  valorPago   Decimal  @default(0) @map("valor_pago") @db.Decimal(12, 2)
+  cartaoId    String?  @map("cartao_id") @db.Uuid
+  categoriaId String?  @map("categoria_id") @db.Uuid
+  nota        String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  espaco    Espaco        @relation(fields: [espacoId], references: [id], onDelete: Cascade)
+  cartao    Cartao?       @relation(fields: [cartaoId], references: [id], onDelete: SetNull)
+  categoria Categoria?    @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  shares    CartaoShare[]
+
+  @@index([espacoId, mes])
+  @@index([cartaoId])
+  @@index([categoriaId])
+  @@map("despesas_mes")
+}
+
+model ReceitaMes {
+  id        String   @id @default(uuid()) @db.Uuid
+  espacoId  String   @map("espaco_id") @db.Uuid
+  mes       String   @db.Char(7)
+  descricao String
+  valor     Decimal  @db.Decimal(12, 2)
+  data      DateTime @db.Date
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  espaco Espaco @relation(fields: [espacoId], references: [id], onDelete: Cascade)
+
+  @@index([espacoId, mes])
+  @@map("receitas_mes")
+}
+
+model RendaMensal {
+  id       String  @id @default(uuid()) @db.Uuid
+  espacoId String  @map("espaco_id") @db.Uuid
+  ym       String  @db.Char(7)
+  valor    Decimal @default(0) @db.Decimal(12, 2)
+
+  espaco Espaco @relation(fields: [espacoId], references: [id], onDelete: Cascade)
+
+  @@unique([espacoId, ym])
+  @@map("rendas_mensais")
+}
