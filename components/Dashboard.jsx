@@ -8,6 +8,7 @@ import { fmtMoney, fmtMoneyCompact, currentMonthKey, fmtMonthLabel, fmtMonthShor
 import { totalSaldo, totalAporteMensal, acento, orcamentoMes, fixaContaNoMes } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
+import * as api from "../services/financeApi";
 
 const GREY = "#64748b";
 
@@ -16,48 +17,75 @@ export default function Dashboard({ onOpenCaixinha }) {
   const { can } = useAuth();
   const {
     caixinhas, cartoes, categorias, despesasFixas, despesasMes, receitasMes,
-    rendasMensais, config, reloadCartoes,
+    rendasMensais, config, reloadCartoes, espacos, activeEspacoId,
   } = fin;
 
   const ym = currentMonthKey();
   // agregados de fatura do mês (caso o usuário caia aqui primeiro)
   useEffect(() => { reloadCartoes(); }, [reloadCartoes]);
 
+  // Espaço visualizado nos gráficos — independente da página ativa em Despesas.
+  // Default = espaço ativo; trocar busca o orçamento do escolhido sem mexer no global.
+  const [vizId, setVizId] = useState(activeEspacoId);
+  const [vizOrc, setVizOrc] = useState(null); // orçamento buscado p/ espaço != ativo
+  const [vizLoading, setVizLoading] = useState(false);
+
+  // ativo só chega depois do boot — adota como default assim que existir
+  useEffect(() => { if (vizId == null && activeEspacoId) setVizId(activeEspacoId); }, [activeEspacoId, vizId]);
+
+  useEffect(() => {
+    if (!vizId || vizId === activeEspacoId) { setVizOrc(null); return; }
+    let cancel = false;
+    setVizLoading(true);
+    api.getOrcamento(vizId)
+      .then((o) => { if (!cancel) setVizOrc(o); })
+      .finally(() => { if (!cancel) setVizLoading(false); });
+    return () => { cancel = true; };
+  }, [vizId, activeEspacoId]);
+
+  // Fonte do orçamento p/ os gráficos: contexto (espaço ativo, dados vivos) ou o buscado.
+  const usaAtivo = !vizId || vizId === activeEspacoId;
+  const dFixas = usaAtivo ? despesasFixas : (vizOrc?.despesasFixas || []);
+  const dMes = usaAtivo ? despesasMes : (vizOrc?.despesasMes || []);
+  const rMes = usaAtivo ? receitasMes : (vizOrc?.receitasMes || []);
+  const rendas = usaAtivo ? rendasMensais : (vizOrc?.rendasMensais || {});
+  const cfg = usaAtivo ? config : (vizOrc?.config || { rendaMensal: 0 });
+
   const catMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
   const orc = useMemo(
-    () => orcamentoMes({ rendasMensais, despesasMes, receitasMes, despesasFixas, config }, ym),
-    [rendasMensais, despesasMes, receitasMes, despesasFixas, config, ym]
+    () => orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, despesasFixas: dFixas, config: cfg }, ym),
+    [rendas, dMes, rMes, dFixas, cfg, ym]
   );
   // série dos últimos 6 meses (evolução + sobra)
   const serie = useMemo(() =>
     lastMonths(6, ym).map((m) => ({
       ym: m,
-      ...orcamentoMes({ rendasMensais, despesasMes, receitasMes, despesasFixas, config }, m),
+      ...orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, despesasFixas: dFixas, config: cfg }, m),
     })),
-    [rendasMensais, despesasMes, receitasMes, despesasFixas, config, ym]
+    [rendas, dMes, rMes, dFixas, cfg, ym]
   );
 
   // despesas do mês por categoria (fixas que caem + avulsas)
   const porCategoria = useMemo(() => {
     const acc = {};
     const add = (id, v) => { const k = id || "__none"; acc[k] = (acc[k] || 0) + v; };
-    despesasFixas.filter((d) => fixaContaNoMes(d, ym)).forEach((d) => add(d.categoriaId, d.valor));
-    despesasMes.filter((d) => d.mes === ym).forEach((d) => add(d.categoriaId, d.valor));
+    dFixas.filter((d) => fixaContaNoMes(d, ym)).forEach((d) => add(d.categoriaId, d.valor));
+    dMes.filter((d) => d.mes === ym).forEach((d) => add(d.categoriaId, d.valor));
     return Object.entries(acc)
       .map(([id, value]) => {
         const c = id !== "__none" ? catMap[id] : null;
         return { label: c?.nome || "Sem categoria", value, color: c ? acento(c.cor).dot : GREY };
       })
       .sort((a, b) => b.value - a.value);
-  }, [despesasFixas, despesasMes, catMap, ym]);
+  }, [dFixas, dMes, catMap, ym]);
 
   const topFixas = useMemo(() =>
-    despesasFixas
+    dFixas
       .filter((d) => fixaContaNoMes(d, ym))
       .map((d) => ({ label: d.descricao, value: d.valor, color: d.categoriaId && catMap[d.categoriaId] ? acento(catMap[d.categoriaId].cor).dot : GREY }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6),
-    [despesasFixas, catMap, ym]
+    [dFixas, catMap, ym]
   );
 
   const cart = useMemo(() => {
@@ -183,9 +211,24 @@ export default function Dashboard({ onOpenCaixinha }) {
         </div>
       </div>
 
-      {/* Gráficos do orçamento (espaço ativo) */}
+      {/* Gráficos do orçamento — espaço escolhido no select (independe da página ativa em Despesas) */}
       {can("orcamento:view") && (
-        <>
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-white">Gráficos do orçamento</h3>
+            {espacos.length > 0 && (
+              <label className="flex items-center gap-2 text-sm text-slate-400">
+                <span className="whitespace-nowrap">Visualizar página</span>
+                <select value={vizId ?? ""} onChange={(e) => setVizId(e.target.value)}
+                  className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-1.5 text-sm text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                  {espacos.map((e) => (
+                    <option key={e.id} value={e.id}>{e.emoji ? `${e.emoji} ` : ""}{e.nome}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          <div className={`space-y-6 transition-opacity ${vizLoading ? "pointer-events-none opacity-40" : "opacity-100"}`}>
           {/* Evolução mensal */}
           <Card className="p-5">
             <div className="mb-4 flex items-center justify-between">
@@ -256,7 +299,8 @@ export default function Dashboard({ onOpenCaixinha }) {
               )}
             </Card>
           </div>
-        </>
+          </div>
+        </div>
       )}
 
       <AporteModal open={aporte} onClose={() => setAporte(false)} caixinhas={ordered} />
