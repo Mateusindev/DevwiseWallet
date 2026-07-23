@@ -185,27 +185,29 @@ export default function DespesasFixas() {
             ) : (
               <ul className="divide-y divide-[var(--color-line)]">
                 {receitasDoMesList.map((r) => (
-                  <li key={r.id} className="group flex items-center gap-3 px-5 py-3.5">
-                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                  <li key={r.id} className="group flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:px-5">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-400">
                       <ArrowDownLeft size={16} />
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-slate-200">{r.descricao}</p>
                       {r.data && <p className="text-xs text-slate-500">{r.data.split("-").reverse().join("/")}</p>}
                     </div>
-                    <span className="tnum font-semibold text-emerald-400">+{fmtMoney(r.valor)}</span>
-                    {canOrc && (
-                      <>
-                        <button onClick={() => setEditReceita(r)} aria-label={`Editar ${r.descricao}`}
-                          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
-                          <Pencil size={15} />
-                        </button>
-                        <button onClick={() => setDelReceita(r)} aria-label={`Remover ${r.descricao}`}
-                          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
-                          <Trash2 size={15} />
-                        </button>
-                      </>
-                    )}
+                    <div className="flex w-full items-center justify-end gap-1 sm:w-auto sm:gap-2">
+                      <span className="tnum font-semibold text-emerald-400">+{fmtMoney(r.valor)}</span>
+                      {canOrc && (
+                        <>
+                          <button onClick={() => setEditReceita(r)} aria-label={`Editar ${r.descricao}`}
+                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                            <Pencil size={15} />
+                          </button>
+                          <button onClick={() => setDelReceita(r)} aria-label={`Remover ${r.descricao}`}
+                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -237,8 +239,8 @@ export default function DespesasFixas() {
                   const parcial = !pago && (d.valorPago || 0) > 0;
                   const falta = Math.max(d.valor - (d.valorPago || 0), 0);
                   return (
-                  <li key={d.id} className={`group flex items-center gap-3 px-5 py-3.5 transition-colors ${pago ? "bg-emerald-500/[0.06]" : parcial ? "bg-amber-500/[0.06]" : ""}`}>
-                    <span className={`grid h-9 w-9 place-items-center rounded-lg transition-colors ${pago ? "bg-emerald-500/15 text-emerald-400" : parcial ? "bg-amber-500/15 text-amber-400" : "bg-rose-500/15 text-rose-400"}`}>
+                  <li key={d.id} className={`group flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 transition-colors sm:px-5 ${pago ? "bg-emerald-500/[0.06]" : parcial ? "bg-amber-500/[0.06]" : ""}`}>
+                    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors ${pago ? "bg-emerald-500/15 text-emerald-400" : parcial ? "bg-amber-500/15 text-amber-400" : "bg-rose-500/15 text-rose-400"}`}>
                       {pago ? <Check size={16} /> : <ArrowUpRight size={16} />}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -267,20 +269,22 @@ export default function DespesasFixas() {
                         <CartaoBadge d={d} cartoesMap={cartoesMap} ym={ym} inline />
                       </div>
                     </div>
-                    <span className={`tnum font-semibold ${pago ? "text-emerald-400" : "text-slate-200"}`}>{fmtMoney(d.valor)}</span>
-                    {canOrc && (
-                      <>
-                        <PagarControl valor={d.valor} valorPago={d.valorPago || 0} onSet={(v) => setPagaMes(d.id, v)} />
-                        <button onClick={() => setEditMes(d)} aria-label={`Editar ${d.descricao}`}
-                          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
-                          <Pencil size={15} />
-                        </button>
-                        <button onClick={() => setDelMes(d)} aria-label={`Remover ${d.descricao}`}
-                          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
-                          <Trash2 size={15} />
-                        </button>
-                      </>
-                    )}
+                    <div className="flex w-full items-center justify-end gap-1 sm:w-auto sm:gap-2">
+                      <span className={`tnum font-semibold ${pago ? "text-emerald-400" : "text-slate-200"}`}>{fmtMoney(d.valor)}</span>
+                      {canOrc && (
+                        <>
+                          <PagarControl valor={d.valor} valorPago={d.valorPago || 0} onSet={(v) => setPagaMes(d.id, v)} />
+                          <button onClick={() => setEditMes(d)} aria-label={`Editar ${d.descricao}`}
+                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                            <Pencil size={15} />
+                          </button>
+                          <button onClick={() => setDelMes(d)} aria-label={`Remover ${d.descricao}`}
+                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </li>
                   );
                 })}
@@ -333,8 +337,8 @@ export default function DespesasFixas() {
                   const falta = fixaFaltaPagar(pagamentosFixas, d, ym);
                   return (
                     <li key={d.id}
-                      className={`flex items-center gap-3 px-5 py-3.5 transition-colors ${!d.ativa ? "opacity-50" : ""} ${paga ? "bg-emerald-500/[0.06]" : parcial ? "bg-amber-500/[0.06]" : ""}`}>
-                      <span className={`grid h-9 w-9 place-items-center rounded-lg transition-colors ${paga ? "bg-emerald-500/15 text-emerald-400" : parcial ? "bg-amber-500/15 text-amber-400" : "bg-white/5 text-slate-400"}`}>
+                      className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 transition-colors sm:px-5 ${!d.ativa ? "opacity-50" : ""} ${paga ? "bg-emerald-500/[0.06]" : parcial ? "bg-amber-500/[0.06]" : ""}`}>
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors ${paga ? "bg-emerald-500/15 text-emerald-400" : parcial ? "bg-amber-500/15 text-amber-400" : "bg-white/5 text-slate-400"}`}>
                         {paga ? <Check size={16} /> : <CalendarClock size={16} />}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -363,24 +367,26 @@ export default function DespesasFixas() {
                           <CartaoBadge d={d} cartoesMap={cartoesMap} ym={ym} inline />
                         </div>
                       </div>
-                      <span className={`tnum font-semibold ${paga ? "text-emerald-400" : "text-slate-200"}`}>{fmtMoney(d.valor)}</span>
-                      {canOrc && (
-                        <>
-                          {conta && <PagarControl valor={d.valor} valorPago={valorPago} onSet={(v) => setPagamentoFixa(d.id, ym, v)} />}
-                          <label className="flex cursor-pointer items-center" title={d.ativa ? "Ativa" : "Pausada"}>
-                            <input type="checkbox" checked={d.ativa} onChange={() => toggleDespesaFixa(d.id)}
-                              className="h-4 w-4 rounded border-white/20 bg-transparent accent-blue-500 cursor-pointer" />
-                          </label>
-                          <button onClick={() => setEditFixa(d)} aria-label={`Editar ${d.descricao}`}
-                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
-                            <Pencil size={16} />
-                          </button>
-                          <button onClick={() => setDelFixa(d)} aria-label={`Remover ${d.descricao}`}
-                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
-                            <Trash2 size={16} />
-                          </button>
-                        </>
-                      )}
+                      <div className="flex w-full items-center justify-end gap-1 sm:w-auto sm:gap-2">
+                        <span className={`tnum font-semibold ${paga ? "text-emerald-400" : "text-slate-200"}`}>{fmtMoney(d.valor)}</span>
+                        {canOrc && (
+                          <>
+                            {conta && <PagarControl valor={d.valor} valorPago={valorPago} onSet={(v) => setPagamentoFixa(d.id, ym, v)} />}
+                            <label className="flex cursor-pointer items-center" title={d.ativa ? "Ativa" : "Pausada"}>
+                              <input type="checkbox" checked={d.ativa} onChange={() => toggleDespesaFixa(d.id)}
+                                className="h-4 w-4 rounded border-white/20 bg-transparent accent-blue-500 cursor-pointer" />
+                            </label>
+                            <button onClick={() => setEditFixa(d)} aria-label={`Editar ${d.descricao}`}
+                              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                              <Pencil size={16} />
+                            </button>
+                            <button onClick={() => setDelFixa(d)} aria-label={`Remover ${d.descricao}`}
+                              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </li>
                   );
                 })}
