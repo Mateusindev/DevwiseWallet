@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "bun run test:unit && bun run test:int",
-    "test:unit": "bun test server",
+    "test:unit": "bun scripts/test-unit.ts",
     "test:int": "bun test tests/integration",
     "test:db:setup": "DATABASE_URL=\"${TEST_DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/cofre_test}\" DIRECT_URL=\"${TEST_DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/cofre_test}\" prisma db push --skip-generate --accept-data-loss",
     "typecheck": "tsc --noEmit",
