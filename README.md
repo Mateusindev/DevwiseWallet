@@ -18,10 +18,9 @@ Substitui os projetos antigos `api/` (Fastify) e `web/` (Vite) — legado, não 
 # 1. banco (compose na raiz do repo Wallet/, um nível acima — Postgres 16 na porta 5434)
 docker compose up -d
 
-# 2. env: criar .env na raiz deste projeto
-#    DATABASE_URL=postgresql://cofre:cofre@localhost:5434/cofre
-#    DIRECT_URL=postgresql://cofre:cofre@localhost:5434/cofre
-#    AUTH_SECRET=<segredo longo>   # sem ele o dev usa fallback inseguro; produção recusa subir
+# 2. env — preencher AUTH_SECRET (sem ele o dev usa fallback inseguro; produção recusa subir)
+cp .env.example .env
+openssl rand -base64 48        # cola o resultado em AUTH_SECRET
 
 # 3. deps + prisma client
 bun install
