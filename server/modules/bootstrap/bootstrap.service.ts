@@ -4,9 +4,9 @@ import { espacoService } from "../espaco/espaco.service";
 import { cartaoService } from "../cartao/cartao.service";
 import { categoriaService } from "../categoria/categoria.service";
 
-// GET /state — estado inicial completo do usuário (espelha getBootstrap() do mock).
+// GET /state — estado inicial completo do usuário logado.
 export async function getState(userId: string) {
-  // Garante espaço + categorias padrão do usuário numa base vazia antes de montar o estado.
+  // Garante espaço + categorias padrão pra quem ainda não tem nada (conta nova).
   // Caixinhas começam vazias — o usuário cria (inclui a reserva de emergência).
   await espacoService.ensureDefaults(userId);
   await categoriaService.ensureDefaults(userId);

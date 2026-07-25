@@ -8,7 +8,9 @@ const view = requirePermission("espaco:view");
 const manage = requirePermission("espaco:manage");
 
 export const espacoRoutes = new Hono<AuthEnv>()
-  .get("/despesas/espacos", view, async (c) => c.json(await espacoService.listWithActive(c.get("user").id)))
+  .get("/despesas/espacos", view, async (c) =>
+    c.json(await espacoService.listWithActive(c.get("user").id))
+  )
   .put("/despesas/espacos/active", manage, zValidator("json", setActiveSchema), async (c) =>
     c.json(await espacoService.setActive(c.get("user").id, c.req.valid("json").id))
   )

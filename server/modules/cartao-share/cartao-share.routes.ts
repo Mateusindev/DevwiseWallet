@@ -11,7 +11,7 @@ import {
 } from "./cartao-share.dto";
 
 export const cartaoShareRoutes = new Hono<AuthEnv>()
-  // ── Contatos (dono) ─────────────────────────────────────────────────────────
+  // ── Contatos (agenda do dono logado) ────────────────────────────────────────
   .get("/contatos", requirePermission("cartao:share"), async (c) =>
     c.json(await cartaoShareService.listContatos(c.get("user").id))
   )
@@ -19,13 +19,21 @@ export const cartaoShareRoutes = new Hono<AuthEnv>()
     "/contatos",
     requirePermission("cartao:share"),
     zValidator("json", createContatoSchema),
-    async (c) => c.json(await cartaoShareService.createContato(c.get("user").id, c.req.valid("json")), 201)
+    async (c) =>
+      c.json(await cartaoShareService.createContato(c.get("user").id, c.req.valid("json")), 201)
   )
   .patch(
     "/contatos/:id",
     requirePermission("cartao:share"),
     zValidator("json", updateContatoSchema),
-    async (c) => c.json(await cartaoShareService.updateContato(c.get("user").id, c.req.param("id"), c.req.valid("json")))
+    async (c) =>
+      c.json(
+        await cartaoShareService.updateContato(
+          c.get("user").id,
+          c.req.param("id"),
+          c.req.valid("json")
+        )
+      )
   )
   .delete("/contatos/:id", requirePermission("cartao:share"), async (c) =>
     c.json(await cartaoShareService.removeContato(c.get("user").id, c.req.param("id")))
@@ -35,19 +43,33 @@ export const cartaoShareRoutes = new Hono<AuthEnv>()
     "/cartoes/:id/shares",
     requirePermission("cartao:share"),
     zValidator("query", shareQuerySchema),
-    async (c) => c.json(await cartaoShareService.listByCartao(c.get("user").id, c.req.param("id"), c.req.valid("query").ym))
+    async (c) =>
+      c.json(
+        await cartaoShareService.listByCartao(
+          c.get("user").id,
+          c.req.param("id"),
+          c.req.valid("query").ym
+        )
+      )
   )
   .post(
     "/cartoes/:id/shares",
     requirePermission("cartao:share"),
     zValidator("json", createShareSchema),
-    async (c) => c.json(await cartaoShareService.createShare(c.get("user").id, c.req.param("id"), c.req.valid("json")), 201)
+    async (c) =>
+      c.json(
+        await cartaoShareService.createShare(c.get("user").id, c.req.param("id"), c.req.valid("json")),
+        201
+      )
   )
   .patch(
     "/shares/:id",
     requirePermission("cartao:share"),
     zValidator("json", updateShareSchema),
-    async (c) => c.json(await cartaoShareService.updateShare(c.get("user").id, c.req.param("id"), c.req.valid("json")))
+    async (c) =>
+      c.json(
+        await cartaoShareService.updateShare(c.get("user").id, c.req.param("id"), c.req.valid("json"))
+      )
   )
   .delete("/shares/:id", requirePermission("cartao:share"), async (c) =>
     c.json(await cartaoShareService.removeShare(c.get("user").id, c.req.param("id")))

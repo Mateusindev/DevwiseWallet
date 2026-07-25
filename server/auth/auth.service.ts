@@ -52,6 +52,7 @@ export const authService = {
   },
 
   // Auto-cadastro pela tela de login: cria usuário com a role padrão "membro".
+  // Contatos com o mesmo email são vinculados lazy no 1º /me/compartilhamentos.
   async register(nome: string, email: string, senha: string): Promise<AuthUser> {
     const em = email.toLowerCase().trim();
     if (await authRepository.findByEmail(em)) throw new AppError("Email já cadastrado", 409);

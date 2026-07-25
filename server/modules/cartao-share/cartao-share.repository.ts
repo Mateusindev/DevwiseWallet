@@ -3,12 +3,21 @@ import { prisma } from "@/server/lib/prisma";
 
 const withLinha = { include: { despesaFixa: true, despesaMes: true } } as const;
 
+// Visão da pessoa compartilhada: precisa do cartão e de quem é o dono dele.
+const withCartaoEDono = {
+  include: {
+    despesaFixa: true,
+    despesaMes: true,
+    cartao: { include: { user: { select: { id: true, nome: true } } } },
+  },
+} as const;
+
 export const cartaoShareRepository = {
-  // ── Contatos (escopados pelo dono da agenda: ownerId) ───────────────────────
+  // ── Contatos (agenda do dono) ──────────────────────────────────────────────
   contatoList(ownerId: string) {
     return prisma.contato.findMany({ where: { ownerId }, orderBy: { nome: "asc" } });
   },
-  contatoFindById(ownerId: string, id: string) {
+  contatoFindById(id: string, ownerId: string) {
     return prisma.contato.findFirst({ where: { id, ownerId } });
   },
   contatoCreate(data: Prisma.ContatoUncheckedCreateInput) {
@@ -20,11 +29,11 @@ export const cartaoShareRepository = {
   contatoDelete(id: string) {
     return prisma.contato.delete({ where: { id } });
   },
-  // Contatos que apontam pro usuário logado (pode haver 1 por dono que o convidou).
+  // Contatos que JÁ apontam pra este usuário — um por dono que o cadastrou.
   contatosByUserId(userId: string) {
     return prisma.contato.findMany({ where: { userId } });
   },
-  // Contatos com este email ainda sem vínculo (candidatos a vínculo lazy).
+  // Contatos ainda sem vínculo com este email (candidatos a vínculo lazy).
   contatosUnlinkedByEmail(email: string) {
     return prisma.contato.findMany({ where: { email, userId: null } });
   },
@@ -33,13 +42,18 @@ export const cartaoShareRepository = {
     return prisma.user.findUnique({ where: { email } });
   },
 
-  // Despesa (fixa/mês) que pertence a um espaço do usuário — impede compartilhar
-  // linha de outra pessoa.
-  despesaFixaOwned(userId: string, id: string) {
-    return prisma.despesaFixa.findFirst({ where: { id, espaco: { userId } }, select: { id: true } });
+  // Linhas compartilháveis: só as do próprio dono (evita apontar despesa alheia).
+  despesaFixaExists(id: string, ownerId: string) {
+    return prisma.despesaFixa.findFirst({
+      where: { id, espaco: { userId: ownerId } },
+      select: { id: true },
+    });
   },
-  despesaMesOwned(userId: string, id: string) {
-    return prisma.despesaMes.findFirst({ where: { id, espaco: { userId } }, select: { id: true } });
+  despesaMesExists(id: string, ownerId: string) {
+    return prisma.despesaMes.findFirst({
+      where: { id, espaco: { userId: ownerId } },
+      select: { id: true },
+    });
   },
 
   // ── Shares ──────────────────────────────────────────────────────────────
@@ -49,15 +63,12 @@ export const cartaoShareRepository = {
   sharesByContatoIds(contatoIds: string[]) {
     return prisma.cartaoShare.findMany({
       where: { contatoId: { in: contatoIds } },
-      include: { despesaFixa: true, despesaMes: true, cartao: true },
+      ...withCartaoEDono,
     });
   },
-  // Inclui o cartão pra checar o dono (cartao.userId) antes de editar/remover.
-  shareFindById(id: string) {
-    return prisma.cartaoShare.findUnique({
-      where: { id },
-      include: { despesaFixa: true, despesaMes: true, cartao: true },
-    });
+  // Share do dono = share num cartão dele.
+  shareFindById(id: string, ownerId: string) {
+    return prisma.cartaoShare.findFirst({ where: { id, cartao: { userId: ownerId } }, ...withLinha });
   },
   shareCreate(data: Prisma.CartaoShareUncheckedCreateInput) {
     return prisma.cartaoShare.create({ data, ...withLinha });

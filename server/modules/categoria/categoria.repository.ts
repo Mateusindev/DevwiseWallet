@@ -6,7 +6,7 @@ export const categoriaRepository = {
     return prisma.categoria.findMany({ where: { userId }, orderBy: { ordem: "asc" } });
   },
 
-  findById(userId: string, id: string) {
+  findById(id: string, userId: string) {
     return prisma.categoria.findFirst({ where: { id, userId } });
   },
 
@@ -18,7 +18,7 @@ export const categoriaRepository = {
     return prisma.categoria.create({ data });
   },
 
-  update(id: string, data: Prisma.CategoriaUpdateInput) {
+  update(id: string, data: Prisma.CategoriaUncheckedUpdateInput) {
     return prisma.categoria.update({ where: { id }, data });
   },
 

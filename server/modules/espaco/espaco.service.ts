@@ -54,7 +54,8 @@ export function orcamentoView(esp: EspacoComOrcamento) {
 }
 
 export const espacoService = {
-  // Espaço padrão provisionado quando o usuário ainda não tem nenhum: só "Meu" (pessoal). Idempotente.
+  // Espaço padrão provisionado quando o usuário não tem nenhum: só "Meu"
+  // (pessoal). Idempotente.
   async ensureDefaults(userId: string) {
     if ((await espacoRepository.count(userId)) > 0) return;
     const esp = await espacoRepository.create({
@@ -68,8 +69,9 @@ export const espacoService = {
     await espacoRepository.setActiveEspacoId(userId, esp.id);
   },
 
+  // 404 (não 403) quando o espaço é de outro dono — não vaza existência.
   async getOrThrow(userId: string, id: string): Promise<Espaco> {
-    const esp = await espacoRepository.findById(userId, id);
+    const esp = await espacoRepository.findById(id, userId);
     if (!esp) throw new NotFoundError(`Espaço de despesa não encontrado: ${id}`);
     return esp;
   },
@@ -113,7 +115,7 @@ export const espacoService = {
   },
 
   async getOrcamento(userId: string, espacoId: string) {
-    const esp = await espacoRepository.findWithOrcamento(userId, espacoId);
+    const esp = await espacoRepository.findWithOrcamento(espacoId, userId);
     if (!esp) throw new NotFoundError(`Espaço de despesa não encontrado: ${espacoId}`);
     return orcamentoView(esp);
   },
@@ -133,7 +135,7 @@ export const espacoService = {
       rendaMensal: round(dto.rendaMensal ?? 0),
       moeda: dto.moeda ?? "BRL",
     });
-    // primeiro espaço do usuário vira ativo automaticamente
+    // primeiro espaço vira ativo automaticamente
     if ((await espacoRepository.getActiveEspacoId(userId)) == null) {
       await espacoRepository.setActiveEspacoId(userId, esp.id);
     }

@@ -18,7 +18,8 @@ export const caixinhaRoutes = new Hono<AuthEnv>()
     "/caixinhas/:id",
     requirePermission("caixinha:manage"),
     zValidator("json", updateCaixinhaSchema),
-    async (c) => c.json(await caixinhaService.update(c.get("user").id, c.req.param("id"), c.req.valid("json")))
+    async (c) =>
+      c.json(await caixinhaService.update(c.get("user").id, c.req.param("id"), c.req.valid("json")))
   )
   .delete("/caixinhas/:id", requirePermission("caixinha:manage"), async (c) =>
     c.json(await caixinhaService.remove(c.get("user").id, c.req.param("id")))

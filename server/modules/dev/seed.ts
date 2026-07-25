@@ -1,29 +1,26 @@
 import { prisma } from "@/server/lib/prisma";
 import { parseDate } from "@/server/lib/serialize";
-import { AppError } from "@/server/lib/errors";
 
-// Seed espelha db/ddl.sql — usado pelo reset ("Restaurar dados de exemplo").
-// Apaga tudo e recria o estado de exemplo numa transação, atribuído ao 1º usuário.
-export async function reseed() {
+// Seed de exemplo — usado pelo reset ("Restaurar dados de exemplo").
+// Apaga e recria SÓ os dados do usuário informado, numa transação.
+export async function reseed(userId: string) {
   await prisma.$transaction(async (tx) => {
-    // dono dos dados de exemplo: primeiro usuário cadastrado (dado é per-user)
-    const user = await tx.user.findFirst({ orderBy: { createdAt: "asc" } });
-    if (!user) throw new AppError("Nenhum usuário cadastrado — rode o seed:auth antes.");
-    const userId = user.id;
-
+    const doUsuario = { espaco: { userId } };
     // ordem importa por causa das FKs (cascata cobre, mas explícito é seguro)
-    await tx.appSettings.deleteMany();
-    await tx.espacoMesOculto.deleteMany();
-    await tx.movimentacao.deleteMany();
-    await tx.rendaMensal.deleteMany();
-    await tx.pagamentoFixa.deleteMany();
-    await tx.despesaFixa.deleteMany();
-    await tx.despesaMes.deleteMany();
-    await tx.receitaMes.deleteMany();
-    await tx.caixinha.deleteMany();
-    await tx.espaco.deleteMany();
-    await tx.cartao.deleteMany();
-    await tx.categoria.deleteMany();
+    await tx.appSettings.deleteMany({ where: { userId } });
+    await tx.espacoMesOculto.deleteMany({ where: doUsuario });
+    await tx.movimentacao.deleteMany({ where: { caixinha: { userId } } });
+    await tx.rendaMensal.deleteMany({ where: doUsuario });
+    await tx.pagamentoFixa.deleteMany({ where: doUsuario });
+    await tx.cartaoShare.deleteMany({ where: { cartao: { userId } } });
+    await tx.despesaFixa.deleteMany({ where: doUsuario });
+    await tx.despesaMes.deleteMany({ where: doUsuario });
+    await tx.receitaMes.deleteMany({ where: doUsuario });
+    await tx.caixinha.deleteMany({ where: { userId } });
+    await tx.espaco.deleteMany({ where: { userId } });
+    await tx.cartao.deleteMany({ where: { userId } });
+    await tx.categoria.deleteMany({ where: { userId } });
+    await tx.contato.deleteMany({ where: { ownerId: userId } });
 
     // ── Caixinhas ────────────────────────────────────────────────────────────
     const emerg = await tx.caixinha.create({
@@ -57,7 +54,7 @@ export async function reseed() {
 
     await tx.appSettings.create({ data: { userId, activeEspacoId: nosso.id } });
 
-    // ── Cartões de crédito (do usuário) ─────────────────────────────────────
+    // ── Cartões de crédito (globais dentro da conta) ────────────────────────
     const nubank = await tx.cartao.create({
       data: { userId, nome: "Nubank", bandeira: "Master", limite: 8000, diaFechamento: 3, diaVencimento: 10, cor: "violet", ordem: 1 },
     });
@@ -65,7 +62,7 @@ export async function reseed() {
       data: { userId, nome: "Inter", bandeira: "Visa", limite: 5000, diaFechamento: 28, diaVencimento: 5, cor: "amber", ordem: 2 },
     });
 
-    // ── Categorias de despesa (do usuário) ──────────────────────────────────
+    // ── Categorias de despesa (globais dentro da conta) ─────────────────────
     const moradia = await tx.categoria.create({ data: { userId, nome: "Moradia", cor: "blue", ordem: 1 } });
     const aliment = await tx.categoria.create({ data: { userId, nome: "Alimentação", cor: "emerald", ordem: 2 } });
     const lazer = await tx.categoria.create({ data: { userId, nome: "Lazer", cor: "violet", ordem: 3 } });
@@ -118,6 +115,22 @@ export async function reseed() {
         { espacoId: meu.id, ym: "2026-04", valor: 1200 },
         { espacoId: meu.id, ym: "2026-05", valor: 1200 },
         { espacoId: meu.id, ym: "2026-06", valor: 1200 },
+      ],
+    });
+
+    // ── Fatura compartilhada ────────────────────────────────────────────────
+    // Maria divide metade do streaming e paga um valor fixo todo mês no Nubank.
+    const maria = await tx.contato.create({
+      data: { ownerId: userId, nome: "Maria", email: "maria@exemplo.com" },
+    });
+    const streaming = await tx.despesaFixa.findFirstOrThrow({
+      where: { espacoId: meu.id, descricao: "Streaming" },
+      select: { id: true },
+    });
+    await tx.cartaoShare.createMany({
+      data: [
+        { cartaoId: nubank.id, contatoId: maria.id, tipo: "linha", despesaFixaId: streaming.id, percentual: 50, descricao: "Metade do streaming" },
+        { cartaoId: nubank.id, contatoId: maria.id, tipo: "valor", valor: 80, mesRef: null, descricao: "Combinado mensal" },
       ],
     });
   }, { timeout: 30_000 }); // seed grande; evita P2028 em cold-start (CLI)

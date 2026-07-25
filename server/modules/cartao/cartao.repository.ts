@@ -6,7 +6,7 @@ export const cartaoRepository = {
     return prisma.cartao.findMany({ where: { userId }, orderBy: { ordem: "asc" } });
   },
 
-  findById(userId: string, id: string) {
+  findById(id: string, userId: string) {
     return prisma.cartao.findFirst({ where: { id, userId } });
   },
 
@@ -18,7 +18,7 @@ export const cartaoRepository = {
     return prisma.cartao.create({ data });
   },
 
-  update(id: string, data: Prisma.CartaoUpdateInput) {
+  update(id: string, data: Prisma.CartaoUncheckedUpdateInput) {
     return prisma.cartao.update({ where: { id }, data });
   },
 
@@ -26,7 +26,8 @@ export const cartaoRepository = {
     return prisma.cartao.delete({ where: { id } });
   },
 
-  // Despesas vinculadas a um cartão (cruza TODOS os espaços — cartão é global).
+  // Despesas vinculadas a um cartão (cruza TODOS os espaços do dono — cartão é
+  // global dentro da conta). O cartaoId chega já validado como do usuário.
   // fixas ativas (caem todo mês) + avulsas do mês informado.
   fixasAtivasDoCartao(cartaoId: string) {
     return prisma.despesaFixa.findMany({ where: { cartaoId, ativa: true } });

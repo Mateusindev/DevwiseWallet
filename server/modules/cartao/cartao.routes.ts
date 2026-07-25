@@ -9,13 +9,17 @@ export const cartaoRoutes = new Hono<AuthEnv>()
     "/cartoes",
     requirePermission("cartao:view"),
     zValidator("query", cartaoQuerySchema),
-    async (c) => c.json(await cartaoService.listWithAggregates(c.get("user").id, c.req.valid("query").ym))
+    async (c) =>
+      c.json(await cartaoService.listWithAggregates(c.get("user").id, c.req.valid("query").ym))
   )
   .get(
     "/cartoes/:id/fatura",
     requirePermission("cartao:view"),
     zValidator("query", cartaoQuerySchema),
-    async (c) => c.json(await cartaoService.faturaLinhas(c.get("user").id, c.req.param("id"), c.req.valid("query").ym))
+    async (c) =>
+      c.json(
+        await cartaoService.faturaLinhas(c.get("user").id, c.req.param("id"), c.req.valid("query").ym)
+      )
   )
   .post(
     "/cartoes",
@@ -27,7 +31,8 @@ export const cartaoRoutes = new Hono<AuthEnv>()
     "/cartoes/:id",
     requirePermission("cartao:manage"),
     zValidator("json", updateCartaoSchema),
-    async (c) => c.json(await cartaoService.update(c.get("user").id, c.req.param("id"), c.req.valid("json")))
+    async (c) =>
+      c.json(await cartaoService.update(c.get("user").id, c.req.param("id"), c.req.valid("json")))
   )
   .delete("/cartoes/:id", requirePermission("cartao:manage"), async (c) =>
     c.json(await cartaoService.remove(c.get("user").id, c.req.param("id")))

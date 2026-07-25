@@ -17,11 +17,11 @@ export const espacoRepository = {
     return prisma.espaco.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
   },
 
-  findById(userId: string, id: string) {
+  findById(id: string, userId: string) {
     return prisma.espaco.findFirst({ where: { id, userId } });
   },
 
-  findWithOrcamento(userId: string, id: string) {
+  findWithOrcamento(id: string, userId: string) {
     return prisma.espaco.findFirst({ where: { id, userId }, include: withOrcamento });
   },
 
@@ -33,7 +33,7 @@ export const espacoRepository = {
     return prisma.espaco.create({ data });
   },
 
-  update(id: string, data: Prisma.EspacoUpdateInput) {
+  update(id: string, data: Prisma.EspacoUncheckedUpdateInput) {
     return prisma.espaco.update({ where: { id }, data });
   },
 
@@ -58,7 +58,7 @@ export const espacoRepository = {
     return prisma.espacoMesOculto.deleteMany({ where: { espacoId, ym } });
   },
 
-  // ── app_settings (por usuário — PK = user_id) ──────────────────────────────
+  // ── app_settings (uma linha por usuário; PK = user_id) ─────────────────────
   async getActiveEspacoId(userId: string): Promise<string | null> {
     const s = await prisma.appSettings.findUnique({ where: { userId } });
     return s?.activeEspacoId ?? null;

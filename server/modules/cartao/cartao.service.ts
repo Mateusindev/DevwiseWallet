@@ -26,8 +26,9 @@ export function cartaoView(c: Cartao) {
 }
 
 export const cartaoService = {
+  // 404 (não 403) quando o cartão é de outro dono — não vaza existência.
   async getOrThrow(userId: string, id: string): Promise<Cartao> {
-    const c = await cartaoRepository.findById(userId, id);
+    const c = await cartaoRepository.findById(id, userId);
     if (!c) throw new NotFoundError(`Cartão não encontrado: ${id}`);
     return c;
   },
@@ -61,6 +62,7 @@ export const cartaoService = {
   },
 
   // Linhas da fatura de um cartão no mês: fixas ativas na janela + avulsas do mês.
+  // Alimenta o seletor de "compartilhar linha".
   async faturaLinhas(userId: string, cartaoId: string, mes = currentMonth()) {
     await this.getOrThrow(userId, cartaoId);
     const [fixas, avulsas] = await Promise.all([

@@ -36,7 +36,7 @@ export const categoriaService = {
   },
 
   async getOrThrow(userId: string, id: string): Promise<Categoria> {
-    const c = await categoriaRepository.findById(userId, id);
+    const c = await categoriaRepository.findById(id, userId);
     if (!c) throw new NotFoundError(`Categoria não encontrada: ${id}`);
     return c;
   },

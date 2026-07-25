@@ -247,8 +247,11 @@ export function MeusCompartilhamentos({ ym }) {
           const a = acento(g.cartao.cor);
           return (
             <div key={g.cartao.id} className="rounded-xl bg-white/4 p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="font-semibold text-white" style={{ color: a.dot }}>{g.cartao.nome}</p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-white" style={{ color: a.dot }}>{g.cartao.nome}</p>
+                  {g.dono?.nome && <p className="truncate text-xs text-slate-500">fatura de {g.dono.nome}</p>}
+                </div>
                 <p className="tnum text-sm font-bold text-rose-400">{fmtMoney(g.devidoMes)}</p>
               </div>
               <ul className="space-y-1 text-xs text-slate-400">

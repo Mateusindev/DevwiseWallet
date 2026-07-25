@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+
+# Um push novo na mesma branch cancela a run anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificacao:
+    name: typecheck + testes (unit + integração)
+    runs-on: ubuntu-latest
+
+    # Banco de teste real: os testes de integração exercitam rotas, repositories
+    # e Prisma de ponta a ponta. Os unitários seguem mockando os repositories.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cofre_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Banco que os testes usam (ver tests/setup/env.ts). O nome precisa conter
+      # "test" — os testes truncam todas as tabelas.
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cofre_test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cofre_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cofre_test
+      AUTH_SECRET: ci-secret-so-pra-assinar-jwt-nos-testes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Versão pinada de propósito: com `latest`, o salto 1.2 → 1.3 mudou a ordem
+      # em que o runner varre os arquivos de teste e quebrou o CI sem nenhum
+      # commit no meio. Subir de versão passa a ser um commit explícito.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Instalar dependências
+        run: bun install --frozen-lockfile
+
+      - name: Gerar Prisma Client
+        run: bun run prisma:generate
+
+      - name: Typecheck (também valida os contratos do RPC)
+        run: bun run typecheck
+
+      - name: Aplicar o schema no banco de teste
+        run: bun run test:db:setup
+
+      # Um processo por arquivo (ver scripts/test-unit.ts) — `mock.module` é
+      # global e vaza entre arquivos. A cobertura sai do merge dos lcov.
+      - name: Testes unitários
+        run: bun run test:unit -- --coverage
+
+      # Rodam em processo separado dos unitários de propósito: `mock.module` é
+      # global no runner do Bun e vazaria os repositórios mockados pra cá.
+      - name: Testes de integração
+        run: bun run test:int
+
+      # O repo ainda tem erros de lint herdados dos componentes portados do Vite.
+      # Enquanto não forem zerados, o lint reporta mas não derruba o CI.
+      # Quando `bun run lint` passar limpo, remova o `continue-on-error`.
+      - name: Lint (informativo)
+        continue-on-error: true
+        run: bun run lint

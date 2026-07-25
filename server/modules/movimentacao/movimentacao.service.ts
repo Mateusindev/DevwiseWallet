@@ -38,7 +38,7 @@ export const movimentacaoService = {
   },
 
   async remove(userId: string, id: string) {
-    const mv = await movimentacaoRepository.findById(userId, id);
+    const mv = await movimentacaoRepository.findById(id, userId);
     if (!mv) throw new NotFoundError(`Movimentação não encontrada: ${id}`);
     // reverter: aporte some -> tira do saldo; despesa some -> devolve ao saldo
     const delta = mv.tipo === "aporte" ? -num(mv.valor) : num(mv.valor);

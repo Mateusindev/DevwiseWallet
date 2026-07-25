@@ -26,8 +26,9 @@ export const caixinhaService = {
     return rows.map(toView);
   },
 
+  // 404 (não 403) quando a caixinha é de outro dono — não vaza existência.
   async getOrThrow(userId: string, id: string): Promise<Caixinha> {
-    const cx = await caixinhaRepository.findById(userId, id);
+    const cx = await caixinhaRepository.findById(id, userId);
     if (!cx) throw new NotFoundError(`Caixinha não encontrada: ${id}`);
     return cx;
   },

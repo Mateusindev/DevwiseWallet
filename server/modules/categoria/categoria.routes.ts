@@ -18,7 +18,8 @@ export const categoriaRoutes = new Hono<AuthEnv>()
     "/categorias/:id",
     requirePermission("categoria:manage"),
     zValidator("json", updateCategoriaSchema),
-    async (c) => c.json(await categoriaService.update(c.get("user").id, c.req.param("id"), c.req.valid("json")))
+    async (c) =>
+      c.json(await categoriaService.update(c.get("user").id, c.req.param("id"), c.req.valid("json")))
   )
   .delete("/categorias/:id", requirePermission("categoria:manage"), async (c) =>
     c.json(await categoriaService.remove(c.get("user").id, c.req.param("id")))

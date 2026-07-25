@@ -1,13 +1,16 @@
 import { Prisma, type TipoMovimentacao } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 
+// Movimentação não tem dono próprio — herda o da caixinha.
 export const movimentacaoRepository = {
-  // Movimentação não tem userId próprio — escopa pelo dono da caixinha.
   list(userId: string) {
-    return prisma.movimentacao.findMany({ where: { caixinha: { userId } }, orderBy: { data: "desc" } });
+    return prisma.movimentacao.findMany({
+      where: { caixinha: { userId } },
+      orderBy: { data: "desc" },
+    });
   },
 
-  findById(userId: string, id: string) {
+  findById(id: string, userId: string) {
     return prisma.movimentacao.findFirst({ where: { id, caixinha: { userId } } });
   },
 
