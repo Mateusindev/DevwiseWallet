@@ -42,25 +42,36 @@ model User {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  roles   UserRole[]
-  contato Contato?
+  roles         UserRole[]
+  espacos       Espaco[]
+  caixinhas     Caixinha[]
+  cartoes       Cartao[]
+  categorias    Categoria[]
+  appSettings   AppSettings?
+  contatosOwned Contato[]    @relation("ContatoOwner")
+  contatoLinks  Contato[]    @relation("ContatoUser")
 
   @@map("users")
 }
 
-// Pessoa com quem se compartilha fatura de cartão. Existe sem login; quando ela
-// vira usuário do app, `userId` vincula (por email, lazy). Ver server/modules/cartao-share.
+// Pessoa da agenda do DONO (ownerId) com quem ele compartilha fatura de cartão.
+// Existe sem login; quando vira usuário do app, `userId` vincula (por email, lazy).
+// Escopo por dono: cada usuário tem a sua própria lista de contatos.
 model Contato {
   id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
   nome      String
   email     String?
-  userId    String?  @unique @map("user_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user   User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  owner  User          @relation("ContatoOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  user   User?         @relation("ContatoUser", fields: [userId], references: [id], onDelete: SetNull)
   shares CartaoShare[]
 
+  @@unique([ownerId, userId])
+  @@index([ownerId])
   @@index([email])
   @@map("contatos")
 }
@@ -119,6 +130,7 @@ model UserRole {
 
 model Caixinha {
   id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
   nome         String
   tipo         String?  // discriminador server-controlled: "emergencia" na reserva provisionada; null nas demais
   aporteMensal Decimal  @default(0) @map("aporte_mensal") @db.Decimal(12, 2)
@@ -133,6 +145,9 @@ model Caixinha {
 
   movimentacoes Movimentacao[]
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@map("caixinhas")
 }
 
@@ -154,6 +169,7 @@ model Movimentacao {
 
 model Cartao {
   id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
   nome          String
   bandeira      String?
   limite        Decimal  @default(0) @db.Decimal(12, 2)
@@ -168,11 +184,15 @@ model Cartao {
   despesasMes   DespesaMes[]
   shares        CartaoShare[]
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@map("cartoes")
 }
 
 model Categoria {
   id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
   nome      String
   cor       String   @default("blue")
   ordem     Int      @default(0)
@@ -182,11 +202,15 @@ model Categoria {
   despesasFixas DespesaFixa[]
   despesasMes   DespesaMes[]
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@map("categorias")
 }
 
 model Espaco {
   id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
   nome        String
   tipo        String   @default("outro")
   emoji       String   @default("📁")
@@ -203,6 +227,9 @@ model Espaco {
   pagamentosFixas PagamentoFixa[]
   mesesOcultos    EspacoMesOculto[]
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@map("espacos")
 }
 
@@ -220,9 +247,10 @@ model EspacoMesOculto {
 }
 
 model AppSettings {
-  id             Boolean @id @default(true)
+  userId         String  @id @map("user_id") @db.Uuid
   activeEspacoId String? @map("active_espaco_id") @db.Uuid
 
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   activeEspaco Espaco? @relation(fields: [activeEspacoId], references: [id], onDelete: SetNull)
 
   @@map("app_settings")

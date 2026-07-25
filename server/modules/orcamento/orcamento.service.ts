@@ -64,8 +64,8 @@ function receitaView(r: { id: string; mes: string; descricao: string; valor: unk
 
 export const orcamentoService = {
   // ── Despesas fixas ─────────────────────────────────────────────────────────
-  async addDespesaFixa(espacoId: string, dto: AddDespesaFixaDTO) {
-    await espacoService.getOrThrow(espacoId);
+  async addDespesaFixa(userId: string, espacoId: string, dto: AddDespesaFixaDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
     const df = await orcamentoRepository.createDespesaFixa({
       espacoId,
       descricao: dto.descricao,
@@ -79,7 +79,8 @@ export const orcamentoService = {
     return fixaView(df);
   },
 
-  async updateDespesaFixa(espacoId: string, id: string, patch: UpdateDespesaFixaDTO) {
+  async updateDespesaFixa(userId: string, espacoId: string, id: string, patch: UpdateDespesaFixaDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
     const found = await orcamentoRepository.findDespesaFixa(id);
     assertPertence(found, espacoId, "Despesa fixa", id);
     const data: Record<string, unknown> = {};
@@ -98,14 +99,16 @@ export const orcamentoService = {
     return fixaView(df);
   },
 
-  async toggleDespesaFixa(espacoId: string, id: string) {
+  async toggleDespesaFixa(userId: string, espacoId: string, id: string) {
+    await espacoService.getOrThrow(userId, espacoId);
     const found = await orcamentoRepository.findDespesaFixa(id);
     assertPertence(found, espacoId, "Despesa fixa", id);
     const df = await orcamentoRepository.updateDespesaFixa(id, { ativa: !found!.ativa });
     return fixaView(df);
   },
 
-  async removeDespesaFixa(espacoId: string, id: string) {
+  async removeDespesaFixa(userId: string, espacoId: string, id: string) {
+    await espacoService.getOrThrow(userId, espacoId);
     const found = await orcamentoRepository.findDespesaFixa(id);
     assertPertence(found, espacoId, "Despesa fixa", id);
     await orcamentoRepository.deleteDespesaFixa(id);
@@ -116,7 +119,8 @@ export const orcamentoService = {
   //   <= 0      → remove o registro (nada pago)
   //   >= valor  → quitada (clampa no valor)
   //   intermed. → pagamento parcial
-  async setPagamentoFixa(espacoId: string, id: string, ym: string, valorPago: number) {
+  async setPagamentoFixa(userId: string, espacoId: string, id: string, ym: string, valorPago: number) {
+    await espacoService.getOrThrow(userId, espacoId);
     const found = await orcamentoRepository.findDespesaFixa(id);
     assertPertence(found, espacoId, "Despesa fixa", id);
     const valor = num(found!.valor);
@@ -131,8 +135,8 @@ export const orcamentoService = {
   },
 
   // ── Despesas do mês ──────────────────────────────────────────────────────
-  async addDespesaMes(espacoId: string, dto: AddDespesaMesDTO) {
-    await espacoService.getOrThrow(espacoId);
+  async addDespesaMes(userId: string, espacoId: string, dto: AddDespesaMesDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
     const dm = await orcamentoRepository.createDespesaMes({
       espacoId,
       mes: dto.mes,
@@ -146,7 +150,8 @@ export const orcamentoService = {
     return mesView(dm);
   },
 
-  async updateDespesaMes(espacoId: string, id: string, patch: UpdateDespesaMesDTO) {
+  async updateDespesaMes(userId: string, espacoId: string, id: string, patch: UpdateDespesaMesDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
     const found = await orcamentoRepository.findDespesaMes(id);
     assertPertence(found, espacoId, "Despesa do mês", id);
     const data: Record<string, unknown> = {};
@@ -160,7 +165,8 @@ export const orcamentoService = {
     return mesView(dm);
   },
 
-  async removeDespesaMes(espacoId: string, id: string) {
+  async removeDespesaMes(userId: string, espacoId: string, id: string) {
+    await espacoService.getOrThrow(userId, espacoId);
     const found = await orcamentoRepository.findDespesaMes(id);
     assertPertence(found, espacoId, "Despesa do mês", id);
     await orcamentoRepository.deleteDespesaMes(id);
@@ -168,7 +174,8 @@ export const orcamentoService = {
   },
 
   // Define quanto foi pago de uma despesa do mês (valor absoluto). paga = pago >= valor.
-  async setPagaMes(espacoId: string, id: string, valorPago: number) {
+  async setPagaMes(userId: string, espacoId: string, id: string, valorPago: number) {
+    await espacoService.getOrThrow(userId, espacoId);
     const found = await orcamentoRepository.findDespesaMes(id);
     assertPertence(found, espacoId, "Despesa do mês", id);
     const valor = num(found!.valor);
@@ -178,8 +185,8 @@ export const orcamentoService = {
   },
 
   // ── Receitas do mês ──────────────────────────────────────────────────────
-  async addReceitaMes(espacoId: string, dto: AddReceitaMesDTO) {
-    await espacoService.getOrThrow(espacoId);
+  async addReceitaMes(userId: string, espacoId: string, dto: AddReceitaMesDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
     const rm = await orcamentoRepository.createReceitaMes({
       espacoId,
       mes: dto.mes,
@@ -190,7 +197,8 @@ export const orcamentoService = {
     return receitaView(rm);
   },
 
-  async updateReceitaMes(espacoId: string, id: string, patch: UpdateReceitaMesDTO) {
+  async updateReceitaMes(userId: string, espacoId: string, id: string, patch: UpdateReceitaMesDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
     const found = await orcamentoRepository.findReceitaMes(id);
     assertPertence(found, espacoId, "Receita do mês", id);
     const data: Record<string, unknown> = {};
@@ -201,7 +209,8 @@ export const orcamentoService = {
     return receitaView(rm);
   },
 
-  async removeReceitaMes(espacoId: string, id: string) {
+  async removeReceitaMes(userId: string, espacoId: string, id: string) {
+    await espacoService.getOrThrow(userId, espacoId);
     const found = await orcamentoRepository.findReceitaMes(id);
     assertPertence(found, espacoId, "Receita do mês", id);
     await orcamentoRepository.deleteReceitaMes(id);
@@ -209,15 +218,15 @@ export const orcamentoService = {
   },
 
   // ── Renda mensal ─────────────────────────────────────────────────────────
-  async setRenda(espacoId: string, ym: string, valor: number) {
-    await espacoService.getOrThrow(espacoId);
+  async setRenda(userId: string, espacoId: string, ym: string, valor: number) {
+    await espacoService.getOrThrow(userId, espacoId);
     const r = await orcamentoRepository.upsertRenda(espacoId, ym, round(valor));
     return { ym: r.ym, valor: num(r.valor) };
   },
 
   // Remove o override do mês → o mês passa a herdar o salário fixo do espaço.
-  async clearRenda(espacoId: string, ym: string) {
-    await espacoService.getOrThrow(espacoId);
+  async clearRenda(userId: string, espacoId: string, ym: string) {
+    await espacoService.getOrThrow(userId, espacoId);
     await orcamentoRepository.deleteRenda(espacoId, ym);
     return { ym };
   },

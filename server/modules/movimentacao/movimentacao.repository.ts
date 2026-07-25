@@ -2,12 +2,13 @@ import { Prisma, type TipoMovimentacao } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 
 export const movimentacaoRepository = {
-  list() {
-    return prisma.movimentacao.findMany({ orderBy: { data: "desc" } });
+  // Movimentação não tem userId próprio — escopa pelo dono da caixinha.
+  list(userId: string) {
+    return prisma.movimentacao.findMany({ where: { caixinha: { userId } }, orderBy: { data: "desc" } });
   },
 
-  findById(id: string) {
-    return prisma.movimentacao.findUnique({ where: { id } });
+  findById(userId: string, id: string) {
+    return prisma.movimentacao.findFirst({ where: { id, caixinha: { userId } } });
   },
 
   // Cria a movimentação e ajusta o saldo da caixinha atomicamente.

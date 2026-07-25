@@ -2,19 +2,19 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 
 export const cartaoRepository = {
-  list() {
-    return prisma.cartao.findMany({ orderBy: { ordem: "asc" } });
+  list(userId: string) {
+    return prisma.cartao.findMany({ where: { userId }, orderBy: { ordem: "asc" } });
   },
 
-  findById(id: string) {
-    return prisma.cartao.findUnique({ where: { id } });
+  findById(userId: string, id: string) {
+    return prisma.cartao.findFirst({ where: { id, userId } });
   },
 
-  count() {
-    return prisma.cartao.count();
+  count(userId: string) {
+    return prisma.cartao.count({ where: { userId } });
   },
 
-  create(data: Prisma.CartaoCreateInput) {
+  create(data: Prisma.CartaoUncheckedCreateInput) {
     return prisma.cartao.create({ data });
   },
 

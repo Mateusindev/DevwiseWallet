@@ -1,10 +1,16 @@
 import { prisma } from "@/server/lib/prisma";
 import { parseDate } from "@/server/lib/serialize";
+import { AppError } from "@/server/lib/errors";
 
 // Seed espelha db/ddl.sql — usado pelo reset ("Restaurar dados de exemplo").
-// Apaga tudo e recria o estado de exemplo numa transação.
+// Apaga tudo e recria o estado de exemplo numa transação, atribuído ao 1º usuário.
 export async function reseed() {
   await prisma.$transaction(async (tx) => {
+    // dono dos dados de exemplo: primeiro usuário cadastrado (dado é per-user)
+    const user = await tx.user.findFirst({ orderBy: { createdAt: "asc" } });
+    if (!user) throw new AppError("Nenhum usuário cadastrado — rode o seed:auth antes.");
+    const userId = user.id;
+
     // ordem importa por causa das FKs (cascata cobre, mas explícito é seguro)
     await tx.appSettings.deleteMany();
     await tx.espacoMesOculto.deleteMany();
@@ -21,10 +27,10 @@ export async function reseed() {
 
     // ── Caixinhas ────────────────────────────────────────────────────────────
     const emerg = await tx.caixinha.create({
-      data: { nome: "Reserva de emergência", tipo: "emergencia", aporteMensal: 700, meta: 14000, saldo: 158.25, cor: "emerald", acumulaSobra: false, ordem: 1 },
+      data: { userId, nome: "Reserva de emergência", tipo: "emergencia", aporteMensal: 700, meta: 14000, saldo: 158.25, cor: "emerald", acumulaSobra: false, ordem: 1 },
     });
     const varv = await tx.caixinha.create({
-      data: { nome: "Despesas Variáveis", aporteMensal: 200, meta: null, saldo: 0, cor: "violet", acumulaSobra: true, ordem: 2 },
+      data: { userId, nome: "Despesas Variáveis", aporteMensal: 200, meta: null, saldo: 0, cor: "violet", acumulaSobra: true, ordem: 2 },
     });
 
     await tx.movimentacao.createMany({
@@ -43,28 +49,28 @@ export async function reseed() {
 
     // ── Espaços ──────────────────────────────────────────────────────────────
     const nosso = await tx.espaco.create({
-      data: { nome: "Nosso", tipo: "casal", emoji: "💑", rendaMensal: 7800, moeda: "BRL" },
+      data: { userId, nome: "Nosso", tipo: "casal", emoji: "💑", rendaMensal: 7800, moeda: "BRL" },
     });
     const meu = await tx.espaco.create({
-      data: { nome: "Meu", tipo: "pessoal", emoji: "🧍", rendaMensal: 1200, moeda: "BRL" },
+      data: { userId, nome: "Meu", tipo: "pessoal", emoji: "🧍", rendaMensal: 1200, moeda: "BRL" },
     });
 
-    await tx.appSettings.create({ data: { id: true, activeEspacoId: nosso.id } });
+    await tx.appSettings.create({ data: { userId, activeEspacoId: nosso.id } });
 
-    // ── Cartões de crédito (globais) ───────────────────────────────────────
+    // ── Cartões de crédito (do usuário) ─────────────────────────────────────
     const nubank = await tx.cartao.create({
-      data: { nome: "Nubank", bandeira: "Master", limite: 8000, diaFechamento: 3, diaVencimento: 10, cor: "violet", ordem: 1 },
+      data: { userId, nome: "Nubank", bandeira: "Master", limite: 8000, diaFechamento: 3, diaVencimento: 10, cor: "violet", ordem: 1 },
     });
     const inter = await tx.cartao.create({
-      data: { nome: "Inter", bandeira: "Visa", limite: 5000, diaFechamento: 28, diaVencimento: 5, cor: "amber", ordem: 2 },
+      data: { userId, nome: "Inter", bandeira: "Visa", limite: 5000, diaFechamento: 28, diaVencimento: 5, cor: "amber", ordem: 2 },
     });
 
-    // ── Categorias de despesa (globais) ────────────────────────────────────
-    const moradia = await tx.categoria.create({ data: { nome: "Moradia", cor: "blue", ordem: 1 } });
-    const aliment = await tx.categoria.create({ data: { nome: "Alimentação", cor: "emerald", ordem: 2 } });
-    const lazer = await tx.categoria.create({ data: { nome: "Lazer", cor: "violet", ordem: 3 } });
-    const saude = await tx.categoria.create({ data: { nome: "Saúde", cor: "rose", ordem: 4 } });
-    const educ = await tx.categoria.create({ data: { nome: "Educação", cor: "amber", ordem: 5 } });
+    // ── Categorias de despesa (do usuário) ──────────────────────────────────
+    const moradia = await tx.categoria.create({ data: { userId, nome: "Moradia", cor: "blue", ordem: 1 } });
+    const aliment = await tx.categoria.create({ data: { userId, nome: "Alimentação", cor: "emerald", ordem: 2 } });
+    const lazer = await tx.categoria.create({ data: { userId, nome: "Lazer", cor: "violet", ordem: 3 } });
+    const saude = await tx.categoria.create({ data: { userId, nome: "Saúde", cor: "rose", ordem: 4 } });
+    const educ = await tx.categoria.create({ data: { userId, nome: "Educação", cor: "amber", ordem: 5 } });
 
     // Nosso
     await tx.despesaFixa.createMany({

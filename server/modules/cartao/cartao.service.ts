@@ -26,8 +26,8 @@ export function cartaoView(c: Cartao) {
 }
 
 export const cartaoService = {
-  async getOrThrow(id: string): Promise<Cartao> {
-    const c = await cartaoRepository.findById(id);
+  async getOrThrow(userId: string, id: string): Promise<Cartao> {
+    const c = await cartaoRepository.findById(userId, id);
     if (!c) throw new NotFoundError(`Cartão não encontrado: ${id}`);
     return c;
   },
@@ -61,9 +61,8 @@ export const cartaoService = {
   },
 
   // Linhas da fatura de um cartão no mês: fixas ativas na janela + avulsas do mês.
-  // Alimenta o seletor de "compartilhar linha".
-  async faturaLinhas(cartaoId: string, mes = currentMonth()) {
-    await this.getOrThrow(cartaoId);
+  async faturaLinhas(userId: string, cartaoId: string, mes = currentMonth()) {
+    await this.getOrThrow(userId, cartaoId);
     const [fixas, avulsas] = await Promise.all([
       cartaoRepository.fixasAtivasDoCartao(cartaoId),
       cartaoRepository.avulsasDoCartaoNoMes(cartaoId, mes),
@@ -95,14 +94,15 @@ export const cartaoService = {
   },
 
   // Lista com agregados de um mês (default: mês corrente).
-  async listWithAggregates(mes = currentMonth()) {
-    const cartoes = await cartaoRepository.list();
+  async listWithAggregates(userId: string, mes = currentMonth()) {
+    const cartoes = await cartaoRepository.list(userId);
     return Promise.all(cartoes.map((c) => this.withAggregates(c, mes)));
   },
 
-  async create(dto: CreateCartaoDTO) {
-    const ordem = (await cartaoRepository.count()) + 1;
+  async create(userId: string, dto: CreateCartaoDTO) {
+    const ordem = (await cartaoRepository.count(userId)) + 1;
     const c = await cartaoRepository.create({
+      userId,
       nome: dto.nome,
       bandeira: dto.bandeira ?? null,
       limite: round(dto.limite),
@@ -114,16 +114,16 @@ export const cartaoService = {
     return cartaoView(c);
   },
 
-  async update(id: string, patch: UpdateCartaoDTO) {
-    await this.getOrThrow(id);
+  async update(userId: string, id: string, patch: UpdateCartaoDTO) {
+    await this.getOrThrow(userId, id);
     const data: Record<string, unknown> = { ...patch };
     if (patch.limite != null) data.limite = round(patch.limite);
     const c = await cartaoRepository.update(id, data);
     return cartaoView(c);
   },
 
-  async remove(id: string) {
-    await this.getOrThrow(id);
+  async remove(userId: string, id: string) {
+    await this.getOrThrow(userId, id);
     await cartaoRepository.delete(id); // despesas mantêm-se, cartao_id vira NULL (SetNull)
     return { id };
   },

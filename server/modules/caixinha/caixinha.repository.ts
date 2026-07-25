@@ -2,19 +2,19 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 
 export const caixinhaRepository = {
-  list() {
-    return prisma.caixinha.findMany({ orderBy: { ordem: "asc" } });
+  list(userId: string) {
+    return prisma.caixinha.findMany({ where: { userId }, orderBy: { ordem: "asc" } });
   },
 
-  findById(id: string) {
-    return prisma.caixinha.findUnique({ where: { id } });
+  findById(userId: string, id: string) {
+    return prisma.caixinha.findFirst({ where: { id, userId } });
   },
 
-  count() {
-    return prisma.caixinha.count();
+  count(userId: string) {
+    return prisma.caixinha.count({ where: { userId } });
   },
 
-  create(data: Prisma.CaixinhaCreateInput) {
+  create(data: Prisma.CaixinhaUncheckedCreateInput) {
     return prisma.caixinha.create({ data });
   },
 

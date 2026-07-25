@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import { AppError } from "@/server/lib/errors";
 import { authRoutes } from "@/server/auth/auth.routes";
-import { requireAuth, requirePermission } from "@/server/auth/middleware";
+import { requireAuth, requirePermission, type AuthEnv } from "@/server/auth/middleware";
 import { getState } from "@/server/modules/bootstrap/bootstrap.service";
 import { caixinhaRoutes } from "@/server/modules/caixinha/caixinha.routes";
 import { movimentacaoRoutes } from "@/server/modules/movimentacao/movimentacao.routes";
@@ -16,7 +16,7 @@ import { categoriaRoutes } from "@/server/modules/categoria/categoria.routes";
 import { adminRoutes } from "@/server/modules/admin/admin.routes";
 import { devRoutes } from "@/server/modules/dev/dev.routes";
 
-const app = new Hono().basePath("/api");
+const app = new Hono<AuthEnv>().basePath("/api");
 
 // ── Error handler central (paridade com o setErrorHandler do Fastify) ────────
 app.onError((err, c) => {
@@ -41,7 +41,7 @@ const routes = app
   // tudo abaixo exige sessão (JWT no cookie httpOnly); cada rota exige a
   // permission granular dela (PBAC)
   .use(requireAuth)
-  .get("/state", requirePermission("state:view"), async (c) => c.json(await getState()))
+  .get("/state", requirePermission("state:view"), async (c) => c.json(await getState(c.get("user").id)))
   .route("/", caixinhaRoutes)
   .route("/", movimentacaoRoutes)
   .route("/", espacoRoutes)

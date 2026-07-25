@@ -87,7 +87,7 @@ mock.module("@/server/modules/orcamento/orcamento.repository", () => ({
 
 mock.module("@/server/modules/espaco/espaco.repository", () => ({
   espacoRepository: {
-    findById: async (id: string) => (id === "e1" ? { id: "e1", nome: "E", tipo: "outro", emoji: "📁" } : null),
+    findById: async (_userId: string, id: string) => (id === "e1" ? { id: "e1", nome: "E", tipo: "outro", emoji: "📁" } : null),
   },
 }));
 
@@ -106,30 +106,30 @@ beforeEach(() => {
 describe("pertencimento ao espaço", () => {
   it("fixa de outro espaço → NotFoundError", async () => {
     state.fixa = fixa({ espacoId: "outro" });
-    expect(orcamentoService.toggleDespesaFixa("e1", "df-1")).rejects.toBeInstanceOf(NotFoundError);
+    expect(orcamentoService.toggleDespesaFixa("u-1", "e1", "df-1")).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it("despesa do mês de outro espaço → NotFoundError", async () => {
     state.despesa = despMes({ espacoId: "outro" });
-    expect(orcamentoService.setPagaMes("e1", "dm-1", 10)).rejects.toBeInstanceOf(NotFoundError);
+    expect(orcamentoService.setPagaMes("u-1", "e1", "dm-1", 10)).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 
 describe("orcamentoService.setPagamentoFixa", () => {
   it("valor intermediário → pagamento parcial", async () => {
-    const r = await orcamentoService.setPagamentoFixa("e1", "df-1", "2026-06", 120);
+    const r = await orcamentoService.setPagamentoFixa("u-1", "e1", "df-1", "2026-06", 120);
     expect(r).toEqual({ despesaFixaId: "df-1", ym: "2026-06", valorPago: 120, pago: false });
     expect(state.upserted!.valorPago).toBe(120);
   });
 
   it("acima do valor clampa e quita", async () => {
-    const r = await orcamentoService.setPagamentoFixa("e1", "df-1", "2026-06", 999);
+    const r = await orcamentoService.setPagamentoFixa("u-1", "e1", "df-1", "2026-06", 999);
     expect(r).toEqual({ despesaFixaId: "df-1", ym: "2026-06", valorPago: 300, pago: true });
   });
 
   it("<= 0 remove o registro existente", async () => {
     state.pagamento = { despesaFixaId: "df-1", ym: "2026-06", valorPago: 100 };
-    const r = await orcamentoService.setPagamentoFixa("e1", "df-1", "2026-06", 0);
+    const r = await orcamentoService.setPagamentoFixa("u-1", "e1", "df-1", "2026-06", 0);
     expect(r.pago).toBe(false);
     expect(r.valorPago).toBe(0);
     expect(state.deletedPagamento).toBe(true);
@@ -138,19 +138,19 @@ describe("orcamentoService.setPagamentoFixa", () => {
 
 describe("orcamentoService.setPagaMes", () => {
   it("clampa no valor e marca paga", async () => {
-    const r = await orcamentoService.setPagaMes("e1", "dm-1", 500);
+    const r = await orcamentoService.setPagaMes("u-1", "e1", "dm-1", 500);
     expect(state.updatedDespesa).toEqual({ valorPago: 100, paga: true });
     expect(r.paga).toBe(true);
   });
 
   it("parcial não marca paga", async () => {
-    await orcamentoService.setPagaMes("e1", "dm-1", 40);
+    await orcamentoService.setPagaMes("u-1", "e1", "dm-1", 40);
     expect(state.updatedDespesa).toEqual({ valorPago: 40, paga: false });
   });
 
   it("valor 0 nunca marca paga", async () => {
     state.despesa = despMes({ valor: 0 });
-    await orcamentoService.setPagaMes("e1", "dm-1", 10);
+    await orcamentoService.setPagaMes("u-1", "e1", "dm-1", 10);
     expect(state.updatedDespesa!.paga).toBe(false);
   });
 });
@@ -158,24 +158,24 @@ describe("orcamentoService.setPagaMes", () => {
 describe("orcamentoService.addDespesaMes", () => {
   it("espaço inexistente → NotFoundError", async () => {
     expect(
-      orcamentoService.addDespesaMes("nope", { mes: "2026-06", descricao: "X", valor: 10 })
+      orcamentoService.addDespesaMes("u-1", "nope", { mes: "2026-06", descricao: "X", valor: 10 })
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it("data default = primeiro dia do mês", async () => {
-    await orcamentoService.addDespesaMes("e1", { mes: "2026-06", descricao: "X", valor: 10 });
+    await orcamentoService.addDespesaMes("u-1", "e1", { mes: "2026-06", descricao: "X", valor: 10 });
     expect((state.createdDespesa!.data as Date).toISOString()).toBe("2026-06-01T00:00:00.000Z");
   });
 
   it("nota vazia vira null", async () => {
-    await orcamentoService.addDespesaMes("e1", { mes: "2026-06", descricao: "X", valor: 10, nota: "" });
+    await orcamentoService.addDespesaMes("u-1", "e1", { mes: "2026-06", descricao: "X", valor: 10, nota: "" });
     expect(state.createdDespesa!.nota).toBeNull();
   });
 });
 
 describe("orcamentoService.setRenda", () => {
   it("arredonda e serializa", async () => {
-    const r = await orcamentoService.setRenda("e1", "2026-06", 1200.005);
+    const r = await orcamentoService.setRenda("u-1", "e1", "2026-06", 1200.005);
     expect(r).toEqual({ ym: "2026-06", valor: 1200.01 });
   });
 });

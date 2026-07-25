@@ -9,22 +9,22 @@ const db: {
   updated: { id: string; data: Row } | null;
 } = { contatos: [], shares: [], users: [], updated: null };
 
-mock.module("@/server/modules/cartao/cartao.service", () => ({
-  cartaoService: { getOrThrow: async (id: string) => ({ id }) },
-}));
+// Sem mock de cartao.service: este arquivo não chama cartaoService em nenhum
+// teste (só cálculo puro + contatos + consumer). Mockar aqui vazaria pro
+// cartao.service.test (mock.module é global no Bun) e quebraria withAggregates.
 
 mock.module("@/server/modules/cartao-share/cartao-share.repository", () => ({
   cartaoShareRepository: {
     contatoList: async () => db.contatos,
-    contatoFindById: async (id: string) => db.contatos.find((c) => c.id === id) ?? null,
+    contatoFindById: async (_ownerId: string, id: string) => db.contatos.find((c) => c.id === id) ?? null,
     contatoCreate: async (data: Row) => {
       const c = { id: "c-new", ...data };
       db.contatos.push(c);
       return c;
     },
-    contatoByUserId: async (userId: string) => db.contatos.find((c) => c.userId === userId) ?? null,
-    contatoUnlinkedByEmail: async (email: string) =>
-      db.contatos.find((c) => c.email === email && c.userId == null) ?? null,
+    contatosByUserId: async (userId: string) => db.contatos.filter((c) => c.userId === userId),
+    contatosUnlinkedByEmail: async (email: string) =>
+      db.contatos.filter((c) => c.email === email && c.userId == null),
     contatoUpdate: async (id: string, data: Row) => {
       const c = db.contatos.find((r) => r.id === id)!;
       Object.assign(c, data);
@@ -32,9 +32,9 @@ mock.module("@/server/modules/cartao-share/cartao-share.repository", () => ({
       return c;
     },
     userByEmail: async (email: string) => db.users.find((u) => u.email === email) ?? null,
-    sharesByContato: async (contatoId: string) => db.shares.filter((s) => s.contatoId === contatoId),
-    despesaFixaExists: async () => ({ id: "ok" }),
-    despesaMesExists: async () => ({ id: "ok" }),
+    sharesByContatoIds: async (ids: string[]) => db.shares.filter((s) => ids.includes(s.contatoId as string)),
+    despesaFixaOwned: async () => ({ id: "ok" }),
+    despesaMesOwned: async () => ({ id: "ok" }),
   },
 }));
 
@@ -125,29 +125,29 @@ describe("shareParcela / shareComprometido", () => {
 describe("createContato — vínculo lazy por email", () => {
   it("associa userId se já existe usuário com o email", async () => {
     db.users = [{ id: "u-9", email: "ana@x.com" }];
-    const v = await cartaoShareService.createContato({ nome: "Ana", email: "ana@x.com" });
+    const v = await cartaoShareService.createContato("owner-1", { nome: "Ana", email: "ana@x.com" });
     expect(v.userId).toBe("u-9");
     expect(v.vinculado).toBe(true);
   });
 
   it("sem usuário correspondente fica sem vínculo", async () => {
-    const v = await cartaoShareService.createContato({ nome: "Bia", email: "bia@x.com" });
+    const v = await cartaoShareService.createContato("owner-1", { nome: "Bia", email: "bia@x.com" });
     expect(v.userId).toBeNull();
     expect(v.vinculado).toBe(false);
   });
 });
 
-describe("resolveContato — claim lazy por email", () => {
+describe("resolveContatos — claim lazy por email", () => {
   it("casa por email e persiste o vínculo", async () => {
     db.contatos = [{ id: "c-1", nome: "Ana", email: "ana@x.com", userId: null }];
-    const c = await cartaoShareService.resolveContato({ id: "u-9", email: "ana@x.com" } as never);
-    expect(c?.id).toBe("c-1");
+    const cs = await cartaoShareService.resolveContatos({ id: "u-9", email: "ana@x.com" } as never);
+    expect(cs.map((c) => c.id)).toContain("c-1");
     expect(db.updated).toEqual({ id: "c-1", data: { userId: "u-9" } });
   });
 
-  it("sem contato correspondente retorna null", async () => {
-    const c = await cartaoShareService.resolveContato({ id: "u-9", email: "z@x.com" } as never);
-    expect(c).toBeNull();
+  it("sem contato correspondente retorna vazio", async () => {
+    const cs = await cartaoShareService.resolveContatos({ id: "u-9", email: "z@x.com" } as never);
+    expect(cs).toEqual([]);
   });
 });
 

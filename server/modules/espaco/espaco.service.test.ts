@@ -24,7 +24,7 @@ const state: {
 mock.module("@/server/modules/espaco/espaco.repository", () => ({
   espacoRepository: {
     list: async () => state.espacos,
-    findById: async (id: string) => state.espacos.find((e) => e.id === id) ?? null,
+    findById: async (_userId: string, id: string) => state.espacos.find((e) => e.id === id) ?? null,
     count: async () => state.espacos.length,
     delete: async (id: string) => {
       state.deleted = id;
@@ -36,7 +36,7 @@ mock.module("@/server/modules/espaco/espaco.repository", () => ({
     },
     unhide: async () => {},
     getActiveEspacoId: async () => state.activeId,
-    setActiveEspacoId: async (id: string | null) => {
+    setActiveEspacoId: async (_userId: string, id: string | null) => {
       state.activeId = id;
       return id;
     },
@@ -56,7 +56,7 @@ beforeEach(() => {
 describe("espacoService.listWithActive", () => {
   it("ativo sumiu → fallback pro primeiro", async () => {
     state.activeId = "morto";
-    const r = await espacoService.listWithActive();
+    const r = await espacoService.listWithActive("u-1");
     expect(r.activeEspacoId).toBe("e1");
     expect(state.activeId).toBe("e1");
   });
@@ -64,29 +64,29 @@ describe("espacoService.listWithActive", () => {
 
 describe("espacoService.ocultarNoMes", () => {
   it("oculta quando há outro visível no mês", async () => {
-    const r = await espacoService.ocultarNoMes("e1", "2026-06");
+    const r = await espacoService.ocultarNoMes("u-1", "e1", "2026-06");
     expect(r).toEqual({ id: "e1", ym: "2026-06" });
     expect(state.hidden).toEqual({ espacoId: "e1", ym: "2026-06" });
   });
 
   it("não deixa ocultar o último visível do mês", async () => {
     state.ocultos = [{ espacoId: "e2", ym: "2026-06" }];
-    expect(espacoService.ocultarNoMes("e1", "2026-06")).rejects.toBeInstanceOf(AppError);
+    expect(espacoService.ocultarNoMes("u-1", "e1", "2026-06")).rejects.toBeInstanceOf(AppError);
   });
 
   it("espaço inexistente lança NotFoundError", async () => {
-    expect(espacoService.ocultarNoMes("nope", "2026-06")).rejects.toBeInstanceOf(NotFoundError);
+    expect(espacoService.ocultarNoMes("u-1", "nope", "2026-06")).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 
 describe("espacoService.remove", () => {
   it("não remove o único espaço", async () => {
     state.espacos = [esp("e1")];
-    expect(espacoService.remove("e1")).rejects.toBeInstanceOf(AppError);
+    expect(espacoService.remove("u-1", "e1")).rejects.toBeInstanceOf(AppError);
   });
 
   it("remover o ativo reassina pro primeiro restante", async () => {
-    const r = await espacoService.remove("e1");
+    const r = await espacoService.remove("u-1", "e1");
     expect(state.deleted).toBe("e1");
     expect(r.activeEspacoId).toBe("e2");
   });

@@ -24,7 +24,7 @@ const mov = (over: Row = {}): Row => ({
 mock.module("@/server/modules/movimentacao/movimentacao.repository", () => ({
   movimentacaoRepository: {
     list: async () => state.movs,
-    findById: async (id: string) => state.movs.find((m) => m.id === id) ?? null,
+    findById: async (_userId: string, id: string) => state.movs.find((m) => m.id === id) ?? null,
     createAndApply: async (input: Row) => {
       state.applied = input;
       return { movimentacao: mov(input), caixinha: cx };
@@ -38,7 +38,7 @@ mock.module("@/server/modules/movimentacao/movimentacao.repository", () => ({
 
 mock.module("@/server/modules/caixinha/caixinha.repository", () => ({
   caixinhaRepository: {
-    findById: async (id: string) => (id === "cx-1" ? cx : null),
+    findById: async (_userId: string, id: string) => (id === "cx-1" ? cx : null),
   },
 }));
 
@@ -52,40 +52,40 @@ beforeEach(() => {
 
 describe("movimentacaoService.create", () => {
   it("aporte soma no saldo (delta positivo) e usa descrição padrão", async () => {
-    await movimentacaoService.create({ caixinhaId: "cx-1", tipo: "aporte", valor: 50 });
+    await movimentacaoService.create("u-1", { caixinhaId: "cx-1", tipo: "aporte", valor: 50 });
     expect(state.applied).toMatchObject({ delta: 50, descricao: "Aporte" });
   });
 
   it("despesa subtrai do saldo (delta negativo)", async () => {
-    await movimentacaoService.create({ caixinhaId: "cx-1", tipo: "despesa", valor: 30, descricao: "Farmácia" });
+    await movimentacaoService.create("u-1", { caixinhaId: "cx-1", tipo: "despesa", valor: 30, descricao: "Farmácia" });
     expect(state.applied).toMatchObject({ delta: -30, descricao: "Farmácia" });
   });
 
   it("caixinha inexistente lança NotFoundError", async () => {
     expect(
-      movimentacaoService.create({ caixinhaId: "nope", tipo: "aporte", valor: 10 })
+      movimentacaoService.create("u-1", { caixinhaId: "nope", tipo: "aporte", valor: 10 })
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it("valor arredondado pra 2 casas", async () => {
-    await movimentacaoService.create({ caixinhaId: "cx-1", tipo: "aporte", valor: 10.005 });
+    await movimentacaoService.create("u-1", { caixinhaId: "cx-1", tipo: "aporte", valor: 10.005 });
     expect(state.applied!.valor).toBe(10.01);
   });
 });
 
 describe("movimentacaoService.remove", () => {
   it("remover aporte tira do saldo (delta negativo)", async () => {
-    await movimentacaoService.remove("mv-1");
+    await movimentacaoService.remove("u-1", "mv-1");
     expect(state.reverted).toEqual({ id: "mv-1", caixinhaId: "cx-1", delta: -50 });
   });
 
   it("remover despesa devolve ao saldo (delta positivo)", async () => {
     state.movs = [mov({ tipo: "despesa", valor: 80 })];
-    await movimentacaoService.remove("mv-1");
+    await movimentacaoService.remove("u-1", "mv-1");
     expect(state.reverted!.delta).toBe(80);
   });
 
   it("id inexistente lança NotFoundError", async () => {
-    expect(movimentacaoService.remove("nope")).rejects.toBeInstanceOf(NotFoundError);
+    expect(movimentacaoService.remove("u-1", "nope")).rejects.toBeInstanceOf(NotFoundError);
   });
 });

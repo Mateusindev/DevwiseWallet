@@ -10,7 +10,7 @@ const db: { rows: Row[]; created: Row | null; deleted: string | null } = { rows:
 mock.module("@/server/modules/categoria/categoria.repository", () => ({
   categoriaRepository: {
     list: async () => db.rows,
-    findById: async (id: string) => db.rows.find((r) => r.id === id) ?? null,
+    findById: async (_userId: string, id: string) => db.rows.find((r) => r.id === id) ?? null,
     count: async () => db.rows.length,
     create: async (data: Row) => {
       db.created = data;
@@ -33,22 +33,22 @@ beforeEach(() => {
 
 describe("categoriaService", () => {
   it("create: ordem = count + 1", async () => {
-    await categoriaService.create({ nome: "Lazer", cor: "violet" });
+    await categoriaService.create("u-1", { nome: "Lazer", cor: "violet" });
     expect(db.created).toMatchObject({ nome: "Lazer", ordem: 2 });
   });
 
   it("view expõe só id/nome/cor/ordem", async () => {
-    const [v] = await categoriaService.list();
+    const [v] = await categoriaService.list("u-1");
     expect(v).toEqual({ id: "cat-1", nome: "Moradia", cor: "blue", ordem: 1 });
   });
 
   it("update/remove de id inexistente lança NotFoundError", async () => {
-    expect(categoriaService.update("nope", { nome: "X" })).rejects.toBeInstanceOf(NotFoundError);
-    expect(categoriaService.remove("nope")).rejects.toBeInstanceOf(NotFoundError);
+    expect(categoriaService.update("u-1", "nope", { nome: "X" })).rejects.toBeInstanceOf(NotFoundError);
+    expect(categoriaService.remove("u-1", "nope")).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it("remove deleta e retorna id", async () => {
-    const r = await categoriaService.remove("cat-1");
+    const r = await categoriaService.remove("u-1", "cat-1");
     expect(r).toEqual({ id: "cat-1" });
     expect(db.deleted).toBe("cat-1");
   });

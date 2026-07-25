@@ -17,13 +17,13 @@ export function toView(mv: Movimentacao) {
 }
 
 export const movimentacaoService = {
-  async list() {
-    const rows = await movimentacaoRepository.list();
+  async list(userId: string) {
+    const rows = await movimentacaoRepository.list(userId);
     return rows.map(toView);
   },
 
-  async create(dto: CreateMovimentacaoDTO) {
-    await caixinhaService.getOrThrow(dto.caixinhaId); // valida existência
+  async create(userId: string, dto: CreateMovimentacaoDTO) {
+    await caixinhaService.getOrThrow(userId, dto.caixinhaId); // valida existência + dono
     const valor = round(dto.valor);
     const padrao = dto.tipo === "aporte" ? "Aporte" : "Despesa";
     const { movimentacao, caixinha } = await movimentacaoRepository.createAndApply({
@@ -37,8 +37,8 @@ export const movimentacaoService = {
     return { movimentacao: toView(movimentacao), caixinha: caixinhaView(caixinha) };
   },
 
-  async remove(id: string) {
-    const mv = await movimentacaoRepository.findById(id);
+  async remove(userId: string, id: string) {
+    const mv = await movimentacaoRepository.findById(userId, id);
     if (!mv) throw new NotFoundError(`Movimentação não encontrada: ${id}`);
     // reverter: aporte some -> tira do saldo; despesa some -> devolve ao saldo
     const delta = mv.tipo === "aporte" ? -num(mv.valor) : num(mv.valor);

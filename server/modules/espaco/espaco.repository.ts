@@ -13,23 +13,23 @@ const withOrcamento = {
 export type EspacoComOrcamento = Prisma.EspacoGetPayload<{ include: typeof withOrcamento }>;
 
 export const espacoRepository = {
-  list() {
-    return prisma.espaco.findMany({ orderBy: { createdAt: "asc" } });
+  list(userId: string) {
+    return prisma.espaco.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
   },
 
-  findById(id: string) {
-    return prisma.espaco.findUnique({ where: { id } });
+  findById(userId: string, id: string) {
+    return prisma.espaco.findFirst({ where: { id, userId } });
   },
 
-  findWithOrcamento(id: string) {
-    return prisma.espaco.findUnique({ where: { id }, include: withOrcamento });
+  findWithOrcamento(userId: string, id: string) {
+    return prisma.espaco.findFirst({ where: { id, userId }, include: withOrcamento });
   },
 
-  count() {
-    return prisma.espaco.count();
+  count(userId: string) {
+    return prisma.espaco.count({ where: { userId } });
   },
 
-  create(data: Prisma.EspacoCreateInput) {
+  create(data: Prisma.EspacoUncheckedCreateInput) {
     return prisma.espaco.create({ data });
   },
 
@@ -42,8 +42,8 @@ export const espacoRepository = {
   },
 
   // ── Ocultar espaço num mês (exclusão só daquele mês, reversível) ────────────
-  listOcultos() {
-    return prisma.espacoMesOculto.findMany();
+  listOcultos(userId: string) {
+    return prisma.espacoMesOculto.findMany({ where: { espaco: { userId } } });
   },
 
   hide(espacoId: string, ym: string) {
@@ -58,16 +58,16 @@ export const espacoRepository = {
     return prisma.espacoMesOculto.deleteMany({ where: { espacoId, ym } });
   },
 
-  // ── app_settings (singleton id=true) ──────────────────────────────────────
-  async getActiveEspacoId(): Promise<string | null> {
-    const s = await prisma.appSettings.findUnique({ where: { id: true } });
+  // ── app_settings (por usuário — PK = user_id) ──────────────────────────────
+  async getActiveEspacoId(userId: string): Promise<string | null> {
+    const s = await prisma.appSettings.findUnique({ where: { userId } });
     return s?.activeEspacoId ?? null;
   },
 
-  async setActiveEspacoId(activeEspacoId: string | null) {
+  async setActiveEspacoId(userId: string, activeEspacoId: string | null) {
     await prisma.appSettings.upsert({
-      where: { id: true },
-      create: { id: true, activeEspacoId },
+      where: { userId },
+      create: { userId, activeEspacoId },
       update: { activeEspacoId },
     });
     return activeEspacoId;
