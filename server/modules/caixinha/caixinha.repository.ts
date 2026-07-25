@@ -1,24 +1,25 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 
+// Toda leitura é escopada pelo dono (userId) — nunca por id sozinho.
 export const caixinhaRepository = {
-  list() {
-    return prisma.caixinha.findMany({ orderBy: { ordem: "asc" } });
+  list(userId: string) {
+    return prisma.caixinha.findMany({ where: { userId }, orderBy: { ordem: "asc" } });
   },
 
-  findById(id: string) {
-    return prisma.caixinha.findUnique({ where: { id } });
+  findById(id: string, userId: string) {
+    return prisma.caixinha.findFirst({ where: { id, userId } });
   },
 
-  count() {
-    return prisma.caixinha.count();
+  count(userId: string) {
+    return prisma.caixinha.count({ where: { userId } });
   },
 
-  create(data: Prisma.CaixinhaCreateInput) {
+  create(data: Prisma.CaixinhaUncheckedCreateInput) {
     return prisma.caixinha.create({ data });
   },
 
-  update(id: string, data: Prisma.CaixinhaUpdateInput) {
+  update(id: string, data: Prisma.CaixinhaUncheckedUpdateInput) {
     return prisma.caixinha.update({ where: { id }, data });
   },
 

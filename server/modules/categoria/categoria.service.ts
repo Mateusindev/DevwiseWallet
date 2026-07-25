@@ -20,41 +20,41 @@ const DEFAULT_CATEGORIAS = [
 ];
 
 export const categoriaService = {
-  // Cria as categorias padrão se ainda não existir nenhuma. Idempotente.
-  async ensureDefaults() {
-    if ((await categoriaRepository.count()) > 0) return;
+  // Cria as categorias padrão do usuário se ele ainda não tiver nenhuma. Idempotente.
+  async ensureDefaults(userId: string) {
+    if ((await categoriaRepository.count(userId)) > 0) return;
     let ordem = 0;
     for (const d of DEFAULT_CATEGORIAS) {
       ordem += 1;
-      await categoriaRepository.create({ nome: d.nome, cor: d.cor, ordem });
+      await categoriaRepository.create({ userId, nome: d.nome, cor: d.cor, ordem });
     }
   },
 
-  async list() {
-    const rows = await categoriaRepository.list();
+  async list(userId: string) {
+    const rows = await categoriaRepository.list(userId);
     return rows.map(categoriaView);
   },
 
-  async getOrThrow(id: string): Promise<Categoria> {
-    const c = await categoriaRepository.findById(id);
+  async getOrThrow(userId: string, id: string): Promise<Categoria> {
+    const c = await categoriaRepository.findById(id, userId);
     if (!c) throw new NotFoundError(`Categoria não encontrada: ${id}`);
     return c;
   },
 
-  async create(dto: CreateCategoriaDTO) {
-    const ordem = (await categoriaRepository.count()) + 1;
-    const c = await categoriaRepository.create({ nome: dto.nome, cor: dto.cor, ordem });
+  async create(userId: string, dto: CreateCategoriaDTO) {
+    const ordem = (await categoriaRepository.count(userId)) + 1;
+    const c = await categoriaRepository.create({ userId, nome: dto.nome, cor: dto.cor, ordem });
     return categoriaView(c);
   },
 
-  async update(id: string, patch: UpdateCategoriaDTO) {
-    await this.getOrThrow(id);
+  async update(userId: string, id: string, patch: UpdateCategoriaDTO) {
+    await this.getOrThrow(userId, id);
     const c = await categoriaRepository.update(id, patch);
     return categoriaView(c);
   },
 
-  async remove(id: string) {
-    await this.getOrThrow(id);
+  async remove(userId: string, id: string) {
+    await this.getOrThrow(userId, id);
     await categoriaRepository.delete(id); // despesas mantêm-se, categoria_id vira NULL
     return { id };
   },

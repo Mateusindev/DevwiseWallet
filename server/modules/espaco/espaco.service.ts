@@ -54,35 +54,38 @@ export function orcamentoView(esp: EspacoComOrcamento) {
 }
 
 export const espacoService = {
-  // Espaço padrão provisionado em base vazia: só "Meu" (pessoal). Idempotente.
-  async ensureDefaults() {
-    if ((await espacoRepository.count()) > 0) return;
+  // Espaço padrão provisionado quando o usuário não tem nenhum: só "Meu"
+  // (pessoal). Idempotente.
+  async ensureDefaults(userId: string) {
+    if ((await espacoRepository.count(userId)) > 0) return;
     const esp = await espacoRepository.create({
+      userId,
       nome: "Meu",
       tipo: "pessoal",
       emoji: "🧍",
       rendaMensal: 0,
       moeda: "BRL",
     });
-    await espacoRepository.setActiveEspacoId(esp.id);
+    await espacoRepository.setActiveEspacoId(userId, esp.id);
   },
 
-  async getOrThrow(id: string): Promise<Espaco> {
-    const esp = await espacoRepository.findById(id);
+  // 404 (não 403) quando o espaço é de outro dono — não vaza existência.
+  async getOrThrow(userId: string, id: string): Promise<Espaco> {
+    const esp = await espacoRepository.findById(id, userId);
     if (!esp) throw new NotFoundError(`Espaço de despesa não encontrado: ${id}`);
     return esp;
   },
 
   // Lista + espaço ativo (com fallback pro primeiro se o ativo sumir).
-  async listWithActive() {
-    const espacos = await espacoRepository.list();
-    let activeEspacoId = await espacoRepository.getActiveEspacoId();
+  async listWithActive(userId: string) {
+    const espacos = await espacoRepository.list(userId);
+    let activeEspacoId = await espacoRepository.getActiveEspacoId(userId);
     const exists = activeEspacoId && espacos.some((e) => e.id === activeEspacoId);
     if (!exists) {
       activeEspacoId = espacos[0]?.id ?? null;
-      await espacoRepository.setActiveEspacoId(activeEspacoId);
+      await espacoRepository.setActiveEspacoId(userId, activeEspacoId);
     }
-    const espacosOcultos = (await espacoRepository.listOcultos()).map((o) => ({
+    const espacosOcultos = (await espacoRepository.listOcultos(userId)).map((o) => ({
       espacoId: o.espacoId,
       ym: o.ym,
     }));
@@ -91,10 +94,10 @@ export const espacoService = {
 
   // Oculta o espaço só no mês `ym` (exclusão reversível daquele mês).
   //   guarda: não deixa ocultar o último espaço visível do mês.
-  async ocultarNoMes(id: string, ym: string) {
-    await this.getOrThrow(id);
-    const espacos = await espacoRepository.list();
-    const ocultos = await espacoRepository.listOcultos();
+  async ocultarNoMes(userId: string, id: string, ym: string) {
+    await this.getOrThrow(userId, id);
+    const espacos = await espacoRepository.list(userId);
+    const ocultos = await espacoRepository.listOcultos(userId);
     const ocultosNoMes = new Set(ocultos.filter((o) => o.ym === ym).map((o) => o.espacoId));
     const visiveis = espacos.filter((e) => !ocultosNoMes.has(e.id));
     if (visiveis.length <= 1 && visiveis.some((e) => e.id === id)) {
@@ -105,26 +108,27 @@ export const espacoService = {
   },
 
   // Restaura o espaço no mês `ym` (desfaz a exclusão daquele mês).
-  async restaurarNoMes(id: string, ym: string) {
-    await this.getOrThrow(id);
+  async restaurarNoMes(userId: string, id: string, ym: string) {
+    await this.getOrThrow(userId, id);
     await espacoRepository.unhide(id, ym);
     return { id, ym };
   },
 
-  async getOrcamento(espacoId: string) {
-    const esp = await espacoRepository.findWithOrcamento(espacoId);
+  async getOrcamento(userId: string, espacoId: string) {
+    const esp = await espacoRepository.findWithOrcamento(espacoId, userId);
     if (!esp) throw new NotFoundError(`Espaço de despesa não encontrado: ${espacoId}`);
     return orcamentoView(esp);
   },
 
-  async setActive(id: string) {
-    await this.getOrThrow(id);
-    await espacoRepository.setActiveEspacoId(id);
+  async setActive(userId: string, id: string) {
+    await this.getOrThrow(userId, id);
+    await espacoRepository.setActiveEspacoId(userId, id);
     return { activeEspacoId: id };
   },
 
-  async create(dto: CreateEspacoDTO) {
+  async create(userId: string, dto: CreateEspacoDTO) {
     const esp = await espacoRepository.create({
+      userId,
       nome: dto.nome,
       tipo: dto.tipo,
       emoji: dto.emoji,
@@ -132,32 +136,32 @@ export const espacoService = {
       moeda: dto.moeda ?? "BRL",
     });
     // primeiro espaço vira ativo automaticamente
-    if ((await espacoRepository.getActiveEspacoId()) == null) {
-      await espacoRepository.setActiveEspacoId(esp.id);
+    if ((await espacoRepository.getActiveEspacoId(userId)) == null) {
+      await espacoRepository.setActiveEspacoId(userId, esp.id);
     }
     return espacoView(esp);
   },
 
-  async update(id: string, patch: UpdateEspacoDTO) {
-    await this.getOrThrow(id);
+  async update(userId: string, id: string, patch: UpdateEspacoDTO) {
+    await this.getOrThrow(userId, id);
     const data: Record<string, unknown> = { ...patch };
     if (patch.rendaMensal != null) data.rendaMensal = round(patch.rendaMensal);
     const esp = await espacoRepository.update(id, data);
     return espacoView(esp);
   },
 
-  async remove(id: string) {
-    await this.getOrThrow(id);
-    if ((await espacoRepository.count()) <= 1) {
+  async remove(userId: string, id: string) {
+    await this.getOrThrow(userId, id);
+    if ((await espacoRepository.count(userId)) <= 1) {
       throw new AppError("Não dá pra remover o único espaço.");
     }
     await espacoRepository.delete(id); // cascata limpa orçamento
     // se era o ativo, reassina pro primeiro restante
-    let activeEspacoId = await espacoRepository.getActiveEspacoId();
+    let activeEspacoId = await espacoRepository.getActiveEspacoId(userId);
     if (activeEspacoId === id || activeEspacoId == null) {
-      const rest = await espacoRepository.list();
+      const rest = await espacoRepository.list(userId);
       activeEspacoId = rest[0]?.id ?? null;
-      await espacoRepository.setActiveEspacoId(activeEspacoId);
+      await espacoRepository.setActiveEspacoId(userId, activeEspacoId);
     }
     return { id, activeEspacoId };
   },

@@ -1,0 +1,3 @@
+[test]
+# Aponta o Prisma pro banco de teste antes de qualquer import (ver tests/setup/env.ts).
+preload = ["./tests/setup/env.ts"]

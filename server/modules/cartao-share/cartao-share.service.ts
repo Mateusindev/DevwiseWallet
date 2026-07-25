@@ -10,7 +10,7 @@ type ShareRow = CartaoShare & {
   despesaFixa: DespesaFixa | null;
   despesaMes: DespesaMes | null;
 };
-type ShareWithCartao = ShareRow & { cartao: Cartao };
+type ShareComDono = ShareRow & { cartao: Cartao & { user: { id: string; nome: string } } };
 
 // ── Cálculo (puro) ───────────────────────────────────────────────────────────
 
@@ -86,59 +86,71 @@ function shareView(s: ShareRow, mes: string) {
 }
 
 // ── Service ────────────────────────────────────────────────────────────────
+// `ownerId` = dono do cartão/agenda (usuário logado nas rotas de gestão).
 
 export const cartaoShareService = {
   // ── Contatos ──────────────────────────────────────────────────────────────
-  async listContatos() {
-    return (await cartaoShareRepository.contatoList()).map(contatoView);
+  async listContatos(ownerId: string) {
+    return (await cartaoShareRepository.contatoList(ownerId)).map(contatoView);
   },
 
-  async getContatoOrThrow(id: string): Promise<Contato> {
-    const c = await cartaoShareRepository.contatoFindById(id);
+  async getContatoOrThrow(ownerId: string, id: string): Promise<Contato> {
+    const c = await cartaoShareRepository.contatoFindById(id, ownerId);
     if (!c) throw new NotFoundError(`Contato não encontrado: ${id}`);
     return c;
   },
 
-  async createContato(dto: CreateContatoDTO) {
+  async createContato(ownerId: string, dto: CreateContatoDTO) {
     const email = dto.email ?? null;
     // vínculo lazy: se já existe usuário com esse email, associa de cara
-    const userId = email ? (await cartaoShareRepository.userByEmail(email))?.id ?? null : null;
-    const c = await cartaoShareRepository.contatoCreate({ nome: dto.nome, email, userId });
+    const userId = email ? await this.vinculavelPor(ownerId, email) : null;
+    const c = await cartaoShareRepository.contatoCreate({ ownerId, nome: dto.nome, email, userId });
     return contatoView(c);
   },
 
-  async updateContato(id: string, patch: UpdateContatoDTO) {
-    await this.getContatoOrThrow(id);
+  async updateContato(ownerId: string, id: string, patch: UpdateContatoDTO) {
+    await this.getContatoOrThrow(ownerId, id);
     const data: Record<string, unknown> = {};
     if (patch.nome != null) data.nome = patch.nome;
     if (patch.email !== undefined) {
       data.email = patch.email;
       // reavalia vínculo quando o email muda
-      data.userId = patch.email ? (await cartaoShareRepository.userByEmail(patch.email))?.id ?? null : null;
+      data.userId = patch.email ? await this.vinculavelPor(ownerId, patch.email, id) : null;
     }
     const c = await cartaoShareRepository.contatoUpdate(id, data);
     return contatoView(c);
   },
 
-  async removeContato(id: string) {
-    await this.getContatoOrThrow(id);
+  async removeContato(ownerId: string, id: string) {
+    await this.getContatoOrThrow(ownerId, id);
     await cartaoShareRepository.contatoDelete(id); // shares caem em cascata
     return { id };
   },
 
+  // userId do usuário com esse email, ou null se não existe / já está vinculado
+  // a outro contato desta mesma agenda (unique ownerId+userId).
+  async vinculavelPor(ownerId: string, email: string, exceptContatoId?: string): Promise<string | null> {
+    const user = await cartaoShareRepository.userByEmail(email);
+    if (!user) return null;
+    const jaNaAgenda = (await cartaoShareRepository.contatosByUserId(user.id)).some(
+      (c) => c.ownerId === ownerId && c.id !== exceptContatoId
+    );
+    return jaNaAgenda ? null : user.id;
+  },
+
   // ── Shares (visão do dono) ──────────────────────────────────────────────────
-  async listByCartao(cartaoId: string, mes = currentMonth()) {
-    await cartaoService.getOrThrow(cartaoId);
+  async listByCartao(ownerId: string, cartaoId: string, mes = currentMonth()) {
+    await cartaoService.getOrThrow(ownerId, cartaoId);
     const shares = await cartaoShareRepository.sharesByCartao(cartaoId);
     return shares.map((s) => shareView(s as ShareRow, mes));
   },
 
-  async createShare(cartaoId: string, dto: CreateShareDTO) {
-    await cartaoService.getOrThrow(cartaoId);
-    await this.getContatoOrThrow(dto.contatoId);
-    if (dto.despesaFixaId && !(await cartaoShareRepository.despesaFixaExists(dto.despesaFixaId)))
+  async createShare(ownerId: string, cartaoId: string, dto: CreateShareDTO) {
+    await cartaoService.getOrThrow(ownerId, cartaoId);
+    await this.getContatoOrThrow(ownerId, dto.contatoId);
+    if (dto.despesaFixaId && !(await cartaoShareRepository.despesaFixaExists(dto.despesaFixaId, ownerId)))
       throw new NotFoundError(`Despesa fixa não encontrada: ${dto.despesaFixaId}`);
-    if (dto.despesaMesId && !(await cartaoShareRepository.despesaMesExists(dto.despesaMesId)))
+    if (dto.despesaMesId && !(await cartaoShareRepository.despesaMesExists(dto.despesaMesId, ownerId)))
       throw new NotFoundError(`Despesa do mês não encontrada: ${dto.despesaMesId}`);
     const s = await cartaoShareRepository.shareCreate({
       cartaoId,
@@ -154,8 +166,8 @@ export const cartaoShareService = {
     return shareView(s as ShareRow, currentMonth());
   },
 
-  async updateShare(id: string, patch: UpdateShareDTO) {
-    const cur = await cartaoShareRepository.shareFindById(id);
+  async updateShare(ownerId: string, id: string, patch: UpdateShareDTO) {
+    const cur = await cartaoShareRepository.shareFindById(id, ownerId);
     if (!cur) throw new NotFoundError(`Compartilhamento não encontrado: ${id}`);
     const data: Record<string, unknown> = {};
     if (patch.descricao != null) data.descricao = patch.descricao;
@@ -170,30 +182,40 @@ export const cartaoShareService = {
     return shareView(s as ShareRow, currentMonth());
   },
 
-  async removeShare(id: string) {
-    const cur = await cartaoShareRepository.shareFindById(id);
+  async removeShare(ownerId: string, id: string) {
+    const cur = await cartaoShareRepository.shareFindById(id, ownerId);
     if (!cur) throw new NotFoundError(`Compartilhamento não encontrado: ${id}`);
     await cartaoShareRepository.shareDelete(id);
     return { id };
   },
 
   // ── Visão da pessoa compartilhada ("o que devo") ─────────────────────────────
-  // Resolve o contato do usuário logado por userId; se não houver, casa por email
-  // e persiste o vínculo (lazy claim).
-  async resolveContato(user: AuthUser): Promise<Contato | null> {
-    const byId = await cartaoShareRepository.contatoByUserId(user.id);
-    if (byId) return byId;
-    const byEmail = await cartaoShareRepository.contatoUnlinkedByEmail(user.email);
-    if (!byEmail) return null;
-    return cartaoShareRepository.contatoUpdate(byEmail.id, { userId: user.id }) as Promise<Contato>;
+  // Uma pessoa pode ser contato de vários donos → resolve TODOS os contatos dela:
+  // os já vinculados por userId + os que casam por email e ainda estão soltos
+  // (claim lazy, um por dono).
+  async resolveContatos(user: AuthUser): Promise<Contato[]> {
+    const vinculados = await cartaoShareRepository.contatosByUserId(user.id);
+    const donosJaVinculados = new Set(vinculados.map((c) => c.ownerId));
+    const candidatos = (await cartaoShareRepository.contatosUnlinkedByEmail(user.email)).filter(
+      (c) => !donosJaVinculados.has(c.ownerId)
+    );
+    const reivindicados: Contato[] = [];
+    for (const c of candidatos) {
+      if (donosJaVinculados.has(c.ownerId)) continue; // 1 contato por dono
+      donosJaVinculados.add(c.ownerId);
+      reivindicados.push((await cartaoShareRepository.contatoUpdate(c.id, { userId: user.id })) as Contato);
+    }
+    return [...vinculados, ...reivindicados];
   },
 
   async meusCompartilhamentos(user: AuthUser, mes = currentMonth()) {
-    const contato = await this.resolveContato(user);
-    if (!contato) return [];
-    const shares = (await cartaoShareRepository.sharesByContato(contato.id)) as ShareWithCartao[];
+    const contatos = await this.resolveContatos(user);
+    if (contatos.length === 0) return [];
+    const shares = (await cartaoShareRepository.sharesByContatoIds(
+      contatos.map((c) => c.id)
+    )) as ShareComDono[];
 
-    const porCartao = new Map<string, { cartao: Cartao; linhas: ShareRow[] }>();
+    const porCartao = new Map<string, { cartao: ShareComDono["cartao"]; linhas: ShareRow[] }>();
     for (const s of shares) {
       const g = porCartao.get(s.cartaoId) ?? { cartao: s.cartao, linhas: [] };
       g.linhas.push(s);
@@ -204,6 +226,7 @@ export const cartaoShareService = {
       const views = linhas.map((s) => shareView(s, mes));
       return {
         cartao: { id: cartao.id, nome: cartao.nome, bandeira: cartao.bandeira, cor: cartao.cor },
+        dono: { id: cartao.user.id, nome: cartao.user.nome },
         devidoMes: round(views.reduce((t, v) => t + v.valorMes, 0)),
         comprometido: round(views.reduce((t, v) => t + v.comprometido, 0)),
         linhas: views,

@@ -1,6 +1,8 @@
 import type { DespesaFixa, DespesaMes } from "@prisma/client";
 import { orcamentoRepository } from "./orcamento.repository";
 import { espacoService } from "../espaco/espaco.service";
+import { cartaoService } from "../cartao/cartao.service";
+import { categoriaService } from "../categoria/categoria.service";
 import { NotFoundError } from "@/server/lib/errors";
 import { num, isoDate, parseDate, round, parcelaView, parcelaWrite, currentMonth } from "@/server/lib/serialize";
 import type {
@@ -17,6 +19,18 @@ function assertPertence(found: { espacoId: string } | null, espacoId: string, la
   if (!found || found.espacoId !== espacoId) {
     throw new NotFoundError(`${label} não encontrada: ${id}`);
   }
+}
+
+// Cartão e categoria são agregados raiz de OUTRO módulo: uma despesa só pode
+// apontar os do próprio dono. Sem isso, uma fixa entraria na fatura de um cartão
+// de outra conta (o cálculo de fatura filtra por cartaoId, não por userId).
+// Recurso de outro dono → 404 pelos getOrThrow, como no resto do app.
+async function assertVinculos(
+  userId: string,
+  dto: { cartaoId?: string | null; categoriaId?: string | null }
+) {
+  if (dto.cartaoId) await cartaoService.getOrThrow(userId, dto.cartaoId);
+  if (dto.categoriaId) await categoriaService.getOrThrow(userId, dto.categoriaId);
 }
 
 function fixaView(d: DespesaFixa) {
@@ -64,8 +78,9 @@ function receitaView(r: { id: string; mes: string; descricao: string; valor: unk
 
 export const orcamentoService = {
   // ── Despesas fixas ─────────────────────────────────────────────────────────
-  async addDespesaFixa(espacoId: string, dto: AddDespesaFixaDTO) {
-    await espacoService.getOrThrow(espacoId);
+  async addDespesaFixa(userId: string, espacoId: string, dto: AddDespesaFixaDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
+    await assertVinculos(userId, dto);
     const df = await orcamentoRepository.createDespesaFixa({
       espacoId,
       descricao: dto.descricao,
@@ -79,9 +94,10 @@ export const orcamentoService = {
     return fixaView(df);
   },
 
-  async updateDespesaFixa(espacoId: string, id: string, patch: UpdateDespesaFixaDTO) {
-    const found = await orcamentoRepository.findDespesaFixa(id);
+  async updateDespesaFixa(userId: string, espacoId: string, id: string, patch: UpdateDespesaFixaDTO) {
+    const found = await orcamentoRepository.findDespesaFixa(id, userId);
     assertPertence(found, espacoId, "Despesa fixa", id);
+    await assertVinculos(userId, patch);
     const data: Record<string, unknown> = {};
     if (patch.descricao !== undefined) data.descricao = patch.descricao;
     if (patch.valor !== undefined) data.valor = round(patch.valor);
@@ -98,15 +114,15 @@ export const orcamentoService = {
     return fixaView(df);
   },
 
-  async toggleDespesaFixa(espacoId: string, id: string) {
-    const found = await orcamentoRepository.findDespesaFixa(id);
+  async toggleDespesaFixa(userId: string, espacoId: string, id: string) {
+    const found = await orcamentoRepository.findDespesaFixa(id, userId);
     assertPertence(found, espacoId, "Despesa fixa", id);
     const df = await orcamentoRepository.updateDespesaFixa(id, { ativa: !found!.ativa });
     return fixaView(df);
   },
 
-  async removeDespesaFixa(espacoId: string, id: string) {
-    const found = await orcamentoRepository.findDespesaFixa(id);
+  async removeDespesaFixa(userId: string, espacoId: string, id: string) {
+    const found = await orcamentoRepository.findDespesaFixa(id, userId);
     assertPertence(found, espacoId, "Despesa fixa", id);
     await orcamentoRepository.deleteDespesaFixa(id);
     return { id };
@@ -116,8 +132,8 @@ export const orcamentoService = {
   //   <= 0      → remove o registro (nada pago)
   //   >= valor  → quitada (clampa no valor)
   //   intermed. → pagamento parcial
-  async setPagamentoFixa(espacoId: string, id: string, ym: string, valorPago: number) {
-    const found = await orcamentoRepository.findDespesaFixa(id);
+  async setPagamentoFixa(userId: string, espacoId: string, id: string, ym: string, valorPago: number) {
+    const found = await orcamentoRepository.findDespesaFixa(id, userId);
     assertPertence(found, espacoId, "Despesa fixa", id);
     const valor = num(found!.valor);
     const pago = clampPago(valorPago, valor);
@@ -131,8 +147,9 @@ export const orcamentoService = {
   },
 
   // ── Despesas do mês ──────────────────────────────────────────────────────
-  async addDespesaMes(espacoId: string, dto: AddDespesaMesDTO) {
-    await espacoService.getOrThrow(espacoId);
+  async addDespesaMes(userId: string, espacoId: string, dto: AddDespesaMesDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
+    await assertVinculos(userId, dto);
     const dm = await orcamentoRepository.createDespesaMes({
       espacoId,
       mes: dto.mes,
@@ -146,9 +163,10 @@ export const orcamentoService = {
     return mesView(dm);
   },
 
-  async updateDespesaMes(espacoId: string, id: string, patch: UpdateDespesaMesDTO) {
-    const found = await orcamentoRepository.findDespesaMes(id);
+  async updateDespesaMes(userId: string, espacoId: string, id: string, patch: UpdateDespesaMesDTO) {
+    const found = await orcamentoRepository.findDespesaMes(id, userId);
     assertPertence(found, espacoId, "Despesa do mês", id);
+    await assertVinculos(userId, patch);
     const data: Record<string, unknown> = {};
     if (patch.descricao !== undefined) data.descricao = patch.descricao;
     if (patch.valor !== undefined) data.valor = round(patch.valor);
@@ -160,16 +178,16 @@ export const orcamentoService = {
     return mesView(dm);
   },
 
-  async removeDespesaMes(espacoId: string, id: string) {
-    const found = await orcamentoRepository.findDespesaMes(id);
+  async removeDespesaMes(userId: string, espacoId: string, id: string) {
+    const found = await orcamentoRepository.findDespesaMes(id, userId);
     assertPertence(found, espacoId, "Despesa do mês", id);
     await orcamentoRepository.deleteDespesaMes(id);
     return { id };
   },
 
   // Define quanto foi pago de uma despesa do mês (valor absoluto). paga = pago >= valor.
-  async setPagaMes(espacoId: string, id: string, valorPago: number) {
-    const found = await orcamentoRepository.findDespesaMes(id);
+  async setPagaMes(userId: string, espacoId: string, id: string, valorPago: number) {
+    const found = await orcamentoRepository.findDespesaMes(id, userId);
     assertPertence(found, espacoId, "Despesa do mês", id);
     const valor = num(found!.valor);
     const pago = clampPago(valorPago, valor);
@@ -178,8 +196,8 @@ export const orcamentoService = {
   },
 
   // ── Receitas do mês ──────────────────────────────────────────────────────
-  async addReceitaMes(espacoId: string, dto: AddReceitaMesDTO) {
-    await espacoService.getOrThrow(espacoId);
+  async addReceitaMes(userId: string, espacoId: string, dto: AddReceitaMesDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
     const rm = await orcamentoRepository.createReceitaMes({
       espacoId,
       mes: dto.mes,
@@ -190,8 +208,8 @@ export const orcamentoService = {
     return receitaView(rm);
   },
 
-  async updateReceitaMes(espacoId: string, id: string, patch: UpdateReceitaMesDTO) {
-    const found = await orcamentoRepository.findReceitaMes(id);
+  async updateReceitaMes(userId: string, espacoId: string, id: string, patch: UpdateReceitaMesDTO) {
+    const found = await orcamentoRepository.findReceitaMes(id, userId);
     assertPertence(found, espacoId, "Receita do mês", id);
     const data: Record<string, unknown> = {};
     if (patch.descricao !== undefined) data.descricao = patch.descricao;
@@ -201,23 +219,23 @@ export const orcamentoService = {
     return receitaView(rm);
   },
 
-  async removeReceitaMes(espacoId: string, id: string) {
-    const found = await orcamentoRepository.findReceitaMes(id);
+  async removeReceitaMes(userId: string, espacoId: string, id: string) {
+    const found = await orcamentoRepository.findReceitaMes(id, userId);
     assertPertence(found, espacoId, "Receita do mês", id);
     await orcamentoRepository.deleteReceitaMes(id);
     return { id };
   },
 
   // ── Renda mensal ─────────────────────────────────────────────────────────
-  async setRenda(espacoId: string, ym: string, valor: number) {
-    await espacoService.getOrThrow(espacoId);
+  async setRenda(userId: string, espacoId: string, ym: string, valor: number) {
+    await espacoService.getOrThrow(userId, espacoId);
     const r = await orcamentoRepository.upsertRenda(espacoId, ym, round(valor));
     return { ym: r.ym, valor: num(r.valor) };
   },
 
   // Remove o override do mês → o mês passa a herdar o salário fixo do espaço.
-  async clearRenda(espacoId: string, ym: string) {
-    await espacoService.getOrThrow(espacoId);
+  async clearRenda(userId: string, espacoId: string, ym: string) {
+    await espacoService.getOrThrow(userId, espacoId);
     await orcamentoRepository.deleteRenda(espacoId, ym);
     return { ym };
   },

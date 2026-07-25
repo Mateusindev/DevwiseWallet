@@ -93,7 +93,7 @@ export async function getBootstrap() {
   return unwrap(client.api.state.$get());
 }
 
-// ── Caixinhas / movimentações (GLOBAIS) ──────────────────────────────────────
+// ── Caixinhas / movimentações (da conta, não por espaço) ─────────────────────
 export async function addAporte({
   caixinhaId,
   valor,
@@ -261,7 +261,7 @@ export async function removeReceitaMes(espacoId: string, id: string) {
   return unwrap(client.api.despesas.espacos[":esp"].receitas[":id"].$delete({ param: { esp: espacoId, id } }));
 }
 
-// ── Cartões de crédito (GLOBAIS) ──────────────────────────────────────────────
+// ── Cartões de crédito (da conta, não por espaço) ────────────────────────────
 export async function getCartoes(ym?: string) {
   return unwrap(client.api.cartoes.$get({ query: ym ? { ym } : {} }));
 }
@@ -325,7 +325,7 @@ export async function getMeusCompartilhamentos(ym?: string) {
   return unwrap(client.api.me.compartilhamentos.$get({ query: ym ? { ym } : {} }));
 }
 
-// ── Categorias de despesa (GLOBAIS) ───────────────────────────────────────────
+// ── Categorias de despesa (da conta, não por espaço) ─────────────────────────
 export async function getCategorias() {
   return unwrap(client.api.categorias.$get());
 }

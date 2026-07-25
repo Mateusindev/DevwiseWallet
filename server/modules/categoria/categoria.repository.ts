@@ -2,23 +2,23 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 
 export const categoriaRepository = {
-  list() {
-    return prisma.categoria.findMany({ orderBy: { ordem: "asc" } });
+  list(userId: string) {
+    return prisma.categoria.findMany({ where: { userId }, orderBy: { ordem: "asc" } });
   },
 
-  findById(id: string) {
-    return prisma.categoria.findUnique({ where: { id } });
+  findById(id: string, userId: string) {
+    return prisma.categoria.findFirst({ where: { id, userId } });
   },
 
-  count() {
-    return prisma.categoria.count();
+  count(userId: string) {
+    return prisma.categoria.count({ where: { userId } });
   },
 
-  create(data: Prisma.CategoriaCreateInput) {
+  create(data: Prisma.CategoriaUncheckedCreateInput) {
     return prisma.categoria.create({ data });
   },
 
-  update(id: string, data: Prisma.CategoriaUpdateInput) {
+  update(id: string, data: Prisma.CategoriaUncheckedUpdateInput) {
     return prisma.categoria.update({ where: { id }, data });
   },
 

@@ -4,9 +4,12 @@ import {
   monthsBetween,
   effectiveParcela,
   parcelaAtivaNoMes,
+  parcelaView,
   parcelaWrite,
   parseDate,
   isoDate,
+  isoToday,
+  currentMonth,
   num,
   numOrNull,
 } from "./serialize";
@@ -24,9 +27,18 @@ describe("num / numOrNull", () => {
     expect(num(null)).toBe(0);
     expect(numOrNull(null)).toBeNull();
   });
+  it("undefined também", () => {
+    expect(num(undefined)).toBe(0);
+    expect(numOrNull(undefined)).toBeNull();
+  });
   it("number passa direto", () => {
     expect(num(12.5)).toBe(12.5);
     expect(numOrNull(12.5)).toBe(12.5);
+  });
+  it("Decimal do Prisma vira number via toNumber()", () => {
+    const decimalLike = { toNumber: () => 42.75 } as never;
+    expect(num(decimalLike)).toBe(42.75);
+    expect(numOrNull(decimalLike)).toBe(42.75);
   });
 });
 
@@ -35,6 +47,13 @@ describe("datas", () => {
     const d = parseDate("2026-06-15");
     expect(d.toISOString()).toBe("2026-06-15T00:00:00.000Z");
     expect(isoDate(d)).toBe("2026-06-15");
+  });
+
+  it("isoToday / currentMonth têm o formato esperado e são consistentes entre si", () => {
+    const hoje = isoToday();
+    expect(hoje).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(currentMonth()).toMatch(/^\d{4}-\d{2}$/);
+    expect(hoje.startsWith(currentMonth())).toBe(true);
   });
 });
 
@@ -82,6 +101,34 @@ describe("parcelaAtivaNoMes", () => {
   });
 });
 
+describe("parcelaView", () => {
+  it("expõe só cartão + campos de parcela, ignorando o resto da linha", () => {
+    const despesa = {
+      id: "df-1",
+      descricao: "Notebook",
+      valor: 200,
+      cartaoId: "ct-1",
+      parcelado: true,
+      parcelaAtual: 3,
+      totalParcelas: 12,
+      parcelaMesRef: "2026-06",
+    };
+    expect(parcelaView(despesa)).toEqual({
+      cartaoId: "ct-1",
+      parcelado: true,
+      parcelaAtual: 3,
+      totalParcelas: 12,
+      parcelaMesRef: "2026-06",
+    });
+  });
+
+  it("linha sem cartão nem parcelamento sai toda nula", () => {
+    expect(
+      parcelaView({ cartaoId: null, parcelado: false, parcelaAtual: null, totalParcelas: null, parcelaMesRef: null })
+    ).toEqual({ cartaoId: null, parcelado: false, parcelaAtual: null, totalParcelas: null, parcelaMesRef: null });
+  });
+});
+
 describe("parcelaWrite", () => {
   it("não parcelado zera tudo", () => {
     expect(parcelaWrite({ cartaoId: "c1", parcelado: false, parcelaAtual: 3, totalParcelas: 12 }, "2026-06")).toEqual({
@@ -101,5 +148,28 @@ describe("parcelaWrite", () => {
       totalParcelas: 10,
       parcelaMesRef: "2026-06",
     });
+  });
+
+  it("dto vazio = não parcelado sem cartão", () => {
+    expect(parcelaWrite({}, "2026-06")).toEqual({
+      cartaoId: null,
+      parcelado: false,
+      parcelaAtual: null,
+      totalParcelas: null,
+      parcelaMesRef: null,
+    });
+  });
+
+  it("parcelado sem totalParcelas mantém total null (parcelamento aberto)", () => {
+    expect(parcelaWrite({ parcelado: true, parcelaAtual: 4 }, "2026-06")).toMatchObject({
+      parcelaAtual: 4,
+      totalParcelas: null,
+      parcelaMesRef: "2026-06",
+    });
+  });
+
+  it("round-trip: o que parcelaWrite grava é o que parcelaView devolve", () => {
+    const gravado = parcelaWrite({ cartaoId: "ct-1", parcelado: true, parcelaAtual: 2, totalParcelas: 6 }, "2026-06");
+    expect(parcelaView(gravado)).toEqual(gravado);
   });
 });

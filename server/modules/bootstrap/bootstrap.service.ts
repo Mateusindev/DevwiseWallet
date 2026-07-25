@@ -4,23 +4,23 @@ import { espacoService } from "../espaco/espaco.service";
 import { cartaoService } from "../cartao/cartao.service";
 import { categoriaService } from "../categoria/categoria.service";
 
-// GET /state — estado inicial completo (espelha getBootstrap() do mock).
-export async function getState() {
-  // Garante espaço + categorias padrão numa base vazia antes de montar o estado.
+// GET /state — estado inicial completo do usuário logado.
+export async function getState(userId: string) {
+  // Garante espaço + categorias padrão pra quem ainda não tem nada (conta nova).
   // Caixinhas começam vazias — o usuário cria (inclui a reserva de emergência).
-  await espacoService.ensureDefaults();
-  await categoriaService.ensureDefaults();
+  await espacoService.ensureDefaults(userId);
+  await categoriaService.ensureDefaults(userId);
 
   const [caixinhas, movimentacoes, { espacos, activeEspacoId, espacosOcultos }, cartoes, categorias] =
     await Promise.all([
-      caixinhaService.list(),
-      movimentacaoService.list(),
-      espacoService.listWithActive(),
-      cartaoService.listWithAggregates(),
-      categoriaService.list(),
+      caixinhaService.list(userId),
+      movimentacaoService.list(userId),
+      espacoService.listWithActive(userId),
+      cartaoService.listWithAggregates(userId),
+      categoriaService.list(userId),
     ]);
 
-  const orcamento = activeEspacoId ? await espacoService.getOrcamento(activeEspacoId) : null;
+  const orcamento = activeEspacoId ? await espacoService.getOrcamento(userId, activeEspacoId) : null;
 
   return { caixinhas, movimentacoes, espacos, activeEspacoId, espacosOcultos, cartoes, categorias, orcamento };
 }
