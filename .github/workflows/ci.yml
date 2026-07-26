@@ -3,6 +3,9 @@ name: CI
 on:
   pull_request:
     branches: [master]
+  # Merge direto em master também roda CI (antes só PR rodava).
+  push:
+    branches: [master]
 
 # Um push novo na mesma branch cancela a run anterior.
 concurrency:
@@ -11,7 +14,7 @@ concurrency:
 
 jobs:
   verificacao:
-    name: typecheck + testes (unit + integração)
+    name: typecheck + testes (lib + unit + integração + front)
     runs-on: ubuntu-latest
 
     # Banco de teste real: os testes de integração exercitam rotas, repositories
@@ -61,6 +64,10 @@ jobs:
       - name: Aplicar o schema no banco de teste
         run: bun run test:db:setup
 
+      # Funções puras de lib/ (calc + format). Sem DOM e sem banco.
+      - name: Testes de lib (funções puras)
+        run: bun run test:lib
+
       # Um processo por arquivo (ver scripts/test-unit.ts) — `mock.module` é
       # global e vaza entre arquivos. A cobertura sai do merge dos lcov.
       - name: Testes unitários
@@ -71,9 +78,14 @@ jobs:
       - name: Testes de integração
         run: bun run test:int
 
-      # O repo ainda tem erros de lint herdados dos componentes portados do Vite.
-      # Enquanto não forem zerados, o lint reporta mas não derruba o CI.
-      # Quando `bun run lint` passar limpo, remova o `continue-on-error`.
-      - name: Lint (informativo)
-        continue-on-error: true
+      # Front: happy-dom + Testing Library com o app Hono real por trás (ponte de
+      # fetch em tests/front/harness.tsx). Usa o mesmo banco da integração, por
+      # isso roda DEPOIS dela e nunca em paralelo — as duas truncam as tabelas.
+      - name: Testes de front (integração)
+        run: bun run test:front
+
+      # Lint bloqueante: os erros herdados dos componentes portados do Vite
+      # (setState em efeito, ref no render, mutação depois do render) foram
+      # zerados, então o step deixou de ser informativo.
+      - name: Lint
         run: bun run lint

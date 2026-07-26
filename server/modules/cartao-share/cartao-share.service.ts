@@ -222,15 +222,22 @@ export const cartaoShareService = {
       porCartao.set(s.cartaoId, g);
     }
 
-    return [...porCartao.values()].map(({ cartao, linhas }) => {
-      const views = linhas.map((s) => shareView(s, mes));
-      return {
-        cartao: { id: cartao.id, nome: cartao.nome, bandeira: cartao.bandeira, cor: cartao.cor },
-        dono: { id: cartao.user.id, nome: cartao.user.nome },
-        devidoMes: round(views.reduce((t, v) => t + v.valorMes, 0)),
-        comprometido: round(views.reduce((t, v) => t + v.comprometido, 0)),
-        linhas: views,
-      };
-    });
+    return (
+      [...porCartao.values()]
+        .map(({ cartao, linhas }) => {
+          const views = linhas.map((s) => shareView(s, mes));
+          return {
+            cartao: { id: cartao.id, nome: cartao.nome, bandeira: cartao.bandeira, cor: cartao.cor },
+            dono: { id: cartao.user.id, nome: cartao.user.nome },
+            devidoMes: round(views.reduce((t, v) => t + v.valorMes, 0)),
+            comprometido: round(views.reduce((t, v) => t + v.comprometido, 0)),
+            linhas: views,
+          };
+        })
+        // Share de uma linha que não existe no mês pedido não devo nada nem
+        // tenho parcela futura — o grupo não entra, senão o painel "O que devo"
+        // fica na tela zerado.
+        .filter((g) => g.devidoMes !== 0 || g.comprometido !== 0)
+    );
   },
 };

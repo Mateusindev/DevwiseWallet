@@ -113,11 +113,21 @@ export default function DespesasFixas() {
 
   // Página ativa oculta no mês visto → pula pra primeira visível (mantém coerência
   // entre aba selecionada e conteúdo mostrado).
+  //
+  // O ref é obrigatório: `setActiveEspaco` vem do provider com identidade nova a
+  // cada render, então o efeito roda em TODO render. Sem a guarda, enquanto o
+  // PUT/GET da troca está em vôo o activeEspacoId ainda é o antigo, o efeito
+  // dispara de novo, cada chamada dispatcha ORC_LOADING, e isso vira loop de
+  // render ("Maximum update depth exceeded").
+  const puloRef = useRef(null);
   useEffect(() => {
-    if (activeEspacoId && espacoOcultoNoMes(espacosOcultos, activeEspacoId, ym)) {
-      const vis = espacosVisiveisNoMes(espacos, espacosOcultos, ym);
-      if (vis[0] && vis[0].id !== activeEspacoId) setActiveEspaco(vis[0].id);
-    }
+    if (!activeEspacoId || !espacoOcultoNoMes(espacosOcultos, activeEspacoId, ym)) return;
+    const alvo = espacosVisiveisNoMes(espacos, espacosOcultos, ym)[0];
+    if (!alvo || alvo.id === activeEspacoId) return;
+    const chave = `${ym}:${activeEspacoId}->${alvo.id}`;
+    if (puloRef.current === chave) return; // já pedi esta troca
+    puloRef.current = chave;
+    setActiveEspaco(alvo.id);
   }, [ym, activeEspacoId, espacosOcultos, espacos, setActiveEspaco]);
 
   return (
@@ -658,7 +668,8 @@ function RecebidoCard({ ym, valor, fixa, override }) {
                 <MoneyInput value={draft} onValue={setDraft} autoFocus
                   onKeyDown={(e) => e.key === "Enter" && save()} />
               </div>
-              <Button variant="growth" onClick={save} loading={busy} className="px-3">
+              <Button variant="growth" onClick={save} loading={busy} className="px-3"
+                aria-label="Salvar salário">
                 <Check size={16} />
               </Button>
             </div>

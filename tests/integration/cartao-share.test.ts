@@ -604,10 +604,11 @@ describe("GET /api/me/compartilhamentos", () => {
     expect((await pessoa.api.get(`/me/compartilhamentos?ym=${currentMonth()}`)).body[0].devidoMes).toBe(
       60
     );
-    expect(
-      (await pessoa.api.get(`/me/compartilhamentos?ym=${addMonths(currentMonth(), 1)}`)).body[0]
-        .devidoMes
-    ).toBe(0);
+    // share pontual do mês corrente: no mês seguinte não devo nada e não há
+    // parcela futura — o grupo sai da resposta em vez de vir zerado
+    expect((await pessoa.api.get(`/me/compartilhamentos?ym=${addMonths(currentMonth(), 1)}`)).body).toEqual(
+      []
+    );
   });
 
   it("exige cartao:view_shared", async () => {

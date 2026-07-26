@@ -21,71 +21,80 @@ export default function Dashboard({ onOpenCaixinha }) {
   } = fin;
 
   const ym = currentMonthKey();
-  // agregados de fatura do mês (caso o usuário caia aqui primeiro)
-  useEffect(() => { reloadCartoes(); }, [reloadCartoes]);
+  // agregados de fatura do mês (caso o usuário caia aqui primeiro).
+  // O catch existe porque isto é fire-and-forget: sem cartao:view (ou com a
+  // sessão expirando no meio) a promise rejeitaria sem ninguém escutando.
+  // A tela segue com os cartões que já estiverem no contexto.
+  useEffect(() => { reloadCartoes().catch(() => {}); }, [reloadCartoes]);
 
   // Espaço visualizado nos gráficos — independente da página ativa em Despesas.
   // Default = espaço ativo; trocar busca o orçamento do escolhido sem mexer no global.
-  const [vizId, setVizId] = useState(activeEspacoId);
-  const [vizOrc, setVizOrc] = useState(null); // orçamento buscado p/ espaço != ativo
-  const [vizLoading, setVizLoading] = useState(false);
-
-  // ativo só chega depois do boot — adota como default assim que existir
-  useEffect(() => { if (vizId == null && activeEspacoId) setVizId(activeEspacoId); }, [activeEspacoId, vizId]);
+  // `escolhido` é null até o usuário mexer no select: o default é DERIVADO do
+  // ativo (que só chega depois do boot), não copiado por efeito.
+  const [escolhido, setEscolhido] = useState(null);
+  const vizId = escolhido ?? activeEspacoId;
+  // { id, orc } do último fetch — guardar o id junto é o que dá "carregando"
+  // e "orçamento válido" sem nenhum setState síncrono dentro do efeito.
+  const [buscado, setBuscado] = useState(null);
 
   useEffect(() => {
-    if (!vizId || vizId === activeEspacoId) { setVizOrc(null); return; }
+    if (!vizId || vizId === activeEspacoId) return;
     let cancel = false;
-    setVizLoading(true);
     api.getOrcamento(vizId)
-      .then((o) => { if (!cancel) setVizOrc(o); })
-      .finally(() => { if (!cancel) setVizLoading(false); });
+      .then((o) => { if (!cancel) setBuscado({ id: vizId, orc: o }); })
+      .catch(() => { if (!cancel) setBuscado({ id: vizId, orc: null }); });
     return () => { cancel = true; };
   }, [vizId, activeEspacoId]);
 
-  // Fonte do orçamento p/ os gráficos: contexto (espaço ativo, dados vivos) ou o buscado.
+  // Fonte do orçamento p/ os gráficos: contexto (espaço ativo, dados vivos) ou o
+  // buscado. Num objeto memoizado só porque é a entrada de 4 useMemo abaixo —
+  // escolher campo por campo faria as deps deles trocarem a cada render.
   const usaAtivo = !vizId || vizId === activeEspacoId;
-  const dFixas = usaAtivo ? despesasFixas : (vizOrc?.despesasFixas || []);
-  const dMes = usaAtivo ? despesasMes : (vizOrc?.despesasMes || []);
-  const rMes = usaAtivo ? receitasMes : (vizOrc?.receitasMes || []);
-  const rendas = usaAtivo ? rendasMensais : (vizOrc?.rendasMensais || {});
-  const cfg = usaAtivo ? config : (vizOrc?.config || { rendaMensal: 0 });
+  const vizOrc = buscado?.id === vizId ? buscado.orc : null;
+  const vizLoading = !usaAtivo && buscado?.id !== vizId;
+  const src = useMemo(
+    () =>
+      usaAtivo
+        ? { rendasMensais, despesasMes, receitasMes, despesasFixas, config }
+        : {
+            rendasMensais: vizOrc?.rendasMensais || {},
+            despesasMes: vizOrc?.despesasMes || [],
+            receitasMes: vizOrc?.receitasMes || [],
+            despesasFixas: vizOrc?.despesasFixas || [],
+            config: vizOrc?.config || { rendaMensal: 0 },
+          },
+    [usaAtivo, rendasMensais, despesasMes, receitasMes, despesasFixas, config, vizOrc]
+  );
 
   const catMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
-  const orc = useMemo(
-    () => orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, despesasFixas: dFixas, config: cfg }, ym),
-    [rendas, dMes, rMes, dFixas, cfg, ym]
-  );
+  const orc = useMemo(() => orcamentoMes(src, ym), [src, ym]);
   // série dos últimos 6 meses (evolução + sobra)
-  const serie = useMemo(() =>
-    lastMonths(6, ym).map((m) => ({
-      ym: m,
-      ...orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, despesasFixas: dFixas, config: cfg }, m),
-    })),
-    [rendas, dMes, rMes, dFixas, cfg, ym]
+  const serie = useMemo(
+    () => lastMonths(6, ym).map((m) => ({ ym: m, ...orcamentoMes(src, m) })),
+    [src, ym]
   );
 
   // despesas do mês por categoria (fixas que caem + avulsas)
   const porCategoria = useMemo(() => {
     const acc = {};
     const add = (id, v) => { const k = id || "__none"; acc[k] = (acc[k] || 0) + v; };
-    dFixas.filter((d) => fixaContaNoMes(d, ym)).forEach((d) => add(d.categoriaId, d.valor));
-    dMes.filter((d) => d.mes === ym).forEach((d) => add(d.categoriaId, d.valor));
+    src.despesasFixas.filter((d) => fixaContaNoMes(d, ym)).forEach((d) => add(d.categoriaId, d.valor));
+    src.despesasMes.filter((d) => d.mes === ym).forEach((d) => add(d.categoriaId, d.valor));
     return Object.entries(acc)
       .map(([id, value]) => {
         const c = id !== "__none" ? catMap[id] : null;
         return { label: c?.nome || "Sem categoria", value, color: c ? acento(c.cor).dot : GREY };
       })
       .sort((a, b) => b.value - a.value);
-  }, [dFixas, dMes, catMap, ym]);
+  }, [src, catMap, ym]);
 
   const topFixas = useMemo(() =>
-    dFixas
+    src.despesasFixas
       .filter((d) => fixaContaNoMes(d, ym))
       .map((d) => ({ label: d.descricao, value: d.valor, color: d.categoriaId && catMap[d.categoriaId] ? acento(catMap[d.categoriaId].cor).dot : GREY }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6),
-    [dFixas, catMap, ym]
+    [src, catMap, ym]
   );
 
   const cart = useMemo(() => {
@@ -128,7 +137,9 @@ export default function Dashboard({ onOpenCaixinha }) {
         <div>
           <p className="text-sm text-slate-400">{fmtMonthLabel(currentMonthKey())}</p>
         </div>
-        {can("movimentacao:manage") && (
+        {/* sem caixinha não há de onde tirar nem pra onde levar dinheiro: as duas
+            ações mandariam caixinhaId "" e o back recusaria com 422 */}
+        {can("movimentacao:manage") && caixinhas.length > 0 && (
           <div className="flex flex-wrap gap-2">
             <Button variant="growth" onClick={() => setAporte(true)}><Plus size={16} /> Aporte</Button>
             <Button variant="outline" onClick={() => setDespesa(true)}>Registrar despesa</Button>
@@ -198,17 +209,29 @@ export default function Dashboard({ onOpenCaixinha }) {
             </button>
           )}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {ordered.map((c) => (
-            <CaixinhaCard
-              key={c.id}
-              caixinha={c}
-              onOpen={() => onOpenCaixinha(c.id)}
-              onAporte={() => setAporte(true)}
-              onDespesa={() => setDespesa(true)}
-            />
-          ))}
-        </div>
+        {ordered.length === 0 ? (
+          <Card className="px-5 py-14 text-center">
+            <PiggyBank size={28} className="mx-auto mb-3 text-slate-500" />
+            <p className="text-sm text-slate-400">Nenhuma caixinha ainda.</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {can("caixinha:manage")
+                ? "Crie a primeira caixinha pra poder registrar aportes e despesas."
+                : "Peça a um admin pra criar a primeira caixinha."}
+            </p>
+          </Card>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {ordered.map((c) => (
+              <CaixinhaCard
+                key={c.id}
+                caixinha={c}
+                onOpen={() => onOpenCaixinha(c.id)}
+                onAporte={() => setAporte(true)}
+                onDespesa={() => setDespesa(true)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Gráficos do orçamento — espaço escolhido no select (independe da página ativa em Despesas) */}
@@ -219,7 +242,7 @@ export default function Dashboard({ onOpenCaixinha }) {
             {espacos.length > 0 && (
               <label className="flex items-center gap-2 text-sm text-slate-400">
                 <span className="whitespace-nowrap">Visualizar página</span>
-                <select value={vizId ?? ""} onChange={(e) => setVizId(e.target.value)}
+                <select value={vizId ?? ""} onChange={(e) => setEscolhido(e.target.value)}
                   className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-1.5 text-sm text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30">
                   {espacos.map((e) => (
                     <option key={e.id} value={e.id}>{e.emoji ? `${e.emoji} ` : ""}{e.nome}</option>
