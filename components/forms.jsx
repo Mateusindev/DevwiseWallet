@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useFinance } from "../store/FinanceContext.jsx";
-import { Modal, Field, TextInput, Textarea, Select, MoneyInput, PercentInput, Button } from "./ui/primitives.jsx";
+import { Modal, Field, FieldGroup, TextInput, Textarea, Select, MoneyInput, PercentInput, Button } from "./ui/primitives.jsx";
 import { fmtMoney, todayISO } from "../lib/format.js";
 import { acento, parcelaInfo } from "../lib/calc.js";
 import { useAuth } from "./AuthGate";
@@ -117,6 +117,8 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
 
   async function submit(e) {
     e.preventDefault();
+    // sem caixinha o payload iria com caixinhaId "" e o zValidator recusaria (422)
+    if (!f.caixinhaId) return setErr("Crie uma caixinha antes de registrar um aporte.");
     if (f.valor <= 0) return setErr("Informe um valor maior que zero.");
     setBusy(true);
     try {
@@ -134,17 +136,22 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
     onClose();
   }
 
+  // O erro do campo fica no Field; qualquer outro (guarda de caixinha ou
+  // resposta do back) vai pro slot geral — senão a mensagem some da tela.
+  const errCampo = err && f.valor <= 0 && f.caixinhaId ? err : "";
+  const errGeral = err && !errCampo ? err : "";
+
   return (
     <Modal open={open} onClose={close} title="Registrar aporte">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Caixinha" required>
-          <Select value={f.caixinhaId} onChange={(e) => set("caixinhaId", e.target.value)}>
+          <Select value={f.caixinhaId} onChange={(e) => { set("caixinhaId", e.target.value); setErr(""); }}>
             {caixinhas.map((c) => (
               <option key={c.id} value={c.id}>{c.nome}</option>
             ))}
           </Select>
         </Field>
-        <Field label="Valor" required error={err && f.valor <= 0 ? err : ""}
+        <Field label="Valor" required error={errCampo}
                hint={sugestao ? `Aporte mensal planejado: ${fmtMoney(sugestao)}` : ""}>
           <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} autoFocus />
         </Field>
@@ -162,6 +169,7 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
             <TextInput value={f.descricao} placeholder="Aporte mensal" onChange={(e) => set("descricao", e.target.value)} />
           </Field>
         </div>
+        {errGeral && <p role="alert" className="text-xs text-rose-400">{errGeral}</p>}
         <div className="flex gap-2 pt-1">
           <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
           <Button type="submit" variant="growth" className="flex-1" loading={busy}>Adicionar</Button>
@@ -185,6 +193,8 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
 
   async function submit(e) {
     e.preventDefault();
+    // sem caixinha o payload iria com caixinhaId "" e o zValidator recusaria (422)
+    if (!f.caixinhaId) return setErr("Crie uma caixinha antes de registrar uma despesa.");
     if (f.valor <= 0) return setErr("Informe um valor maior que zero.");
     setBusy(true);
     try {
@@ -198,18 +208,23 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
   }
   function close() { setForm(null); setErr(""); onClose(); }
 
+  // Mesma divisão do AporteModal: erro do campo no Field, o resto (guarda de
+  // caixinha, resposta do back) num slot geral que sempre aparece.
+  const errCampo = err && f.valor <= 0 && f.caixinhaId ? err : "";
+  const errGeral = err && !errCampo ? err : "";
+
   return (
     <Modal open={open} onClose={close} title="Registrar despesa">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Debitar da caixinha" required>
-          <Select value={f.caixinhaId} onChange={(e) => set("caixinhaId", e.target.value)}>
+          <Select value={f.caixinhaId} onChange={(e) => { set("caixinhaId", e.target.value); setErr(""); }}>
             {caixinhas.map((c) => (
               <option key={c.id} value={c.id}>{c.nome} — saldo {fmtMoney(c.saldo)}</option>
             ))}
           </Select>
         </Field>
         <Field label="Valor" required
-               error={err && f.valor <= 0 ? err : ""}
+               error={errCampo}
                hint={cx ? `Saldo disponível: ${fmtMoney(cx.saldo)}` : ""}>
           <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} autoFocus />
         </Field>
@@ -226,6 +241,7 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
             <TextInput value={f.descricao} placeholder="Mercado, farmácia…" onChange={(e) => set("descricao", e.target.value)} />
           </Field>
         </div>
+        {errGeral && <p role="alert" className="text-xs text-rose-400">{errGeral}</p>}
         <div className="flex gap-2 pt-1">
           <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
           <Button type="submit" variant="danger" className="flex-1" loading={busy}>Registrar saída</Button>
@@ -459,16 +475,16 @@ export function CaixinhaModal({ open, onClose, caixinha }) {
         <Field label="Rendimento" hint="Juros compostos usados só na previsão da meta — o saldo continua vindo das movimentações">
           <PercentInput value={f.taxaJuros} onValue={(v) => set("taxaJuros", v)} />
         </Field>
-        <Field label="Cor">
+        <FieldGroup label="Cor">
           <div className="flex gap-2">
             {CORES.map((c) => (
               <button key={c} type="button" onClick={() => set("cor", c)}
-                      aria-label={c}
+                      aria-label={c} aria-pressed={f.cor === c}
                       style={{ backgroundColor: acento(c).dot }}
                       className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-white scale-110" : "opacity-60 hover:opacity-100"}`} />
             ))}
           </div>
-        </Field>
+        </FieldGroup>
         <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer">
           <input type="checkbox" checked={f.acumulaSobra} onChange={(e) => set("acumulaSobra", e.target.checked)}
                  className="h-4 w-4 rounded border-white/20 bg-transparent accent-blue-500 cursor-pointer" />
@@ -532,19 +548,21 @@ export function ReservaEmergenciaModal({ open, onClose, caixinha, onCreated }) {
   return (
     <Modal open={open} onClose={close} title={editing ? "Configurar reserva de emergência" : "Nova reserva de emergência"}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Meses de segurança" hint="Quantos meses de gasto quer ter guardados" error={err}>
+        <FieldGroup label="Meses de segurança" hint="Quantos meses de gasto quer ter guardados" error={err}>
           <div className="flex flex-wrap items-center gap-2">
             {MESES_SUGERIDOS.map((m) => (
               <button key={m} type="button" onClick={() => { set("meses", m); setErr(""); }}
+                      aria-pressed={f.meses === m}
                       className={`rounded-xl px-3.5 py-2 text-sm font-semibold cursor-pointer transition-colors ${f.meses === m ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-500/40" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>
                 {m} meses
               </button>
             ))}
-            <TextInput type="number" min="1" value={f.meses}
+            {/* fora de um <label>, o input precisa do rótulo explícito */}
+            <TextInput type="number" min="1" value={f.meses} aria-label="Meses de segurança"
                        onChange={(e) => { set("meses", Math.max(0, parseInt(e.target.value, 10) || 0)); setErr(""); }}
                        className="w-20" />
           </div>
-        </Field>
+        </FieldGroup>
         <Field label="Gasto por mês" hint="Quanto você gasta em média por mês">
           <MoneyInput value={f.gasto} onValue={(v) => { set("gasto", v); setErr(""); }} />
         </Field>
@@ -611,17 +629,17 @@ export function EspacoModal({ open, onClose, onCreated }) {
           <TextInput value={f.nome} placeholder="Nosso, Meu, Viagem…" autoFocus
                      onChange={(e) => { set("nome", e.target.value); setErr(""); }} />
         </Field>
-        <Field label="Ícone">
+        <FieldGroup label="Ícone">
           <div className="flex flex-wrap gap-2">
             {EMOJIS.map((em) => (
               <button key={em} type="button" onClick={() => set("emoji", em)}
-                      aria-label={`Ícone ${em}`}
+                      aria-label={`Ícone ${em}`} aria-pressed={f.emoji === em}
                       className={`grid h-10 w-10 place-items-center rounded-xl text-lg cursor-pointer transition-colors ${f.emoji === em ? "bg-blue-500/20 ring-2 ring-blue-500/60" : "bg-white/5 hover:bg-white/10"}`}>
                 {em}
               </button>
             ))}
           </div>
-        </Field>
+        </FieldGroup>
         <p className="rounded-xl bg-white/4 px-3.5 py-3 text-xs text-slate-400">
           Só o orçamento é separado — despesas fixas, despesas do mês e renda próprias.
           As caixinhas (economias) são compartilhadas entre todos os espaços.
@@ -699,15 +717,15 @@ export function CartaoModal({ open, onClose, cartao }) {
                        onChange={(e) => set("diaVencimento", e.target.value)} />
           </Field>
         </div>
-        <Field label="Cor">
+        <FieldGroup label="Cor">
           <div className="flex gap-2">
             {CORES_CARTAO.map((c) => (
-              <button key={c} type="button" onClick={() => set("cor", c)} aria-label={c}
+              <button key={c} type="button" onClick={() => set("cor", c)} aria-label={c} aria-pressed={f.cor === c}
                       style={{ backgroundColor: acento(c).dot }}
                       className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-white scale-110" : "opacity-60 hover:opacity-100"}`} />
             ))}
           </div>
-        </Field>
+        </FieldGroup>
         <div className="flex gap-2 pt-1">
           <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
           <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar cartão"}</Button>
@@ -748,15 +766,15 @@ export function CategoriaModal({ open, onClose, categoria, onCreated }) {
           <TextInput value={f.nome} placeholder="Moradia, Alimentação, Lazer…" autoFocus
                      onChange={(e) => { set("nome", e.target.value); setErr(""); }} />
         </Field>
-        <Field label="Cor">
+        <FieldGroup label="Cor">
           <div className="flex gap-2">
             {CORES_CATEGORIA.map((c) => (
-              <button key={c} type="button" onClick={() => set("cor", c)} aria-label={c}
+              <button key={c} type="button" onClick={() => set("cor", c)} aria-label={c} aria-pressed={f.cor === c}
                       style={{ backgroundColor: acento(c).dot }}
                       className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-white scale-110" : "opacity-60 hover:opacity-100"}`} />
             ))}
           </div>
-        </Field>
+        </FieldGroup>
         <div className="flex gap-2 pt-1">
           <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
           <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar categoria"}</Button>

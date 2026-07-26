@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { ShieldCheck, Users, KeyRound, Plus, Pencil, Trash2 } from "lucide-react";
 // primitives são .jsx sem tipos — TS inferiria todas as props como obrigatórias
 import * as P from "./ui/primitives.jsx";
-const { Card, Button, Modal, Field, TextInput, Badge, Spinner } =
+const { Card, Button, Modal, Field, FieldGroup, TextInput, Badge, Spinner } =
   P as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
 import { useAuth } from "./AuthGate";
 import {
@@ -24,23 +24,47 @@ export default function Admin() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
-    setError(null);
-    try {
-      const [u, r, p] = await Promise.all([
+  // Busca e aplicação separadas: chamar direto do efeito uma função que faz
+  // setState é render em cascata (react-hooks/set-state-in-effect), mesmo quando
+  // o setState só acontece depois do await. Dentro de callback de promise, não.
+  const buscar = useCallback(
+    () =>
+      Promise.all([
         can("user:view") ? listUsers() : Promise.resolve(null),
         can("role:view") ? listRoles() : Promise.resolve(null),
-        can("role:view") ? listPermissions() : Promise.resolve({ permissions: [] as unknown as readonly string[] }),
-      ]);
-      setUsers(u);
-      setRoles(r);
-      setPermissions([...(p?.permissions ?? [])]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha ao carregar");
-    }
-  }, [can]);
+        can("role:view")
+          ? listPermissions()
+          : Promise.resolve({ permissions: [] as unknown as readonly string[] }),
+      ]),
+    [can]
+  );
 
-  useEffect(() => { reload(); }, [reload]);
+  type Carga = Awaited<ReturnType<typeof buscar>>;
+  const aplicar = useCallback(([u, r, p]: Carga) => {
+    setError(null);
+    setUsers(u);
+    setRoles(r);
+    setPermissions([...(p?.permissions ?? [])]);
+  }, []);
+
+  const falhou = useCallback(
+    (e: unknown) => setError(e instanceof Error ? e.message : "Falha ao carregar"),
+    []
+  );
+
+  // usado pelos filhos depois de cada mutação
+  const reload = useCallback(
+    () => buscar().then(aplicar).catch(falhou),
+    [buscar, aplicar, falhou]
+  );
+
+  useEffect(() => {
+    let cancel = false;
+    buscar()
+      .then((carga) => { if (!cancel) aplicar(carga); })
+      .catch((e) => { if (!cancel) falhou(e); });
+    return () => { cancel = true; };
+  }, [buscar, aplicar, falhou]);
 
   return (
     <section className="space-y-6">
@@ -97,6 +121,20 @@ function UsersTab({ users, roles, meId, canManage, onChanged }: {
 }) {
   const [novoOpen, setNovoOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUserView | null>(null);
+  const [excluindo, setExcluindo] = useState<AdminUserView | null>(null);
+  const [delBusy, setDelBusy] = useState(false);
+
+  async function excluir() {
+    if (!excluindo) return;
+    setDelBusy(true);
+    try {
+      await deleteUser(excluindo.id);
+      await onChanged();
+      setExcluindo(null);
+    } finally {
+      setDelBusy(false);
+    }
+  }
 
   if (!users) return <Loading />;
 
@@ -133,7 +171,7 @@ function UsersTab({ users, roles, meId, canManage, onChanged }: {
                   </button>
                   {u.id !== meId && (
                     <button
-                      onClick={async () => { await deleteUser(u.id); await onChanged(); }}
+                      onClick={() => setExcluindo(u)}
                       aria-label={`Excluir ${u.nome}`}
                       className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
                       <Trash2 size={15} />
@@ -148,10 +186,35 @@ function UsersTab({ users, roles, meId, canManage, onChanged }: {
 
       <UserModal open={novoOpen} onClose={() => setNovoOpen(false)} roles={roles ?? []} onSaved={onChanged} />
       <UserModal open={!!editing} user={editing} meId={meId} onClose={() => setEditing(null)} roles={roles ?? []} onSaved={onChanged} />
+
+      <Modal open={!!excluindo} onClose={() => !delBusy && setExcluindo(null)} title="Excluir usuário">
+        {excluindo && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              Excluir <b className="text-white">{excluindo.nome}</b> ({excluindo.email})?
+            </p>
+            <p className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-xs text-rose-200 ring-1 ring-rose-500/20">
+              A conta e todos os dados dela vão junto. Não dá pra desfazer.
+            </p>
+            <div className="flex gap-2 pt-1">
+              <Button variant="ghost" className="flex-1" disabled={delBusy} onClick={() => setExcluindo(null)}>
+                Cancelar
+              </Button>
+              <Button variant="danger" className="flex-1" loading={delBusy} onClick={excluir}>
+                <Trash2 size={15} /> Excluir
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
 
+// O form vive DENTRO do Modal de propósito: com `open: false` o Modal não
+// renderiza os filhos, então o estado do form morre junto e reabrir já vem
+// limpo. É o que substitui o efeito de reset (setState em cascata dentro de
+// efeito — react-hooks/set-state-in-effect).
 function UserModal({ open, onClose, user, meId, roles, onSaved }: {
   open: boolean;
   onClose: () => void;
@@ -160,24 +223,31 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
   roles: AdminRoleView[];
   onSaved: () => Promise<void>;
 }) {
-  const editing = !!user;
-  const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [ativo, setAtivo] = useState(true);
-  const [roleIds, setRoleIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal open={open} onClose={() => !busy && onClose()} title={user ? "Editar usuário" : "Novo usuário"}>
+      <UserForm user={user} meId={meId} roles={roles} busy={busy} setBusy={setBusy}
+        onClose={onClose} onSaved={onSaved} />
+    </Modal>
+  );
+}
 
-  useEffect(() => {
-    if (!open) return;
-    setNome(user?.nome ?? "");
-    setEmail(user?.email ?? "");
-    setSenha("");
-    setAtivo(user?.ativo ?? true);
-    setRoleIds(user?.roles.map((r) => r.id) ?? []);
-    setError(null);
-  }, [open, user]);
+function UserForm({ onClose, user, meId, roles, onSaved, busy, setBusy }: {
+  onClose: () => void;
+  user?: AdminUserView | null;
+  meId?: string;
+  roles: AdminRoleView[];
+  onSaved: () => Promise<void>;
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+}) {
+  const editing = !!user;
+  const [nome, setNome] = useState(user?.nome ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [senha, setSenha] = useState("");
+  const [ativo, setAtivo] = useState(user?.ativo ?? true);
+  const [roleIds, setRoleIds] = useState<string[]>(user?.roles.map((r) => r.id) ?? []);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -203,7 +273,6 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
   }
 
   return (
-    <Modal open={open} onClose={() => !busy && onClose()} title={editing ? "Editar usuário" : "Novo usuário"}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Nome" required>
           <TextInput value={nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNome(e.target.value)} required autoFocus />
@@ -216,12 +285,14 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
             required={!editing} minLength={6} autoComplete="new-password" />
         </Field>
 
-        <Field label="Roles" hint="usuário pode ter mais de uma">
+        {/* FieldGroup (fieldset/legend) e não Field: <button> dentro de <label>
+            herda o texto do label inteiro como nome acessível */}
+        <FieldGroup label="Roles" hint="usuário pode ter mais de uma">
           <div className="flex flex-wrap gap-1.5">
             {roles.map((r) => {
               const on = roleIds.includes(r.id);
               return (
-                <button key={r.id} type="button"
+                <button key={r.id} type="button" aria-pressed={on}
                   onClick={() => setRoleIds(on ? roleIds.filter((id) => id !== r.id) : [...roleIds, r.id])}
                   className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                     on ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "bg-white/5 text-slate-400 hover:bg-white/10"
@@ -231,7 +302,7 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
               );
             })}
           </div>
-        </Field>
+        </FieldGroup>
 
         {editing && user && user.id !== meId && (
           <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
@@ -248,7 +319,6 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
           <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar"}</Button>
         </div>
       </form>
-    </Modal>
   );
 }
 
@@ -262,6 +332,20 @@ function RolesTab({ roles, permissions, canManage, onChanged }: {
 }) {
   const [novoOpen, setNovoOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRoleView | null>(null);
+  const [excluindo, setExcluindo] = useState<AdminRoleView | null>(null);
+  const [delBusy, setDelBusy] = useState(false);
+
+  async function excluir() {
+    if (!excluindo) return;
+    setDelBusy(true);
+    try {
+      await deleteRole(excluindo.id);
+      await onChanged();
+      setExcluindo(null);
+    } finally {
+      setDelBusy(false);
+    }
+  }
 
   if (!roles) return <Loading />;
 
@@ -289,7 +373,7 @@ function RolesTab({ roles, permissions, canManage, onChanged }: {
                     <Pencil size={15} />
                   </button>
                   <button
-                    onClick={async () => { await deleteRole(r.id); await onChanged(); }}
+                    onClick={() => setExcluindo(r)}
                     aria-label={`Excluir ${r.nome}`}
                     className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
                     <Trash2 size={15} />
@@ -312,10 +396,36 @@ function RolesTab({ roles, permissions, canManage, onChanged }: {
 
       <RoleModal open={novoOpen} onClose={() => setNovoOpen(false)} permissions={permissions} onSaved={onChanged} />
       <RoleModal open={!!editing} role={editing} onClose={() => setEditing(null)} permissions={permissions} onSaved={onChanged} />
+
+      <Modal open={!!excluindo} onClose={() => !delBusy && setExcluindo(null)} title="Excluir role">
+        {excluindo && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              Excluir a role <b className="text-white">{excluindo.nome}</b>?
+            </p>
+            <p className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-xs text-rose-200 ring-1 ring-rose-500/20">
+              {excluindo.usuarios > 0
+                ? `${excluindo.usuarios} usuário${excluindo.usuarios === 1 ? "" : "s"} perde${excluindo.usuarios === 1 ? "" : "m"} essas permissions na hora.`
+                : "Nenhum usuário usa esta role."}
+              {" "}Não dá pra desfazer.
+            </p>
+            <div className="flex gap-2 pt-1">
+              <Button variant="ghost" className="flex-1" disabled={delBusy} onClick={() => setExcluindo(null)}>
+                Cancelar
+              </Button>
+              <Button variant="danger" className="flex-1" loading={delBusy} onClick={excluir}>
+                <Trash2 size={15} /> Excluir
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
 
+// Mesma divisão do UserModal: o form só existe enquanto o Modal está aberto,
+// então não precisa de efeito pra resetar os campos.
 function RoleModal({ open, onClose, role, permissions, onSaved }: {
   open: boolean;
   onClose: () => void;
@@ -323,20 +433,28 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
   permissions: string[];
   onSaved: () => Promise<void>;
 }) {
-  const editing = !!role;
-  const [nome, setNome] = useState("");
-  const [descricao, setDescricao] = useState("");
-  const [perms, setPerms] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal open={open} onClose={() => !busy && onClose()} title={role ? "Editar role" : "Nova role"}>
+      <RoleForm role={role} permissions={permissions} busy={busy} setBusy={setBusy}
+        onClose={onClose} onSaved={onSaved} />
+    </Modal>
+  );
+}
 
-  useEffect(() => {
-    if (!open) return;
-    setNome(role?.nome ?? "");
-    setDescricao(role?.descricao ?? "");
-    setPerms(role?.permissions ?? []);
-    setError(null);
-  }, [open, role]);
+function RoleForm({ onClose, role, permissions, onSaved, busy, setBusy }: {
+  onClose: () => void;
+  role?: AdminRoleView | null;
+  permissions: string[];
+  onSaved: () => Promise<void>;
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+}) {
+  const editing = !!role;
+  const [nome, setNome] = useState(role?.nome ?? "");
+  const [descricao, setDescricao] = useState(role?.descricao ?? "");
+  const [perms, setPerms] = useState<string[]>(role?.permissions ?? []);
+  const [error, setError] = useState<string | null>(null);
 
   // catálogo agrupado por recurso + entrada de wildcard por grupo
   const grupos = useMemo(() => {
@@ -368,7 +486,6 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
   }
 
   return (
-    <Modal open={open} onClose={() => !busy && onClose()} title={editing ? "Editar role" : "Nova role"}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Nome" required>
           <TextInput value={nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNome(e.target.value)} required autoFocus />
@@ -377,7 +494,8 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
           <TextInput value={descricao} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDescricao(e.target.value)} />
         </Field>
 
-        <Field label="Permissions" hint="wildcard: recurso:* cobre todas as ações do recurso; * cobre tudo">
+        {/* FieldGroup: cada chip é um <button> e não pode herdar o texto do label */}
+        <FieldGroup label="Permissions" hint="wildcard: recurso:* cobre todas as ações do recurso; * cobre tudo">
           <div className="max-h-64 space-y-3 overflow-y-auto rounded-xl border border-[var(--color-line)] p-3">
             <PermChip p="*" on={perms.includes("*")} onToggle={() => toggle("*")} destaque />
             {grupos.map(([recurso, ps]) => (
@@ -392,7 +510,7 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
               </div>
             ))}
           </div>
-        </Field>
+        </FieldGroup>
 
         {error && <p className="text-xs text-rose-400">{error}</p>}
 
@@ -401,13 +519,12 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
           <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar"}</Button>
         </div>
       </form>
-    </Modal>
   );
 }
 
 function PermChip({ p, on, onToggle, destaque }: { p: string; on: boolean; onToggle: () => void; destaque?: boolean }) {
   return (
-    <button type="button" onClick={onToggle}
+    <button type="button" onClick={onToggle} aria-pressed={on}
       className={`rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
         on
           ? destaque ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40" : "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40"

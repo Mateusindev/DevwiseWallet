@@ -59,7 +59,8 @@ export function HBars({ items, format = fmtMoneyCompact, empty = "Sem dados." })
 
 // ── Sparkline-ish line (evolução de saldo/sobra) ────────────────────────────
 // points: [{ label, value }]
-export function LineTrend({ points, height = 120, color = "#3b82f6", format = fmtMoneyCompact }) {
+// (não formata valor: o gráfico só desenha a linha e rotula os meses)
+export function LineTrend({ points, height = 120, color = "#3b82f6" }) {
   if (points.length < 2) return <p className="py-6 text-center text-sm text-slate-500">Pouco histórico.</p>;
   const vals = points.map((p) => p.value);
   const min = Math.min(0, ...vals);

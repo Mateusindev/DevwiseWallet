@@ -74,10 +74,14 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{ user, can, signOut }}>
       {children}
+      {/* Sem `lg:` nenhum: em mobile o topbar do App só tem a marca à esquerda,
+          então o botão cai no canto livre. Escondê-lo abaixo de lg deixava a
+          conta sem saída no celular. */}
       <button
         title={`Sair (${user.email})`}
+        aria-label="Sair"
         onClick={signOut}
-        className="fixed right-4 top-4 z-40 hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)]/80 p-2 text-slate-500 backdrop-blur transition-colors hover:text-slate-200 lg:block"
+        className="fixed right-4 top-4 z-40 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)]/80 p-2 text-slate-500 backdrop-blur transition-colors hover:text-slate-200"
       >
         <LogOut size={16} />
       </button>

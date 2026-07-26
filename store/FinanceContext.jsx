@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useReducer } from "react";
+import { createContext, useContext, useCallback, useEffect, useMemo, useReducer } from "react";
 import * as api from "../services/financeApi";
 
 // ── State shape ────────────────────────────────────────────────────────────
@@ -205,6 +205,9 @@ const Ctx = createContext(null);
 export function FinanceProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initial);
   const esp = state.activeEspacoId;
+  // As actions leem só estas três fatias do estado (o resto vem do back a cada
+  // chamada) — são as deps do useMemo que memoiza o objeto de actions.
+  const { espacos, espacosOcultos } = state;
 
   const bootstrap = useCallback(async () => {
     dispatch({ type: "BOOT_START" });
@@ -227,7 +230,18 @@ export function FinanceProvider({ children }) {
     return cartoes;
   }, []);
 
-  const actions = {
+  // Versão fire-and-forget do reloadCartoes: os agregados de fatura são um
+  // efeito colateral das mutações de despesa, então ninguém espera (nem trata)
+  // o resultado. Sem o catch, um 403/401 aqui vira unhandled rejection — que no
+  // navegador polui o console e nos testes derruba a suíte inteira.
+  const refreshCartoes = useCallback(() => { reloadCartoes().catch(() => {}); }, [reloadCartoes]);
+
+  // Identidade estável: sem o useMemo, TODO efeito de componente que dependa de
+  // uma action (ex.: o pulo automático de página em DespesasFixas) roda em todo
+  // render — foi a causa raiz do "Maximum update depth exceeded" de lá. Agora o
+  // objeto só troca quando o espaço ativo (ou a lista de espaços) muda, que é
+  // exatamente quando as actions passam a se comportar diferente.
+  const actions = useMemo(() => ({
     refresh: bootstrap,
     reloadCartoes,
 
@@ -296,11 +310,11 @@ export function FinanceProvider({ children }) {
       dispatch({ type: "HIDE_ESPACO_MES", espacoId: id, ym });
       if (id === esp) {
         const ocultosNoMes = new Set(
-          [...state.espacosOcultos, { espacoId: id, ym }]
+          [...espacosOcultos, { espacoId: id, ym }]
             .filter((o) => o.ym === ym)
             .map((o) => o.espacoId)
         );
-        const proxima = state.espacos.find((e) => !ocultosNoMes.has(e.id));
+        const proxima = espacos.find((e) => !ocultosNoMes.has(e.id));
         if (proxima && proxima.id !== esp) {
           await api.setActiveEspaco(proxima.id);
           const orcamento = await api.getOrcamento(proxima.id);
@@ -350,24 +364,24 @@ export function FinanceProvider({ children }) {
     async addDespesaFixa(dto) {
       const df = await api.addDespesaFixa(esp, dto);
       dispatch({ type: "UPSERT_DF", df });
-      if (df.cartaoId) reloadCartoes();
+      if (df.cartaoId) refreshCartoes();
       return df;
     },
     async updateDespesaFixa(id, patch) {
       const df = await api.updateDespesaFixa(esp, id, patch);
       dispatch({ type: "UPSERT_DF", df });
-      reloadCartoes();
+      refreshCartoes();
       return df;
     },
     async toggleDespesaFixa(id) {
       const df = await api.toggleDespesaFixa(esp, id);
       dispatch({ type: "UPSERT_DF", df });
-      if (df.cartaoId) reloadCartoes();
+      if (df.cartaoId) refreshCartoes();
     },
     async removeDespesaFixa(id) {
       await api.removeDespesaFixa(esp, id);
       dispatch({ type: "REMOVE_DF", id });
-      reloadCartoes();
+      refreshCartoes();
     },
     async setPagamentoFixa(id, ym, valorPago) {
       const r = await api.setPagamentoFixa(esp, id, ym, valorPago);
@@ -390,19 +404,19 @@ export function FinanceProvider({ children }) {
     async addDespesaMes(dto) {
       const dm = await api.addDespesaMes(esp, dto);
       dispatch({ type: "ADD_DM", dm });
-      if (dm.cartaoId) reloadCartoes();
+      if (dm.cartaoId) refreshCartoes();
       return dm;
     },
     async updateDespesaMes(id, patch) {
       const dm = await api.updateDespesaMes(esp, id, patch);
       dispatch({ type: "UPSERT_DM", dm });
-      reloadCartoes();
+      refreshCartoes();
       return dm;
     },
     async removeDespesaMes(id) {
       await api.removeDespesaMes(esp, id);
       dispatch({ type: "REMOVE_DM", id });
-      reloadCartoes();
+      refreshCartoes();
     },
     async setPagaMes(id, valorPago) {
       const dm = await api.setPagaMes(esp, id, valorPago);
@@ -427,9 +441,11 @@ export function FinanceProvider({ children }) {
       await api.resetState();
       await bootstrap();
     },
-  };
+  }), [esp, espacos, espacosOcultos, bootstrap, reloadCartoes, refreshCartoes]);
 
-  return <Ctx.Provider value={{ ...state, ...actions }}>{children}</Ctx.Provider>;
+  const value = useMemo(() => ({ ...state, ...actions }), [state, actions]);
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useFinance() {

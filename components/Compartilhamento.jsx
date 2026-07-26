@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Users, Trash2, Plus, HandCoins } from "lucide-react";
 import { Card, Button, Modal, Field, TextInput, Select, MoneyInput } from "./ui/primitives.jsx";
 import { fmtMoney } from "../lib/format.js";
@@ -6,7 +6,19 @@ import { acento } from "../lib/calc.js";
 import * as api from "../services/financeApi";
 
 // ── Modal: compartilhar fatura de um cartão ────────────────────────────────────
+// O form vive DENTRO do Modal: fechado, o Modal não renderiza os filhos, então o
+// estado morre junto e reabrir já vem limpo. É o que substitui o efeito que
+// resetava os campos (setState em cascata dentro de efeito).
 export function CompartilharModal({ open, onClose, cartao, ym }) {
+  if (!cartao) return null;
+  return (
+    <Modal open={open} onClose={onClose} title={`Compartilhar · ${cartao.nome}`}>
+      <CompartilharForm cartao={cartao} ym={ym} />
+    </Modal>
+  );
+}
+
+function CompartilharForm({ cartao, ym }) {
   const [contatos, setContatos] = useState([]);
   const [linhas, setLinhas] = useState([]);
   const [shares, setShares] = useState([]);
@@ -24,30 +36,35 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
   const [valor, setValor] = useState(0);
   const [recorrencia, setRecorrencia] = useState("recorrente");
 
-  async function reload() {
-    if (!cartao) return;
-    const [cs, ls, ss] = await Promise.all([
-      api.getContatos(),
-      api.getFaturaLinhas(cartao.id, ym),
-      api.getCartaoShares(cartao.id, ym),
-    ]);
+  // Busca e aplicação separadas: chamar direto do efeito uma função que faz
+  // setState é render em cascata (react-hooks/set-state-in-effect). Dentro de
+  // callback de promise, não.
+  const buscar = useCallback(
+    () =>
+      Promise.all([
+        api.getContatos(),
+        api.getFaturaLinhas(cartao.id, ym),
+        api.getCartaoShares(cartao.id, ym),
+      ]),
+    [cartao.id, ym]
+  );
+
+  const aplicar = useCallback(([cs, ls, ss]) => {
     setContatos(cs);
     setLinhas(ls);
     setShares(ss);
-  }
+  }, []);
+
+  // usado depois de criar/remover share
+  const reload = useCallback(() => buscar().then(aplicar), [buscar, aplicar]);
 
   useEffect(() => {
-    if (open) {
-      reload();
-      setErr("");
-      setContatoId("");
-      setNovoNome("");
-      setNovoEmail("");
-      setTipo("linha");
-      setLinhaKey("");
-      setDivisao("inteira");
-    }
-  }, [open, cartao?.id, ym]);
+    let cancel = false;
+    buscar()
+      .then((carga) => { if (!cancel) aplicar(carga); })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, [buscar, aplicar]);
 
   async function submit(e) {
     e.preventDefault();
@@ -102,10 +119,7 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
     await reload();
   }
 
-  if (!cartao) return null;
-
   return (
-    <Modal open={open} onClose={onClose} title={`Compartilhar · ${cartao.nome}`}>
       <div className="space-y-5">
         {/* lista de shares existentes */}
         <div className="space-y-2">
@@ -223,17 +237,36 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
           </Button>
         </form>
       </div>
-    </Modal>
   );
 }
 
 // ── Painel "O que devo" (pessoa compartilhada) ──────────────────────────────────
 export function MeusCompartilhamentos({ ym }) {
   const [grupos, setGrupos] = useState([]);
+  const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.getMeusCompartilhamentos(ym).then(setGrupos).catch(() => setGrupos([]));
+    let cancel = false;
+    // O catch é obrigatório (rejeição solta polui o console e derruba a suíte),
+    // mas não pode virar "não devo nada": guarda a mensagem pra mostrar no painel.
+    api.getMeusCompartilhamentos(ym)
+      .then((gs) => { if (!cancel) { setGrupos(gs); setErro(""); } })
+      .catch((e) => { if (!cancel) { setGrupos([]); setErro(e?.message || "Falha ao carregar"); } });
+    return () => { cancel = true; };
   }, [ym]);
+
+  if (erro) {
+    return (
+      <Card className="p-5 sm:p-6">
+        <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-white">
+          <HandCoins size={18} /> O que devo
+        </h3>
+        <p role="alert" className="text-sm text-rose-400">
+          Não consegui carregar o que você deve. {erro}
+        </p>
+      </Card>
+    );
+  }
 
   if (grupos.length === 0) return null;
 

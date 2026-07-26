@@ -87,8 +87,10 @@ export function Modal({ open, onClose, title, children }) {
   // onClose costuma ser arrow inline (nova identidade a cada render). Guarda a
   // versão atual num ref pra NÃO re-rodar o efeito a cada keystroke do pai —
   // senão ref.current.focus() rouba o foco do input a cada letra digitada.
+  // A escrita vai num efeito (não no corpo): mexer em ref durante o render é
+  // erro de lint (react-hooks/refs) e o efeito roda antes de qualquer keydown.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -159,6 +161,28 @@ export function Field({ label, hint, error, children, required }) {
         <span className="mt-1 block text-xs text-slate-500">{hint}</span>
       ) : null}
     </label>
+  );
+}
+
+// Variante do Field pra GRUPOS DE CONTROLE (botões de preset, seletor de cor,
+// chips de permission). Não usa <label>: um <button> dentro de um <label> herda
+// o texto inteiro do label como nome acessível — o leitor de tela anunciava
+// "Meses de segurança 3 meses 12 meses 6 Quantos meses…" em cada botão.
+// <fieldset>/<legend> nomeia o grupo sem contaminar os filhos.
+export function FieldGroup({ label, hint, error, children, required }) {
+  return (
+    <fieldset className="block min-w-0">
+      <legend className="mb-1.5 flex items-center gap-1 text-sm font-medium text-slate-300">
+        {label}
+        {required && <span className="text-rose-400">*</span>}
+      </legend>
+      {children}
+      {error ? (
+        <span role="alert" className="mt-1 block text-xs text-rose-400">{error}</span>
+      ) : hint ? (
+        <span className="mt-1 block text-xs text-slate-500">{hint}</span>
+      ) : null}
+    </fieldset>
   );
 }
 
@@ -237,31 +261,33 @@ export function Donut({ segments, size = 168, stroke = 18, centerLabel, centerSu
   const total = segments.reduce((s, x) => s + x.value, 0) || 1;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  let offset = 0;
+  // Arcos pré-calculados: cada segmento começa onde o anterior terminou. O
+  // acumulado sai de um reduce (e não de um `offset +=` dentro do map do JSX,
+  // que é mutação durante o render — erro de react-hooks/immutability).
+  const arcos = segments.reduce((acc, s) => {
+    const len = (s.value / total) * c;
+    const anterior = acc[acc.length - 1];
+    acc.push({ color: s.color, len, offset: anterior ? anterior.offset + anterior.len : 0 });
+    return acc;
+  }, []);
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} />
-        {segments.map((s, i) => {
-          const len = (s.value / total) * c;
-          const dash = `${len} ${c - len}`;
-          const el = (
-            <circle
-              key={i}
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke={s.color}
-              strokeWidth={stroke}
-              strokeDasharray={dash}
-              strokeDashoffset={-offset}
-              strokeLinecap="round"
-            />
-          );
-          offset += len;
-          return el;
-        })}
+        {arcos.map((a, i) => (
+          <circle
+            key={i}
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={a.color}
+            strokeWidth={stroke}
+            strokeDasharray={`${a.len} ${c - a.len}`}
+            strokeDashoffset={-a.offset}
+            strokeLinecap="round"
+          />
+        ))}
       </svg>
       {(centerLabel || centerSub) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">

@@ -70,7 +70,7 @@ Front e back no mesmo projeto Next.js, type-safety ponta a ponta via Hono RPC. S
 
 ### Testes
 
-Duas suítes, **processos separados** (`bun run test` roda as duas em sequência). Motivo: `mock.module` do Bun é global no runner — rodar tudo num processo só vaza os repositories mockados dos unitários pra dentro dos testes de integração. Nunca rode `bun test` sem filtro.
+Quatro suítes, **processos separados** (`bun run test` roda em sequência: `test:lib` → `test:unit` → `test:int` → `test:front`). Motivo: `mock.module` do Bun é global no runner — rodar tudo num processo só vaza os repositories mockados dos unitários pra dentro dos testes de integração. Nunca rode `bun test` sem filtro. Detalhes das duas de front em `TESTES-FRONTEND.md`.
 
 - **Unit** (`bun run test:unit`): `*.test.ts` ao lado do código em `server/`, repositories mockados com `mock.module` — não tocam banco. `scripts/test-unit.ts` roda **um processo por arquivo**: `mock.module` não tem como ser desfeito, então um arquivo que mocka um *service* (bootstrap mocka `caixinha.service`; `middleware.test` mocka `auth.service`) serviria o stub pros arquivos seguintes, que testariam o mock do vizinho em vez do módulo real. Como a ordem dos arquivos vem do walk do runner, isso passa numa máquina e quebra em outra — foi o que derrubou o CI no salto do Bun 1.2 → 1.3. A cobertura sai do merge dos lcov de cada processo.
   - Rodar `bun test server` direto (sem o runner) reintroduz o vazamento — use `bun run test:unit`, ou filtre um arquivo só: `bun test server/modules/caixinha`.
@@ -78,4 +78,6 @@ Duas suítes, **processos separados** (`bun run test` roda as duas em sequência
   - `tests/setup/env.ts` é preload de **todos** os testes (`bunfig.toml`) e força `DATABASE_URL` pro banco de teste (`TEST_DATABASE_URL`, default `postgresql://postgres:postgres@localhost:5432/cofre_test`). O nome do banco precisa conter "test" — as suítes truncam todas as tabelas.
   - `tests/integration/harness.ts`: `resetDb()`, `seedRoles()`, `account({ roles | permissions })` (cria usuário + loga pela rota real) e `client(cookie)` com `get/post/put/patch/delete` que prefixam `/api`.
   - Antes da primeira rodada: `bun run test:db:setup` (aplica o schema; cria o banco se não existir).
-- CI (`.github/workflows/ci.yml`) roda typecheck → `test:unit --coverage` → `test:int` (service container `postgres:16`) → lint (informativo).
+- **Lib** (`bun run test:lib`): funções puras de `lib/` (`calc`, `format`), sem DOM e sem banco. O `./` de `bun test ./lib/` é obrigatório — o filtro `lib` casaria `server/lib/*.test.ts`, que são da suíte unitária.
+- **Front** (`bun run test:front`): `tests/front/*.test.tsx`, happy-dom + Testing Library com o **app Hono real** por trás (ponte de fetch em `tests/front/harness.tsx` troca `globalThis.fetch` por `app.request()`). Usa o mesmo banco da integração, por isso nunca roda em paralelo com ela.
+- CI (`.github/workflows/ci.yml`) roda typecheck → `test:db:setup` → `test:lib` → `test:unit --coverage` → `test:int` (service container `postgres:16`) → `test:front` → lint. **Lint é bloqueante** (os 9 erros herdados dos componentes portados do Vite foram zerados).

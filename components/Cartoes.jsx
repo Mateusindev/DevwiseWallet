@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users } from "lucide-react";
-import { Card, Button, ProgressBar, Donut } from "./ui/primitives.jsx";
+import { Card, Button, ProgressBar, Donut, Modal } from "./ui/primitives.jsx";
 import { CartaoModal } from "./forms.jsx";
 import { CompartilharModal, MeusCompartilhamentos } from "./Compartilhamento.jsx";
 import { fmtMoney, fmtMonthLabel, currentMonthKey } from "../lib/format.js";
@@ -29,12 +29,21 @@ export default function Cartoes() {
   const [novoOpen, setNovoOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [sharing, setSharing] = useState(null);
-  const meses = useMemo(mesesRange, []);
+  const [delCartao, setDelCartao] = useState(null); // cartão a excluir (confirma)
+  const [delBusy, setDelBusy] = useState(false);
+  const meses = useMemo(() => mesesRange(), []);
 
-  // recarrega os agregados quando troca o mês
+  async function excluirCartao() {
+    setDelBusy(true);
+    try { await removeCartao(delCartao.id); setDelCartao(null); }
+    finally { setDelBusy(false); }
+  }
+
+  // recarrega os agregados quando troca o mês (fire-and-forget: o catch evita
+  // rejeição solta se a request falhar — a tela fica com os dados que tem)
   useEffect(() => {
-    if (ym !== currentMonthKey()) reloadCartoes(ym);
-    else reloadCartoes();
+    const p = ym !== currentMonthKey() ? reloadCartoes(ym) : reloadCartoes();
+    p.catch(() => {});
   }, [ym, reloadCartoes]);
 
   // total agregado de todos os cartões
@@ -104,7 +113,7 @@ export default function Cartoes() {
         <div className="grid gap-4 sm:grid-cols-2">
           {cartoes.map((c) => (
             <CartaoCard key={c.id} cartao={c} canManage={canManage} canShare={canShare}
-                        onEdit={() => setEditing(c)} onRemove={() => removeCartao(c.id)}
+                        onEdit={() => setEditing(c)} onRemove={() => setDelCartao(c)}
                         onShare={() => setSharing(c)} />
           ))}
         </div>
@@ -116,6 +125,30 @@ export default function Cartoes() {
       <CartaoModal open={novoOpen} onClose={() => setNovoOpen(false)} />
       <CartaoModal open={!!editing} cartao={editing} onClose={() => setEditing(null)} />
       <CompartilharModal open={!!sharing} cartao={sharing} ym={ym} onClose={() => setSharing(null)} />
+
+      {/* excluir cartão: confirma como as outras exclusões do app, e avisa do
+          SetNull — as despesas ficam, só perdem o vínculo com o cartão */}
+      <Modal open={!!delCartao} onClose={() => !delBusy && setDelCartao(null)} title="Excluir cartão">
+        {delCartao && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              Excluir <b className="text-white">{delCartao.nome}</b>?
+            </p>
+            <p className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-xs text-rose-200 ring-1 ring-rose-500/20">
+              As despesas vinculadas continuam, mas perdem o cartão (e saem da fatura).
+              Não dá pra desfazer.
+            </p>
+            <div className="flex gap-2 pt-1">
+              <Button variant="ghost" className="flex-1" disabled={delBusy} onClick={() => setDelCartao(null)}>
+                Cancelar
+              </Button>
+              <Button variant="danger" className="flex-1" loading={delBusy} onClick={excluirCartao}>
+                <Trash2 size={15} /> Excluir
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </section>
   );
 }

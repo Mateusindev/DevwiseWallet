@@ -95,8 +95,14 @@ async function relatorioCobertura() {
 
   const total = [...fontes.values()].reduce(
     (acc, f) => {
-      for (const h of f.funcs.values()) acc.funcsTotal++, h > 0 && acc.funcsHit++;
-      for (const h of f.linhas.values()) acc.linhasTotal++, h > 0 && acc.linhasHit++;
+      for (const h of f.funcs.values()) {
+        acc.funcsTotal++;
+        if (h > 0) acc.funcsHit++;
+      }
+      for (const h of f.linhas.values()) {
+        acc.linhasTotal++;
+        if (h > 0) acc.linhasHit++;
+      }
       return acc;
     },
     { funcsHit: 0, funcsTotal: 0, linhasHit: 0, linhasTotal: 0 }
