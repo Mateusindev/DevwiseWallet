@@ -3,21 +3,10 @@ import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users } from "lucide-r
 import { Card, Button, ProgressBar, Donut } from "./ui/primitives.jsx";
 import { CartaoModal } from "./forms.jsx";
 import { CompartilharModal, MeusCompartilhamentos } from "./Compartilhamento.jsx";
-import { fmtMoney, fmtMonthLabel, currentMonthKey } from "../lib/format.js";
+import { fmtMoney, fmtMonthLabel, currentMonthKey, monthRange } from "../lib/format.js";
 import { acento } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
-
-// Lista de meses ao redor do atual (−3 … +6) pra escolher a fatura.
-function mesesRange() {
-  const [y, m] = currentMonthKey().split("-").map(Number);
-  const out = [];
-  for (let i = -3; i <= 6; i++) {
-    const d = new Date(Date.UTC(y, m - 1 + i, 1));
-    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
-  }
-  return out;
-}
 
 export default function Cartoes() {
   const { cartoes, reloadCartoes, removeCartao } = useFinance();
@@ -29,7 +18,8 @@ export default function Cartoes() {
   const [novoOpen, setNovoOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [sharing, setSharing] = useState(null);
-  const meses = useMemo(mesesRange, []);
+  // meses ao redor do atual (−3 … +6) pra escolher a fatura
+  const meses = useMemo(() => monthRange(-3, 6), []);
 
   // recarrega os agregados quando troca o mês
   useEffect(() => {
