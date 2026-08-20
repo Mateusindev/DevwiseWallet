@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2,
+  Receipt, Flag, ChevronDown, TrendingDown,
 } from "lucide-react";
-import { Card, Button, MoneyInput, Spinner, Modal } from "./ui/primitives.jsx";
+import { Card, Button, MoneyInput, Spinner, Modal, ProgressBar } from "./ui/primitives.jsx";
 import { DespesaFixaModal, DespesaMesModal, ReceitaMesModal, EspacoModal } from "./forms.jsx";
-import { fmtMoney, fmtMonthLabel, currentMonthKey } from "../lib/format.js";
-import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, mesesOrcamento, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes } from "../lib/calc.js";
+import { fmtMoney, fmtMonthLabel, fmtMonthShort, currentMonthKey } from "../lib/format.js";
+import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, mesesOrcamento, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes, quitacaoParceladas } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 
@@ -293,6 +294,9 @@ export default function DespesasFixas() {
           </Card>
         </div>
 
+        {/* quitação das parceladas — panorama até zerar */}
+        <QuitacaoParceladas despesasFixas={despesasFixas} pagamentosFixas={pagamentosFixas} ym={ym} />
+
         {/* despesas fixas */}
         <div>
           <div className="mb-3 flex items-center justify-between">
@@ -466,6 +470,122 @@ export default function DespesasFixas() {
         )}
       </Modal>
     </section>
+  );
+}
+
+// Painel de quitação das fixas parceladas: quanto falta pra zerar tudo, quando
+// fica livre e quanto sai por mês até lá. Só leitura — não altera nada.
+function QuitacaoParceladas({ despesasFixas, pagamentosFixas, ym }) {
+  const [aberto, setAberto] = useState(false);
+  const q = useMemo(() => quitacaoParceladas(despesasFixas, pagamentosFixas, ym), [despesasFixas, pagamentosFixas, ym]);
+  if (q.itens.length === 0) return null;
+
+  const mediaMes = q.cronograma.length > 0 ? q.falta / q.cronograma.length : 0;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-white">
+            Quitação das parceladas
+            <span className="ml-2 tnum text-sm font-normal text-slate-400">{q.itens.length} em andamento</span>
+          </h3>
+          <p className="mt-0.5 text-xs text-slate-500">
+            O que ainda vai cair de {fmtMonthLabel(ym)} até a última parcela.
+          </p>
+        </div>
+      </div>
+
+      <Card className="p-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
+              <Receipt size={13} className="text-amber-400" /> Falta pra quitar tudo
+            </p>
+            <p className="tnum text-xl font-bold text-white sm:text-2xl">{fmtMoney(q.falta)}</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              de {fmtMoney(q.contrato)} contratados
+            </p>
+          </div>
+          <div>
+            <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
+              <TrendingDown size={13} className="text-rose-400" /> Ainda sai em {fmtMonthShort(ym)}
+            </p>
+            <p className="tnum text-xl font-bold text-white sm:text-2xl">{fmtMoney(q.faltaNoMes)}</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              média de {fmtMoney(mediaMes)}/mês até o fim
+            </p>
+          </div>
+          <div>
+            <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
+              <Flag size={13} className="text-emerald-400" /> Livre em
+            </p>
+            <p className="text-xl font-bold text-white sm:text-2xl">{fmtMonthShort(q.ultimoMes)}</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {q.mesesAte === 0 ? "última parcela é este mês" : `faltam ${q.mesesAte + 1} ${q.mesesAte + 1 === 1 ? "mês" : "meses"}`}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="text-slate-400">Já quitado</span>
+            <span className="tnum font-medium text-slate-300">
+              {fmtMoney(q.quitado)} · {Math.round(q.progresso * 100)}%
+            </span>
+          </div>
+          <ProgressBar value={q.progresso} fromClass="from-emerald-500" toClass="to-emerald-400" />
+        </div>
+
+        {/* por parcelada */}
+        <ul className="mt-4 divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+          {q.itens.map((i) => (
+            <li key={i.id} className="py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <p className="min-w-0 flex-1 truncate font-medium text-slate-200">{i.descricao}</p>
+                <span className="tnum font-semibold text-slate-200">{fmtMoney(i.falta)}</span>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                <span className="rounded-md bg-white/5 px-1.5 py-0.5 font-medium text-slate-300">{i.label}</span>
+                <span>
+                  {i.notStarted
+                    ? `começa em ${fmtMonthShort(i.primeiroMes)}`
+                    : `${i.parcelas} ${i.parcelas === 1 ? "parcela" : "parcelas"} de ${fmtMoney(i.valor)}`}
+                </span>
+                <span className="text-slate-600">·</span>
+                <span>quita em {fmtMonthShort(i.ultimoMes)}</span>
+              </div>
+              <ProgressBar className="mt-2 h-1.5" value={i.progresso} fromClass="from-blue-500" toClass="to-blue-400" />
+            </li>
+          ))}
+        </ul>
+
+        {/* cronograma mês a mês */}
+        <button onClick={() => setAberto((v) => !v)}
+          className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
+          <ChevronDown size={15} className={`transition-transform ${aberto ? "rotate-180" : ""}`} />
+          {aberto ? "Ocultar" : "Ver"} mês a mês até quitar
+        </button>
+
+        {aberto && (
+          <ul className="mt-3 space-y-1.5">
+            {q.cronograma.map((c) => (
+              <li key={c.ym} className="flex items-center gap-3 text-xs">
+                <span className={`w-14 shrink-0 ${c.ym === ym ? "font-semibold text-slate-200" : "text-slate-500"}`}>
+                  {fmtMonthShort(c.ym)}
+                </span>
+                <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/8">
+                  <span className="block h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400"
+                    style={{ width: `${q.picoMes > 0 ? (c.valor / q.picoMes) * 100 : 0}%` }} />
+                </span>
+                <span className="tnum w-24 shrink-0 text-right text-slate-300">{fmtMoney(c.valor)}</span>
+                <span className="w-16 shrink-0 text-right text-slate-500">{c.itens} {c.itens === 1 ? "conta" : "contas"}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
   );
 }
 
