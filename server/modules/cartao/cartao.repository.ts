@@ -39,4 +39,21 @@ export const cartaoRepository = {
   fixasParceladas(cartaoId: string) {
     return prisma.despesaFixa.findMany({ where: { cartaoId, parcelado: true, ativa: true } });
   },
+
+  // Toda parcelada ativa do dono, de QUALQUER espaço — a aba de cartões é da
+  // conta, não de um espaço, então o painel de quitação tem que ver tudo (é o
+  // mesmo escopo do `comprometido` de cada cartão). Inclui parcelada sem cartão
+  // (carnê, boleto): também é dívida a quitar.
+  parceladasDoUsuario(userId: string) {
+    return prisma.despesaFixa.findMany({
+      where: { parcelado: true, ativa: true, espaco: { userId } },
+      include: { espaco: { select: { nome: true, emoji: true } } },
+      orderBy: { descricao: "asc" },
+    });
+  },
+
+  // Pagamentos das fixas do dono num mês (desconta parcela já paga no mês visto).
+  pagamentosDoUsuarioNoMes(userId: string, ym: string) {
+    return prisma.pagamentoFixa.findMany({ where: { ym, espaco: { userId } } });
+  },
 };

@@ -278,6 +278,12 @@ export async function removeCartao(id: string) {
   return unwrap(client.api.cartoes[":id"].$delete({ param: { id } }));
 }
 
+// Parceladas em aberto da conta (todos os espaços) + pagamentos do mês.
+// Base do painel de quitação na aba de cartões.
+export async function getParceladas(ym?: string) {
+  return unwrap(client.api.cartoes.parceladas.$get({ query: ym ? { ym } : {} }));
+}
+
 // Linhas da fatura de um cartão num mês (pra escolher qual compartilhar).
 export async function getFaturaLinhas(cartaoId: string, ym?: string) {
   return unwrap(client.api.cartoes[":id"].fatura.$get({ param: { id: cartaoId }, query: ym ? { ym } : {} }));

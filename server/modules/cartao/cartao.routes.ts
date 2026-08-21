@@ -12,6 +12,14 @@ export const cartaoRoutes = new Hono<AuthEnv>()
     async (c) =>
       c.json(await cartaoService.listWithAggregates(c.get("user").id, c.req.valid("query").ym))
   )
+  // parceladas em aberto do dono (todos os espaços) — alimenta o painel de quitação
+  .get(
+    "/cartoes/parceladas",
+    requirePermission("cartao:view"),
+    zValidator("query", cartaoQuerySchema),
+    async (c) =>
+      c.json(await cartaoService.parceladasEmAberto(c.get("user").id, c.req.valid("query").ym))
+  )
   .get(
     "/cartoes/:id/fatura",
     requirePermission("cartao:view"),

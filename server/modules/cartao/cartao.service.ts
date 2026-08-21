@@ -1,7 +1,7 @@
 import type { Cartao, DespesaFixa } from "@prisma/client";
 import { cartaoRepository } from "./cartao.repository";
 import { NotFoundError } from "@/server/lib/errors";
-import { num, round, currentMonth, effectiveParcela, parcelaAtivaNoMes } from "@/server/lib/serialize";
+import { num, round, currentMonth, effectiveParcela, parcelaAtivaNoMes, parcelaView } from "@/server/lib/serialize";
 import type { CreateCartaoDTO, UpdateCartaoDTO } from "./cartao.dto";
 
 // Parcelas futuras (depois do mês `mes`) de uma fixa parcelada, já auto-avançadas.
@@ -93,6 +93,37 @@ export const cartaoService = {
       totalParcelas: null,
     }));
     return [...linhasFixas, ...linhasAvulsas];
+  },
+
+  // Parceladas em aberto do dono (todos os espaços) + o que já foi pago no mês.
+  // Cru de propósito: o painel de quitação da aba de cartões roda o mesmo cálculo
+  // do front (lib/calc.js quitacaoParceladas) sobre estes dados, sem duplicar a
+  // matemática de parcela nos dois lados.
+  async parceladasEmAberto(userId: string, mes = currentMonth()) {
+    const [fixas, pagamentos] = await Promise.all([
+      cartaoRepository.parceladasDoUsuario(userId),
+      cartaoRepository.pagamentosDoUsuarioNoMes(userId, mes),
+    ]);
+    const ids = new Set(fixas.map((d) => d.id));
+    return {
+      mes,
+      fixas: fixas.map((d) => ({
+        id: d.id,
+        descricao: d.descricao,
+        valor: num(d.valor),
+        ativa: d.ativa,
+        diaVencimento: d.diaVencimento,
+        categoriaId: d.categoriaId,
+        espacoId: d.espacoId,
+        espacoNome: d.espaco.nome,
+        espacoEmoji: d.espaco.emoji,
+        ...parcelaView(d),
+      })),
+      // só o que aponta pra uma parcelada listada — o resto é ruído pro painel
+      pagamentos: pagamentos
+        .filter((p) => ids.has(p.despesaFixaId))
+        .map((p) => ({ despesaFixaId: p.despesaFixaId, ym: p.ym, valorPago: num(p.valorPago) })),
+    };
   },
 
   // Lista com agregados de um mês (default: mês corrente).

@@ -307,6 +307,74 @@ describe("DELETE /api/cartoes/:id", () => {
   });
 });
 
+describe("GET /api/cartoes/parceladas", () => {
+  const mes = currentMonth();
+
+  it("sem parcelada: listas vazias", async () => {
+    await novoCartao();
+    const res = await api.get("/cartoes/parceladas");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ mes, fixas: [], pagamentos: [] });
+  });
+
+  it("traz parcelada de qualquer espaço, com cartão ou sem, e ignora fixa normal", async () => {
+    const cartao = await novoCartao();
+    const outroEsp = (await api.post("/despesas/espacos", { nome: "Secundário" })).body.id;
+    await fixaNoCartao(cartao.id, { descricao: "Sofá", valor: 200, parcelado: true, parcelaAtual: 3, totalParcelas: 10 });
+    await fixaNoCartao(cartao.id, { descricao: "Netflix", valor: 50 }); // fixa normal fica fora
+    await api.post(`/despesas/espacos/${outroEsp}/fixas`, {
+      descricao: "Fogão", valor: 50, parcelado: true, parcelaAtual: 1, totalParcelas: 4,
+    });
+
+    const { fixas } = (await api.get("/cartoes/parceladas")).body;
+    expect(fixas.map((f: { descricao: string }) => f.descricao)).toEqual(["Fogão", "Sofá"]);
+    expect(fixas.find((f: { descricao: string }) => f.descricao === "Sofá")).toMatchObject({
+      valor: 200, cartaoId: cartao.id, parcelado: true, parcelaAtual: 3, totalParcelas: 10,
+      parcelaMesRef: mes, espacoId: esp, espacoNome: "Principal",
+    });
+    // parcelada sem cartão (carnê) também é dívida a quitar
+    expect(fixas.find((f: { descricao: string }) => f.descricao === "Fogão")).toMatchObject({
+      cartaoId: null, espacoId: outroEsp, espacoNome: "Secundário",
+    });
+  });
+
+  it("parcelada pausada fica fora", async () => {
+    const cartao = await novoCartao();
+    const fixa = await fixaNoCartao(cartao.id, { parcelado: true, parcelaAtual: 1, totalParcelas: 5 });
+    await api.patch(`/despesas/espacos/${esp}/fixas/${fixa.id}/toggle`, {});
+    expect((await api.get("/cartoes/parceladas")).body.fixas).toEqual([]);
+  });
+
+  it("devolve o pago no mês pedido, só das parceladas listadas", async () => {
+    const cartao = await novoCartao();
+    const parc = await fixaNoCartao(cartao.id, { valor: 200, parcelado: true, parcelaAtual: 2, totalParcelas: 6 });
+    const normal = await fixaNoCartao(cartao.id, { descricao: "Netflix", valor: 50 });
+    await api.put(`/despesas/espacos/${esp}/fixas/${parc.id}/pago/${mes}`, { valorPago: 80 });
+    await api.put(`/despesas/espacos/${esp}/fixas/${normal.id}/pago/${mes}`, { valorPago: 50 });
+
+    const res = await api.get("/cartoes/parceladas");
+    expect(res.body.pagamentos).toEqual([{ despesaFixaId: parc.id, ym: mes, valorPago: 80 }]);
+
+    // outro mês → nada pago
+    const outroMes = addMonths(mes, 1);
+    const noOutro = await api.get(`/cartoes/parceladas?ym=${outroMes}`);
+    expect(noOutro.body).toMatchObject({ mes: outroMes, pagamentos: [] });
+  });
+
+  it("não vaza parcelada de outra conta", async () => {
+    const outro = await account({ roles: ["membro"] });
+    const espAlheio = (await outro.api.post("/despesas/espacos", { nome: "Dele" })).body.id;
+    await outro.api.post(`/despesas/espacos/${espAlheio}/fixas`, {
+      descricao: "Alheia", valor: 999, parcelado: true, parcelaAtual: 1, totalParcelas: 9,
+    });
+    expect((await api.get("/cartoes/parceladas")).body.fixas).toEqual([]);
+  });
+
+  it("ym malformado → 422", async () => {
+    expect((await api.get("/cartoes/parceladas?ym=2026-1")).status).toBe(422);
+  });
+});
+
 describe("permissions", () => {
   it("leitor lê fatura e lista, não muta", async () => {
     const cartao = await novoCartao();
@@ -322,5 +390,6 @@ describe("permissions", () => {
   it("sem cartao:view → 403", async () => {
     const sem = await account({ permissions: ["state:view"] });
     expect((await sem.api.get("/cartoes")).status).toBe(403);
+    expect((await sem.api.get("/cartoes/parceladas")).status).toBe(403);
   });
 });

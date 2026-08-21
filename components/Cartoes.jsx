@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users } from "lucide-react";
+import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users, Receipt, Flag, TrendingDown, ChevronDown } from "lucide-react";
 import { Card, Button, ProgressBar, Donut } from "./ui/primitives.jsx";
 import { CartaoModal } from "./forms.jsx";
 import { CompartilharModal, MeusCompartilhamentos } from "./Compartilhamento.jsx";
-import { fmtMoney, fmtMonthLabel, currentMonthKey, monthRange } from "../lib/format.js";
-import { acento } from "../lib/calc.js";
+import { fmtMoney, fmtMonthLabel, fmtMonthShort, currentMonthKey, monthRange } from "../lib/format.js";
+import { acento, quitacaoParceladas, quitacaoPorCartao } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
+import * as api from "../services/financeApi";
 import { useAuth } from "./AuthGate";
 
 export default function Cartoes() {
@@ -101,12 +102,175 @@ export default function Cartoes() {
         </>
       )}
 
+      <QuitacaoParceladas ym={ym} cartoes={cartoes} />
+
       {canViewShared && <MeusCompartilhamentos ym={ym} />}
 
       <CartaoModal open={novoOpen} onClose={() => setNovoOpen(false)} />
       <CartaoModal open={!!editing} cartao={editing} onClose={() => setEditing(null)} />
       <CompartilharModal open={!!sharing} cartao={sharing} ym={ym} onClose={() => setSharing(null)} />
     </section>
+  );
+}
+
+// Painel de quitação: quanto falta pra zerar todas as parceladas em aberto da
+// conta, quando fica livre e quanto sai mês a mês até lá. Fica aqui (e não em
+// Despesas) porque dívida parcelada é assunto de cartão — e porque o escopo é a
+// conta inteira, não o espaço ativo: busca as parceladas de todos os espaços,
+// igual ao `comprometido` que cada card mostra.
+function QuitacaoParceladas({ ym, cartoes }) {
+  const [dados, setDados] = useState(null);
+  const [aberto, setAberto] = useState(false);
+  const cartoesMap = useMemo(() => Object.fromEntries(cartoes.map((c) => [c.id, c])), [cartoes]);
+  // o cálculo é genérico e não carrega o espaço da fixa — busca no payload por id
+  const fixasMap = useMemo(() => Object.fromEntries((dados?.fixas || []).map((d) => [d.id, d])), [dados]);
+
+  useEffect(() => {
+    let vivo = true;
+    api.getParceladas(ym)
+      .then((d) => vivo && setDados(d))
+      .catch(() => vivo && setDados(null));
+    return () => { vivo = false; };
+  }, [ym]);
+
+  const total = useMemo(
+    () => quitacaoParceladas(dados?.fixas, dados?.pagamentos, ym),
+    [dados, ym]
+  );
+  const grupos = useMemo(
+    () => quitacaoPorCartao(dados?.fixas, dados?.pagamentos, ym),
+    [dados, ym]
+  );
+
+  if (total.itens.length === 0) return null;
+
+  const mediaMes = total.cronograma.length > 0 ? total.falta / total.cronograma.length : 0;
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="mb-4">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+          <Receipt size={18} /> Quitação das parceladas
+        </h3>
+        <p className="mt-0.5 text-xs text-slate-500">
+          O que ainda vai cair de {fmtMonthLabel(ym)} até a última parcela · {total.itens.length}{" "}
+          {total.itens.length === 1 ? "compra em andamento" : "compras em andamento"}
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
+            <Receipt size={13} className="text-amber-400" /> Falta pra quitar tudo
+          </p>
+          <p className="tnum text-xl font-bold text-white sm:text-2xl">{fmtMoney(total.falta)}</p>
+          <p className="mt-0.5 text-xs text-slate-500">de {fmtMoney(total.contrato)} contratados</p>
+        </div>
+        <div>
+          <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
+            <TrendingDown size={13} className="text-rose-400" /> Ainda sai em {fmtMonthShort(ym)}
+          </p>
+          <p className="tnum text-xl font-bold text-white sm:text-2xl">{fmtMoney(total.faltaNoMes)}</p>
+          <p className="mt-0.5 text-xs text-slate-500">média de {fmtMoney(mediaMes)}/mês até o fim</p>
+        </div>
+        <div>
+          <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
+            <Flag size={13} className="text-emerald-400" /> Livre em
+          </p>
+          <p className="text-xl font-bold text-white sm:text-2xl">{fmtMonthShort(total.ultimoMes)}</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {total.mesesAte === 0
+              ? "última parcela é este mês"
+              : `faltam ${total.mesesAte + 1} ${total.mesesAte + 1 === 1 ? "mês" : "meses"}`}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="mb-1.5 flex items-center justify-between text-xs">
+          <span className="text-slate-400">Já quitado</span>
+          <span className="tnum font-medium text-slate-300">
+            {fmtMoney(total.quitado)} · {Math.round(total.progresso * 100)}%
+          </span>
+        </div>
+        <ProgressBar value={total.progresso} fromClass="from-emerald-500" toClass="to-emerald-400" />
+      </div>
+
+      {/* por cartão (grupo sem cartão = carnê/boleto) */}
+      <div className="mt-5 space-y-3">
+        {grupos.map((g) => {
+          const c = g.cartaoId ? cartoesMap[g.cartaoId] : null;
+          const a = acento(c?.cor || "amber");
+          return (
+            <div key={g.cartaoId || "sem-cartao"} className="rounded-xl bg-white/4 p-4">
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <p className="min-w-0 flex-1 truncate font-semibold" style={{ color: g.cartaoId ? a.dot : undefined }}>
+                  {g.cartaoId ? c?.nome || "Cartão removido" : "Sem cartão (carnê, boleto)"}
+                </p>
+                <div className="text-right">
+                  <p className="tnum text-sm font-bold text-rose-400">{fmtMoney(g.falta)}</p>
+                  <p className="text-[11px] text-slate-500">quita em {fmtMonthShort(g.ultimoMes)}</p>
+                </div>
+              </div>
+              <ul className="divide-y divide-[var(--color-line)]">
+                {g.itens.map((i) => (
+                  <li key={i.id} className="py-2.5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-200">{i.descricao}</p>
+                      <span className="tnum text-sm font-semibold text-slate-200">{fmtMoney(i.falta)}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                      <span className="rounded-md bg-white/6 px-1.5 py-0.5 font-medium text-slate-300">{i.label}</span>
+                      <span>
+                        {i.notStarted
+                          ? `começa em ${fmtMonthShort(i.primeiroMes)}`
+                          : `${i.parcelas} ${i.parcelas === 1 ? "parcela" : "parcelas"} de ${fmtMoney(i.valor)}`}
+                      </span>
+                      <span className="text-slate-600">·</span>
+                      <span>quita em {fmtMonthShort(i.ultimoMes)}</span>
+                      {fixasMap[i.id]?.espacoNome && (
+                        <>
+                          <span className="text-slate-600">·</span>
+                          <span>{fixasMap[i.id].espacoEmoji} {fixasMap[i.id].espacoNome}</span>
+                        </>
+                      )}
+                    </div>
+                    <ProgressBar className="mt-2 h-1.5" value={i.progresso} fromClass={a.from} toClass={a.from} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* cronograma mês a mês até quitar tudo */}
+      <button onClick={() => setAberto((v) => !v)}
+              className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
+        <ChevronDown size={15} className={`transition-transform ${aberto ? "rotate-180" : ""}`} />
+        {aberto ? "Ocultar" : "Ver"} mês a mês até quitar
+      </button>
+
+      {aberto && (
+        <ul className="mt-3 space-y-1.5">
+          {total.cronograma.map((m) => (
+            <li key={m.ym} className="flex items-center gap-3 text-xs">
+              <span className={`w-14 shrink-0 ${m.ym === ym ? "font-semibold text-slate-200" : "text-slate-500"}`}>
+                {fmtMonthShort(m.ym)}
+              </span>
+              <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/8">
+                <span className="block h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400"
+                      style={{ width: `${total.picoMes > 0 ? (m.valor / total.picoMes) * 100 : 0}%` }} />
+              </span>
+              <span className="tnum w-24 shrink-0 text-right text-slate-300">{fmtMoney(m.valor)}</span>
+              <span className="w-16 shrink-0 text-right text-slate-500">
+                {m.itens} {m.itens === 1 ? "conta" : "contas"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
