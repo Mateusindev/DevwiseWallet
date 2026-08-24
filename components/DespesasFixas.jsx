@@ -789,12 +789,14 @@ function Resumo({ icon: Icon, label, value, tone }) {
     blue: "text-blue-400 bg-blue-500/15",
   };
   return (
-    <Card className="p-4">
-      <span className={`mb-3 grid h-9 w-9 place-items-center rounded-lg ${tones[tone]}`}>
-        <Icon size={17} />
+    // p-3 + fonte menor no mobile: em 3 colunas o card fica com ~90px úteis e
+    // valor de 4 dígitos vazava do card.
+    <Card className="min-w-0 p-3 sm:p-4">
+      <span className={`mb-2 grid h-8 w-8 place-items-center rounded-lg sm:mb-3 sm:h-9 sm:w-9 ${tones[tone]}`}>
+        <Icon size={16} />
       </span>
       <p className="text-[11px] leading-tight text-slate-400 sm:text-xs">{label}</p>
-      <p className="tnum text-lg font-bold text-white sm:text-xl">{fmtMoney(value)}</p>
+      <p className="tnum text-[15px] font-bold leading-tight break-words text-white sm:text-xl">{fmtMoney(value)}</p>
     </Card>
   );
 }

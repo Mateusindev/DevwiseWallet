@@ -121,23 +121,30 @@ export function Modal({ open, onClose, title, children }) {
         aria-label={title}
         className="relative z-10 w-full sm:max-w-md outline-none animate-[pop_.18s_ease-out]"
       >
-        <div className="m-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface-2)] p-5 shadow-2xl">
-          <div className="mb-4 flex items-center justify-between">
+        {/* Coluna com altura travada no viewport: cabeçalho fixo + corpo rolável.
+            Sem isso, form que cresce (ex: "Compra parcelada" aparece ao escolher
+            cartão) empurra os campos e os botões pra fora da tela no celular —
+            e o scroll do body está bloqueado enquanto o modal está aberto. */}
+        <div className="modal-card m-3 flex flex-col rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface-2)] shadow-2xl">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-line)] px-5 py-4">
             <h2 className="text-lg font-semibold text-white">{title}</h2>
             <button
               onClick={onClose}
               aria-label="Fechar"
-              className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer transition-colors"
+              className="-mr-1.5 shrink-0 rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer transition-colors"
             >
               <X size={18} />
             </button>
           </div>
-          {children}
+          <div className="min-h-0 overflow-y-auto overscroll-contain p-5">{children}</div>
         </div>
       </div>
       <style>{`
         @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
         @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98) } to { opacity: 1; transform: none } }
+        .modal-card { max-height: calc(100vh - 1.5rem) }
+        /* dvh acompanha a barra do navegador/teclado no mobile */
+        @supports (height: 100dvh) { .modal-card { max-height: calc(100dvh - 1.5rem) } }
       `}</style>
     </div>,
     document.body
@@ -162,8 +169,10 @@ export function Field({ label, hint, error, children, required }) {
   );
 }
 
+// text-base no mobile de propósito: com fonte < 16px o Safari/iOS dá zoom ao
+// focar o campo e o layout do modal "salta". Volta pra text-sm no desktop.
 const inputBase =
-  "w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-2.5 text-sm text-white " +
+  "w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-2.5 text-base sm:text-sm text-white " +
   "placeholder:text-slate-500 transition-colors focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
 
 export function TextInput({ className, ...rest }) {

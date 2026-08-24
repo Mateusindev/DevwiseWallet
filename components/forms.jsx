@@ -28,30 +28,37 @@ function CartaoParcelaFields({ f, set, comParcela = true }) {
       </Field>
 
       {comParcela && f.cartaoId && (
-        <>
-          <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer">
+        // Bloco destacado: no celular o checkbox solto passava despercebido
+        // (aparece só depois de escolher o cartão, no fim do form).
+        <div className="rounded-xl border border-[var(--color-line)] bg-white/[0.03] p-3">
+          <label className="flex items-center gap-3 text-sm font-medium text-slate-200 cursor-pointer">
             <input
               type="checkbox"
               checked={!!f.parcelado}
               onChange={(e) => set({ parcelado: e.target.checked })}
-              className="h-4 w-4 rounded border-white/20 bg-transparent accent-blue-500 cursor-pointer"
+              className="h-5 w-5 shrink-0 rounded border-white/20 bg-transparent accent-blue-500 cursor-pointer"
             />
-            Compra parcelada
+            <span>
+              Compra parcelada
+              <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                Marque para lançar em parcelas na fatura
+              </span>
+            </span>
           </label>
 
           {f.parcelado && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
               <Field label="Parcela atual" hint="ex: 3">
-                <TextInput type="number" min={1} value={f.parcelaAtual}
+                <TextInput type="number" inputMode="numeric" min={1} value={f.parcelaAtual}
                            onChange={(e) => set({ parcelaAtual: e.target.value })} />
               </Field>
               <Field label="Total de parcelas" hint="ex: 10">
-                <TextInput type="number" min={1} value={f.totalParcelas}
+                <TextInput type="number" inputMode="numeric" min={1} value={f.totalParcelas}
                            onChange={(e) => set({ totalParcelas: e.target.value })} />
               </Field>
             </div>
           )}
-        </>
+        </div>
       )}
     </>
   );
@@ -278,12 +285,12 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
           <TextInput value={f.descricao} placeholder="Aluguel, internet, jiu-jitsu…" autoFocus
                      onChange={(e) => { set("descricao", e.target.value); setErr(""); }} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
           <Field label={f.parcelado ? "Valor da parcela" : "Valor mensal"} required error={err && f.valor <= 0 ? err : ""}>
             <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} />
           </Field>
           <Field label="Dia do vencimento" hint="1 a 31">
-            <TextInput type="number" min={1} max={31} value={f.diaVencimento}
+            <TextInput type="number" inputMode="numeric" min={1} max={31} value={f.diaVencimento}
                        onChange={(e) => set("diaVencimento", e.target.value)} />
           </Field>
         </div>
@@ -338,7 +345,7 @@ export function DespesaMesModal({ open, onClose, mes, mesLabel, despesa }) {
           <TextInput value={f.descricao} placeholder="Mercado, transporte, geladeira…" autoFocus
                      onChange={(e) => { set("descricao", e.target.value); setErr(""); }} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
           <Field label="Valor" required error={err && f.valor <= 0 ? err : ""}>
             <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} />
           </Field>
