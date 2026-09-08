@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, PiggyBank, Target, LifeBuoy, ChevronRight } from "lucide-react";
 import { Card, Donut, Button, ProgressBar, Modal } from "./ui/primitives.jsx";
+import { Select, SelectItem } from "./ui/fields.jsx";
 import { GroupedBars, HBars, LineTrend } from "./ui/charts.jsx";
 import CaixinhaCard from "./CaixinhaCard.jsx";
 import { AporteModal, DespesaVariavelModal, CaixinhaModal, ReservaEmergenciaModal } from "./forms.jsx";
@@ -219,12 +220,11 @@ export default function Dashboard({ onOpenCaixinha }) {
             {espacos.length > 0 && (
               <label className="flex items-center gap-2 text-sm text-slate-400">
                 <span className="whitespace-nowrap">Visualizar página</span>
-                <select value={vizId ?? ""} onChange={(e) => setVizId(e.target.value)}
-                  className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-1.5 text-sm text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                <Select value={vizId ?? ""} onValue={setVizId} className="w-auto py-1.5" placeholder="Selecione…">
                   {espacos.map((e) => (
-                    <option key={e.id} value={e.id}>{e.emoji ? `${e.emoji} ` : ""}{e.nome}</option>
+                    <SelectItem key={e.id} value={e.id}>{e.emoji ? `${e.emoji} ` : ""}{e.nome}</SelectItem>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
           </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Users, Trash2, Plus, HandCoins } from "lucide-react";
-import { Card, Button, Modal, Field, TextInput, Select, MoneyInput } from "./ui/primitives.jsx";
+import { Card, Button, Modal, Field, TextInput, MoneyInput } from "./ui/primitives.jsx";
+import { Select, SelectItem, NumberInput } from "./ui/fields.jsx";
 import { fmtMoney } from "../lib/format.js";
 import { acento } from "../lib/calc.js";
 import * as api from "../services/financeApi";
@@ -145,12 +146,11 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
         {/* form novo share */}
         <form onSubmit={submit} className="space-y-4">
           <Field label="Pessoa" error={err}>
-            <Select value={contatoId} onChange={(e) => setContatoId(e.target.value)}>
-              <option value="">Selecione…</option>
+            <Select value={contatoId} onValue={setContatoId} placeholder="Selecione…">
               {contatos.map((c) => (
-                <option key={c.id} value={c.id}>{c.nome}{c.vinculado ? " ✓" : ""}</option>
+                <SelectItem key={c.id} value={c.id}>{c.nome}{c.vinculado ? " ✓" : ""}</SelectItem>
               ))}
-              <option value="__novo__">+ Nova pessoa</option>
+              <SelectItem value="__novo__">+ Nova pessoa</SelectItem>
             </Select>
           </Field>
 
@@ -166,36 +166,34 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
           )}
 
           <Field label="O que compartilhar">
-            <Select value={tipo} onChange={(e) => setTipo(e.target.value)}>
-              <option value="linha">Uma linha da fatura</option>
-              <option value="valor">Um valor da fatura</option>
+            <Select value={tipo} onValue={setTipo}>
+              <SelectItem value="linha">Uma linha da fatura</SelectItem>
+              <SelectItem value="valor">Um valor da fatura</SelectItem>
             </Select>
           </Field>
 
           {tipo === "linha" ? (
             <>
               <Field label="Linha">
-                <Select value={linhaKey} onChange={(e) => setLinhaKey(e.target.value)}>
-                  <option value="">Selecione…</option>
+                <Select value={linhaKey} onValue={setLinhaKey} placeholder="Selecione…">
                   {linhas.map((l) => (
-                    <option key={`${l.tipo}:${l.id}`} value={`${l.tipo}:${l.id}`}>
+                    <SelectItem key={`${l.tipo}:${l.id}`} value={`${l.tipo}:${l.id}`}>
                       {l.descricao} · {fmtMoney(l.valor)}
                       {l.parcelado ? ` (${l.parcelaAtual}/${l.totalParcelas})` : ""}
-                    </option>
+                    </SelectItem>
                   ))}
                 </Select>
               </Field>
               <Field label="Quanto dessa linha">
-                <Select value={divisao} onChange={(e) => setDivisao(e.target.value)}>
-                  <option value="inteira">Linha inteira (100%)</option>
-                  <option value="percentual">Percentual</option>
-                  <option value="valor">Valor fixo por mês</option>
+                <Select value={divisao} onValue={setDivisao}>
+                  <SelectItem value="inteira">Linha inteira (100%)</SelectItem>
+                  <SelectItem value="percentual">Percentual</SelectItem>
+                  <SelectItem value="valor">Valor fixo por mês</SelectItem>
                 </Select>
               </Field>
               {divisao === "percentual" && (
                 <Field label="Percentual (%)">
-                  <TextInput type="number" min={1} max={100} value={percentual}
-                             onChange={(e) => setPercentual(e.target.value)} />
+                  <NumberInput value={percentual} min={1} max={100} onValue={setPercentual} />
                 </Field>
               )}
               {divisao === "valor" && (
@@ -210,9 +208,9 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
                 <MoneyInput value={valor} onValue={setValor} />
               </Field>
               <Field label="Recorrência">
-                <Select value={recorrencia} onChange={(e) => setRecorrencia(e.target.value)}>
-                  <option value="recorrente">Todo mês</option>
-                  <option value="pontual">Só neste mês ({ym})</option>
+                <Select value={recorrencia} onValue={setRecorrencia}>
+                  <SelectItem value="recorrente">Todo mês</SelectItem>
+                  <SelectItem value="pontual">Só neste mês ({ym})</SelectItem>
                 </Select>
               </Field>
             </>

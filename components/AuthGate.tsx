@@ -10,6 +10,10 @@ import {
   type ReactNode,
 } from "react";
 import { LogOut, PiggyBank } from "lucide-react";
+// primitives são .jsx sem tipos — TS inferiria todas as props como obrigatórias
+import * as P from "./ui/primitives.jsx";
+const { Field, TextInput } =
+  P as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
 import { hasPermission } from "@/server/auth/permissions";
 import { login, logout, me, register, type AuthUser } from "@/services/financeApi";
 
@@ -94,9 +98,6 @@ function LoginForm({ onLogged }: { onLogged: (u: AuthUser) => void }) {
   const [busy, setBusy] = useState(false);
   const registering = mode === "register";
 
-  const inputCls =
-    "w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3.5 py-2.5 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-blue-500/50";
-
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -130,34 +131,19 @@ function LoginForm({ onLogged }: { onLogged: (u: AuthUser) => void }) {
         </div>
 
         {registering && (
-          <input
-            type="text"
-            required
-            autoFocus
-            placeholder="nome"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            className={inputCls}
-          />
+          <Field label="Nome" required>
+            <TextInput type="text" required autoFocus placeholder="como te chamamos"
+                       value={nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNome(e.target.value)} />
+          </Field>
         )}
-        <input
-          type="email"
-          required
-          autoFocus={!registering}
-          placeholder="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className={inputCls}
-        />
-        <input
-          type="password"
-          required
-          placeholder={registering ? "senha (mín. 6)" : "senha"}
-          minLength={registering ? 6 : undefined}
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          className={inputCls}
-        />
+        <Field label="Email" required>
+          <TextInput type="email" required autoFocus={!registering} placeholder="voce@email.com"
+                     value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
+        </Field>
+        <Field label="Senha" required hint={registering ? "mínimo 6 caracteres" : ""}>
+          <TextInput type="password" required minLength={registering ? 6 : undefined}
+                     placeholder="••••••" value={senha} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSenha(e.target.value)} />
+        </Field>
 
         {error && <p className="text-xs text-rose-400">{error}</p>}
 

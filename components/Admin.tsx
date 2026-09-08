@@ -6,6 +6,8 @@ import { ShieldCheck, Users, KeyRound, Plus, Pencil, Trash2 } from "lucide-react
 import * as P from "./ui/primitives.jsx";
 const { Card, Button, Modal, Field, TextInput, Badge, Spinner } =
   P as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
+import * as F from "./ui/fields.jsx";
+const { CheckboxField } = F as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
 import { useAuth } from "./AuthGate";
 import {
   listUsers, createUser, updateUser, deleteUser,
@@ -234,11 +236,7 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
         </Field>
 
         {editing && user && user.id !== meId && (
-          <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-            <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)}
-              className="h-4 w-4 rounded border-white/20 bg-transparent accent-blue-500 cursor-pointer" />
-            Conta ativa
-          </label>
+          <CheckboxField label="Conta ativa" checked={ativo} onChecked={setAtivo} />
         )}
 
         {error && <p className="text-xs text-rose-400">{error}</p>}

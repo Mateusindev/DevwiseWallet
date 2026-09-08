@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFinance } from "../store/FinanceContext.jsx";
-import { Modal, Field, TextInput, Textarea, Select, MoneyInput, PercentInput, Button } from "./ui/primitives.jsx";
+import { Modal, Field, TextInput, Textarea, MoneyInput, PercentInput, Button } from "./ui/primitives.jsx";
+import { Select, SelectItem, CheckboxField, NumberInput, DayInput, DateInput } from "./ui/fields.jsx";
 import { fmtMoney, todayISO } from "../lib/format.js";
 import { acento, parcelaInfo } from "../lib/calc.js";
 import { useAuth } from "./AuthGate";
@@ -14,15 +15,12 @@ function CartaoParcelaFields({ f, set, comParcela = true }) {
       <Field label="Cartão de crédito" hint={cartoes.length ? "" : "Cadastre um cartão na página Cartões"}>
         <Select
           value={f.cartaoId || ""}
-          onChange={(e) => {
-            const cartaoId = e.target.value;
-            // limpa parcelamento se tirar o cartão
-            set({ cartaoId, ...(cartaoId ? {} : { parcelado: false }) });
-          }}
+          // limpa parcelamento se tirar o cartão
+          onValue={(cartaoId) => set({ cartaoId, ...(cartaoId ? {} : { parcelado: false }) })}
         >
-          <option value="">Sem cartão (à vista / débito)</option>
+          <SelectItem value="">Sem cartão (à vista / débito)</SelectItem>
           {cartoes.map((c) => (
-            <option key={c.id} value={c.id}>{c.nome}</option>
+            <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
           ))}
         </Select>
       </Field>
@@ -31,30 +29,22 @@ function CartaoParcelaFields({ f, set, comParcela = true }) {
         // Bloco destacado: no celular o checkbox solto passava despercebido
         // (aparece só depois de escolher o cartão, no fim do form).
         <div className="rounded-xl border border-[var(--color-line)] bg-white/[0.03] p-3">
-          <label className="flex items-center gap-3 text-sm font-medium text-slate-200 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!f.parcelado}
-              onChange={(e) => set({ parcelado: e.target.checked })}
-              className="h-5 w-5 shrink-0 rounded border-white/20 bg-transparent accent-blue-500 cursor-pointer"
-            />
-            <span>
-              Compra parcelada
-              <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                Marque para lançar em parcelas na fatura
-              </span>
-            </span>
-          </label>
+          <CheckboxField
+            label="Compra parcelada"
+            hint="Marque para lançar em parcelas na fatura"
+            checked={!!f.parcelado}
+            onChecked={(parcelado) => set({ parcelado })}
+          />
 
           {f.parcelado && (
             <div className="mt-3 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
               <Field label="Parcela atual" hint="ex: 3">
-                <TextInput type="number" inputMode="numeric" min={1} value={f.parcelaAtual}
-                           onChange={(e) => set({ parcelaAtual: e.target.value })} />
+                <NumberInput value={f.parcelaAtual} min={1} max={480}
+                             onValue={(parcelaAtual) => set({ parcelaAtual })} />
               </Field>
               <Field label="Total de parcelas" hint="ex: 10">
-                <TextInput type="number" inputMode="numeric" min={1} value={f.totalParcelas}
-                           onChange={(e) => set({ totalParcelas: e.target.value })} />
+                <NumberInput value={f.totalParcelas} min={1} max={480} allowEmpty
+                             onValue={(totalParcelas) => set({ totalParcelas })} />
               </Field>
             </div>
           )}
@@ -76,15 +66,20 @@ function CategoriaField({ f, set }) {
   return (
     <Field label="Categoria">
       <Select value={f.categoriaId || ""}
-              onChange={(e) => {
-                if (e.target.value === NOVA_CATEGORIA) { setNovoOpen(true); return; }
-                set("categoriaId", e.target.value);
+              onValue={(v) => {
+                if (v === NOVA_CATEGORIA) { setNovoOpen(true); return; }
+                set("categoriaId", v);
               }}>
-        <option value="">Sem categoria</option>
+        <SelectItem value="">Sem categoria</SelectItem>
         {categorias.map((c) => (
-          <option key={c.id} value={c.id}>{c.nome}</option>
+          <SelectItem key={c.id} value={c.id}>
+            <span className="inline-flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+              {c.nome}
+            </span>
+          </SelectItem>
         ))}
-        {podeCriar && <option value={NOVA_CATEGORIA}>+ Nova categoria…</option>}
+        {podeCriar && <SelectItem value={NOVA_CATEGORIA}>+ Nova categoria…</SelectItem>}
       </Select>
       {podeCriar && (
         <CategoriaModal open={novoOpen} onClose={() => setNovoOpen(false)}
@@ -145,9 +140,14 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
     <Modal open={open} onClose={close} title="Registrar aporte">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Caixinha" required>
-          <Select value={f.caixinhaId} onChange={(e) => set("caixinhaId", e.target.value)}>
+          <Select value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
             {caixinhas.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
+              <SelectItem key={c.id} value={c.id}>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+                  {c.nome}
+                </span>
+              </SelectItem>
             ))}
           </Select>
         </Field>
@@ -163,7 +163,7 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
         )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Data">
-            <TextInput type="date" value={f.data} onChange={(e) => set("data", e.target.value)} />
+            <DateInput value={f.data} onValue={(v) => set("data", v)} />
           </Field>
           <Field label="Descrição">
             <TextInput value={f.descricao} placeholder="Aporte mensal" onChange={(e) => set("descricao", e.target.value)} />
@@ -209,9 +209,14 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
     <Modal open={open} onClose={close} title="Registrar despesa">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Debitar da caixinha" required>
-          <Select value={f.caixinhaId} onChange={(e) => set("caixinhaId", e.target.value)}>
+          <Select value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
             {caixinhas.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome} — saldo {fmtMoney(c.saldo)}</option>
+              <SelectItem key={c.id} value={c.id}>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+                  {c.nome} — saldo {fmtMoney(c.saldo)}
+                </span>
+              </SelectItem>
             ))}
           </Select>
         </Field>
@@ -227,7 +232,7 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
         )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Data">
-            <TextInput type="date" value={f.data} onChange={(e) => set("data", e.target.value)} />
+            <DateInput value={f.data} onValue={(v) => set("data", v)} />
           </Field>
           <Field label="Descrição">
             <TextInput value={f.descricao} placeholder="Mercado, farmácia…" onChange={(e) => set("descricao", e.target.value)} />
@@ -248,14 +253,14 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
   const editing = !!despesa;
   const [form, setForm] = useState(null);
   const init = () => {
-    if (!despesa) return { descricao: "", valor: 0, diaVencimento: 5, cartaoId: "", categoriaId: "", nota: "", parcelado: false, parcelaAtual: 1, totalParcelas: "" };
+    if (!despesa) return { descricao: "", valor: 0, diaVencimento: 5, cartaoId: "", categoriaId: "", nota: "", parcelado: false, parcelaAtual: 1, totalParcelas: null };
     // prefill com a parcela EFETIVA do mês atual (editar re-ancora "agora estou na X")
     const eff = despesa.parcelado ? parcelaInfo(despesa) : null;
     return {
       descricao: despesa.descricao, valor: despesa.valor, diaVencimento: despesa.diaVencimento,
       cartaoId: despesa.cartaoId || "", categoriaId: despesa.categoriaId || "", nota: despesa.nota || "", parcelado: !!despesa.parcelado,
       parcelaAtual: eff ? Math.min(Math.max(eff.atual, 1), despesa.totalParcelas) : 1,
-      totalParcelas: despesa.totalParcelas ?? "",
+      totalParcelas: despesa.totalParcelas ?? null,
     };
   };
   const f = form ?? init();
@@ -290,8 +295,7 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
             <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} />
           </Field>
           <Field label="Dia do vencimento" hint="1 a 31">
-            <TextInput type="number" inputMode="numeric" min={1} max={31} value={f.diaVencimento}
-                       onChange={(e) => set("diaVencimento", e.target.value)} />
+            <DayInput value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)} allowEmpty />
           </Field>
         </div>
         <CategoriaField f={f} set={set} />
@@ -350,7 +354,7 @@ export function DespesaMesModal({ open, onClose, mes, mesLabel, despesa }) {
             <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} />
           </Field>
           <Field label="Data">
-            <TextInput type="date" value={f.data} onChange={(e) => set("data", e.target.value)} />
+            <DateInput value={f.data} onValue={(v) => set("data", v)} month={mes} />
           </Field>
         </div>
         <CategoriaField f={f} set={set} />
@@ -408,7 +412,7 @@ export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita }) {
             <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} />
           </Field>
           <Field label="Data">
-            <TextInput type="date" value={f.data} onChange={(e) => set("data", e.target.value)} />
+            <DateInput value={f.data} onValue={(v) => set("data", v)} month={mes} />
           </Field>
         </div>
         <div className="flex gap-2 pt-1">
@@ -476,11 +480,8 @@ export function CaixinhaModal({ open, onClose, caixinha }) {
             ))}
           </div>
         </Field>
-        <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer">
-          <input type="checkbox" checked={f.acumulaSobra} onChange={(e) => set("acumulaSobra", e.target.checked)}
-                 className="h-4 w-4 rounded border-white/20 bg-transparent accent-blue-500 cursor-pointer" />
-          Acumula o que sobrar no mês
-        </label>
+        <CheckboxField label="Acumula o que sobrar no mês" checked={f.acumulaSobra}
+                       onChecked={(v) => set("acumulaSobra", v)} />
         <div className="flex gap-2 pt-1">
           <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
           <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar caixinha"}</Button>
@@ -547,9 +548,9 @@ export function ReservaEmergenciaModal({ open, onClose, caixinha, onCreated }) {
                 {m} meses
               </button>
             ))}
-            <TextInput type="number" min="1" value={f.meses}
-                       onChange={(e) => { set("meses", Math.max(0, parseInt(e.target.value, 10) || 0)); setErr(""); }}
-                       className="w-20" />
+            <NumberInput value={f.meses} min={1} max={120}
+                         onValue={(v) => { set("meses", v ?? 0); setErr(""); }}
+                         className="w-20" />
           </div>
         </Field>
         <Field label="Gasto por mês" hint="Quanto você gasta em média por mês">
@@ -652,9 +653,9 @@ export function CartaoModal({ open, onClose, cartao }) {
     cartao
       ? {
           nome: cartao.nome, bandeira: cartao.bandeira || "", limite: cartao.limite,
-          diaFechamento: cartao.diaFechamento ?? "", diaVencimento: cartao.diaVencimento, cor: cartao.cor,
+          diaFechamento: cartao.diaFechamento ?? null, diaVencimento: cartao.diaVencimento, cor: cartao.cor,
         }
-      : { nome: "", bandeira: "", limite: 0, diaFechamento: "", diaVencimento: 10, cor: "violet" };
+      : { nome: "", bandeira: "", limite: 0, diaFechamento: null, diaVencimento: 10, cor: "violet" };
   const f = form ?? init();
   const set = (k, v) => setForm({ ...f, [k]: v });
   const [busy, setBusy] = useState(false);
@@ -668,8 +669,8 @@ export function CartaoModal({ open, onClose, cartao }) {
       nome: f.nome,
       bandeira: f.bandeira.trim() || null,
       limite: f.limite,
-      diaFechamento: f.diaFechamento === "" ? null : Number(f.diaFechamento),
-      diaVencimento: Number(f.diaVencimento) || 1,
+      diaFechamento: f.diaFechamento ?? null,
+      diaVencimento: f.diaVencimento ?? 1,
       cor: f.cor,
     };
     try {
@@ -698,12 +699,10 @@ export function CartaoModal({ open, onClose, cartao }) {
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Dia do fechamento" hint="opcional">
-            <TextInput type="number" min={1} max={31} value={f.diaFechamento}
-                       onChange={(e) => set("diaFechamento", e.target.value)} />
+            <DayInput value={f.diaFechamento} onValue={(v) => set("diaFechamento", v)} allowEmpty />
           </Field>
           <Field label="Dia do vencimento" hint="1 a 31">
-            <TextInput type="number" min={1} max={31} value={f.diaVencimento}
-                       onChange={(e) => set("diaVencimento", e.target.value)} />
+            <DayInput value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)} allowEmpty />
           </Field>
         </div>
         <Field label="Cor">

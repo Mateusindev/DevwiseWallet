@@ -4,6 +4,7 @@ import {
   Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2,
 } from "lucide-react";
 import { Card, Button, MoneyInput, Spinner, Modal } from "./ui/primitives.jsx";
+import { Checkbox, CheckboxField } from "./ui/fields.jsx";
 import { DespesaFixaModal, DespesaMesModal, ReceitaMesModal, EspacoModal } from "./forms.jsx";
 import { fmtMoney, fmtMonthLabel, currentMonthKey } from "../lib/format.js";
 import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, mesesOrcamento, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes } from "../lib/calc.js";
@@ -372,10 +373,10 @@ export default function DespesasFixas() {
                         {canOrc && (
                           <>
                             {conta && <PagarControl valor={d.valor} valorPago={valorPago} onSet={(v) => setPagamentoFixa(d.id, ym, v)} />}
-                            <label className="flex cursor-pointer items-center" title={d.ativa ? "Ativa" : "Pausada"}>
-                              <input type="checkbox" checked={d.ativa} onChange={() => toggleDespesaFixa(d.id)}
-                                className="h-4 w-4 rounded border-white/20 bg-transparent accent-blue-500 cursor-pointer" />
-                            </label>
+                            <span className="flex items-center" title={d.ativa ? "Ativa" : "Pausada"}>
+                              <Checkbox checked={d.ativa} onChecked={() => toggleDespesaFixa(d.id)}
+                                        aria-label={d.ativa ? `Pausar ${d.descricao}` : `Ativar ${d.descricao}`} />
+                            </span>
                             <button onClick={() => setEditFixa(d)} aria-label={`Editar ${d.descricao}`}
                               className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
                               <Pencil size={16} />
@@ -662,11 +663,7 @@ function RecebidoCard({ ym, valor, fixa, override }) {
                 <Check size={16} />
               </Button>
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-              <input type="checkbox" checked={fixo} onChange={(e) => setFixo(e.target.checked)}
-                className="h-4 w-4 rounded border-white/20 bg-transparent accent-emerald-500 cursor-pointer" />
-              Salário fixo — repete todo mês
-            </label>
+            <CheckboxField label="Salário fixo — repete todo mês" checked={fixo} onChecked={setFixo} />
           </div>
         ) : (
           <>

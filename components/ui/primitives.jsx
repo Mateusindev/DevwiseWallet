@@ -171,7 +171,7 @@ export function Field({ label, hint, error, children, required }) {
 
 // text-base no mobile de propósito: com fonte < 16px o Safari/iOS dá zoom ao
 // focar o campo e o layout do modal "salta". Volta pra text-sm no desktop.
-const inputBase =
+export const inputBase =
   "w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-2.5 text-base sm:text-sm text-white " +
   "placeholder:text-slate-500 transition-colors focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
 
@@ -181,14 +181,6 @@ export function TextInput({ className, ...rest }) {
 
 export function Textarea({ className, rows = 2, ...rest }) {
   return <textarea rows={rows} className={cx(inputBase, "resize-y", className)} {...rest} />;
-}
-
-export function Select({ className, children, ...rest }) {
-  return (
-    <select className={cx(inputBase, "cursor-pointer", className)} {...rest}>
-      {children}
-    </select>
-  );
 }
 
 // Percent input — mesma máscara de 2 casas do MoneyInput, sufixo "% a.a.".
