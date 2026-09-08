@@ -5,7 +5,7 @@ import { prisma } from "@/server/lib/prisma";
 const withOrcamento = {
   despesasFixas: { orderBy: { createdAt: "asc" } },
   despesasMes: { orderBy: { data: "desc" } },
-  receitasMes: { orderBy: { data: "desc" } },
+  receitasMes: { orderBy: { data: "desc" }, include: { skips: true } },
   rendasMensais: { orderBy: { ym: "asc" } },
   pagamentosFixas: true,
 } satisfies Prisma.EspacoInclude;

@@ -299,6 +299,9 @@ describe("orcamentoView", () => {
         descricao: "Freela",
         valor: 800,
         data: new Date("2026-06-20T00:00:00.000Z"),
+        recorrente: false,
+        mesFim: null,
+        skips: [],
       },
     ],
     pagamentosFixas: [{ despesaFixaId: "df-1", ym: "2026-06", valorPago: 600, espacoId: "e1" }],
@@ -343,6 +346,8 @@ describe("orcamentoView", () => {
       descricao: "Freela",
       valor: 800,
       data: "2026-06-20",
+      recorrente: false,
+      mesFim: null,
     });
     // pagamento de fixa não carrega espacoId pro front
     expect(v.pagamentosFixas).toEqual([{ despesaFixaId: "df-1", ym: "2026-06", valorPago: 600 }]);

@@ -17,7 +17,7 @@ export default function Dashboard({ onOpenCaixinha }) {
   const fin = useFinance();
   const { can } = useAuth();
   const {
-    caixinhas, cartoes, categorias, despesasFixas, despesasMes, receitasMes,
+    caixinhas, cartoes, categorias, despesasFixas, despesasMes, receitasMes, receitasSkips,
     rendasMensais, config, reloadCartoes, espacos, activeEspacoId,
   } = fin;
 
@@ -49,21 +49,22 @@ export default function Dashboard({ onOpenCaixinha }) {
   const dFixas = usaAtivo ? despesasFixas : (vizOrc?.despesasFixas || []);
   const dMes = usaAtivo ? despesasMes : (vizOrc?.despesasMes || []);
   const rMes = usaAtivo ? receitasMes : (vizOrc?.receitasMes || []);
+  const rSkips = usaAtivo ? receitasSkips : (vizOrc?.receitasSkips || []);
   const rendas = usaAtivo ? rendasMensais : (vizOrc?.rendasMensais || {});
   const cfg = usaAtivo ? config : (vizOrc?.config || { rendaMensal: 0 });
 
   const catMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
   const orc = useMemo(
-    () => orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, despesasFixas: dFixas, config: cfg }, ym),
-    [rendas, dMes, rMes, dFixas, cfg, ym]
+    () => orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, receitasSkips: rSkips, despesasFixas: dFixas, config: cfg }, ym),
+    [rendas, dMes, rMes, rSkips, dFixas, cfg, ym]
   );
   // série dos últimos 6 meses (evolução + sobra)
   const serie = useMemo(() =>
     lastMonths(6, ym).map((m) => ({
       ym: m,
-      ...orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, despesasFixas: dFixas, config: cfg }, m),
+      ...orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, receitasSkips: rSkips, despesasFixas: dFixas, config: cfg }, m),
     })),
-    [rendas, dMes, rMes, dFixas, cfg, ym]
+    [rendas, dMes, rMes, rSkips, dFixas, cfg, ym]
   );
 
   // despesas do mês por categoria (fixas que caem + avulsas)
@@ -145,7 +146,7 @@ export default function Dashboard({ onOpenCaixinha }) {
         const o = await api.getOrcamento(e.id).catch(() => null);
         if (!o) return null;
         const m = orcamentoMes(
-          { rendasMensais: o.rendasMensais, despesasMes: o.despesasMes, receitasMes: o.receitasMes, despesasFixas: o.despesasFixas, config: o.config },
+          { rendasMensais: o.rendasMensais, despesasMes: o.despesasMes, receitasMes: o.receitasMes, receitasSkips: o.receitasSkips, despesasFixas: o.despesasFixas, config: o.config },
           ym
         );
         return { label: `${e.emoji ? `${e.emoji} ` : ""}${e.nome}`, value: m.saiu, cor: e.cor };

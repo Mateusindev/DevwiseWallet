@@ -115,6 +115,20 @@ export const orcamentoRepository = {
     return prisma.receitaMes.delete({ where: { id } });
   },
 
+  // ── Exceções de receita recorrente ───────────────────────────────────────
+  // Sem user_id: herda o dono via receita → espaco (o service resolve a receita
+  // por `findReceitaMes`, que já cruza o userId).
+  upsertSkipReceita(receitaId: string, ym: string) {
+    return prisma.receitaMesSkip.upsert({
+      where: { receitaId_ym: { receitaId, ym } },
+      create: { receitaId, ym },
+      update: {},
+    });
+  },
+  deleteSkipReceita(receitaId: string, ym: string) {
+    return prisma.receitaMesSkip.deleteMany({ where: { receitaId, ym } });
+  },
+
   // ── Renda mensal (upsert por espaço+ym) ──────────────────────────────────
   upsertRenda(espacoId: string, ym: string, valor: number) {
     return prisma.rendaMensal.upsert({

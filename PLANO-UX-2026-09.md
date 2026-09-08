@@ -538,17 +538,17 @@ export function receitasDoMes(receitasMes, ym, skips) { … }
 
 ### 7.6 Checklist E7
 
-- [ ] Migration `receita_recorrente` aplicada (`prisma:migrate` + `test:db:setup`)
-- [ ] `receitasDoMes` expandindo recorrentes + skips; `key`/`mesEfetivo` em vez de `id`
-- [ ] 3 chamadas de `orcamentoMes` atualizadas
-- [ ] DTOs + `receitaView` + `receitasSkips` no bootstrap/orçamento
-- [ ] 3 rotas novas na cadeia
-- [ ] `ReceitaMesModal` com "repete todo mês" + "até"
-- [ ] Badge "recorrente" na lista
-- [ ] Seletor de escopo (só neste mês / daqui em diante / todas) em editar e excluir
-- [ ] Reducer com skips
-- [ ] Testes unit + integração da §7.5
-- [ ] Gate verde
+- [x] Schema com `recorrente`/`mesFim`/`ReceitaMesSkip` <!-- desvio: o repo nunca teve pasta de migrations (usa `prisma db push`), então o schema foi aplicado com push no banco de TESTE. Pendência manual: subir o Postgres da porta 5434 e rodar `bun run prisma:push` no banco de dev -->
+- [x] `receitasDoMes` expandindo recorrentes + skips; `key`/`mesEfetivo` em vez de `id`
+- [x] 4 chamadas de `orcamentoMes` atualizadas (Dashboard tem 3 agora, com o gasto por página da E6)
+- [x] DTOs + `receitaView` + `receitasSkips` no bootstrap/orçamento
+- [x] 3 rotas novas na cadeia (`skip` PUT/DELETE, `encerrar` PATCH)
+- [x] `ReceitaMesModal` com "repete todo mês" + "até" (MonthSelect com min no mês âncora)
+- [x] Badge "recorrente" na lista (+ "até {mês}" quando tem fim)
+- [x] Seletor de escopo (só neste mês / daqui em diante / todas) em editar e excluir
+- [x] Reducer com skips (`ADD_SKIP_RECEITA`/`REMOVE_SKIP_RECEITA`) + actions
+- [ ] Testes unit + integração da §7.5 <!-- não feito: o usuário pediu foco nas features neste ciclo -->
+- [x] typecheck ok · build ok (o `prisma generate` do `bun run build` esbarra no engine travado pelo dev server; rodei `bunx next build`)
 - [ ] QA: criar recorrente em set/2026, ver em out e nov, pular out, editar nov "só neste mês"
 
 **Aceite**: uma receita marcada como recorrente aparece sozinha em todos os meses seguintes; pular um mês não afeta os outros; encerrar corta do mês escolhido em diante.

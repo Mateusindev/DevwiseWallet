@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2,
+  Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2, Repeat,
 } from "lucide-react";
 import { Card, Button, Field, MoneyInput, Spinner, Modal } from "./ui/primitives.jsx";
 import { Checkbox, CheckboxField, FormError, MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
@@ -13,6 +13,21 @@ import { fmtMoney, fmtMonthLabel, currentMonthKey } from "../lib/format.js";
 import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, janelaMeses, mesesComDados, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
+
+// Opção do seletor de escopo (recorrente): título + o que acontece de fato.
+function EscopoOpcao({ titulo, desc, tone, disabled, onClick }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled}
+      className={`w-full rounded-xl border p-3.5 text-left transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+        tone === "danger"
+          ? "border-rose-500/30 bg-rose-500/[0.06] hover:bg-rose-500/[0.12]"
+          : "border-[var(--color-line)] bg-white/[0.02] hover:border-white/25 hover:bg-white/5"
+      }`}>
+      <span className={`block font-semibold ${tone === "danger" ? "text-rose-300" : "text-white"}`}>{titulo}</span>
+      <span className="mt-0.5 block text-xs text-slate-400">{desc}</span>
+    </button>
+  );
+}
 
 // Tag de categoria numa linha de despesa.
 function CategoriaBadge({ d, categoriasMap }) {
@@ -56,10 +71,10 @@ function CartaoBadge({ d, cartoesMap, ym }) {
 export default function DespesasFixas() {
   const fin = useFinance();
   const {
-    despesasFixas, despesasMes, receitasMes, rendasMensais, config,
+    despesasFixas, despesasMes, receitasMes, receitasSkips, rendasMensais, config,
     espacos, espacosOcultos, activeEspacoId, orcamentoStatus, cartoes, categorias, pagamentosFixas,
     setActiveEspaco, toggleDespesaFixa, removeDespesaFixa, removeDespesaMes, removeReceitaMes, setPagamentoFixa, setPagaMes,
-    bulkMes, bulkFixas,
+    bulkMes, bulkFixas, skipReceitaMes, encerrarReceitaMes,
   } = fin;
   const cartoesMap = useMemo(() => Object.fromEntries(cartoes.map((c) => [c.id, c])), [cartoes]);
   const categoriasMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
@@ -76,6 +91,9 @@ export default function DespesasFixas() {
   const [delFixa, setDelFixa] = useState(null); // despesa fixa a excluir (confirma)
   const [delMes, setDelMes] = useState(null); // despesa do mês a excluir
   const [delReceita, setDelReceita] = useState(null); // receita do mês a excluir
+  // Recorrente não tem "uma linha só": editar/excluir precisa saber o escopo.
+  const [escopoReceita, setEscopoReceita] = useState(null); // { r, acao: "editar" | "excluir" }
+  const [escopoEdicao, setEscopoEdicao] = useState("todas");
   const [delBusy, setDelBusy] = useState(false);
 
   async function excluirFixa() {
@@ -94,6 +112,30 @@ export default function DespesasFixas() {
     finally { setDelBusy(false); }
   }
 
+  // Clique em editar/excluir numa recorrente passa antes pelo seletor de escopo.
+  function pedirReceita(r, acao) {
+    if (r.recorrente) { setEscopoReceita({ r, acao }); return; }
+    if (acao === "editar") setEditReceita(r);
+    else setDelReceita(r);
+  }
+
+  async function aplicarEscopo(escopo) {
+    const { r, acao } = escopoReceita;
+    if (acao === "editar") {
+      setEscopoEdicao(escopo);
+      setEscopoReceita(null);
+      setEditReceita(r);
+      return;
+    }
+    setDelBusy(true);
+    try {
+      if (escopo === "mes") await skipReceitaMes(r.id, ym);
+      else if (escopo === "diante") await encerrarReceitaMes(r.id, ym);
+      else await removeReceitaMes(r.id);
+      setEscopoReceita(null);
+    } finally { setDelBusy(false); }
+  }
+
   // Pontinho nos meses com lançamento; janela navegável esticada pelo dado mais antigo.
   const comDados = useMemo(
     () => mesesComDados({ rendasMensais, despesasMes, receitasMes }),
@@ -101,15 +143,19 @@ export default function DespesasFixas() {
   );
   const janela = useMemo(() => janelaMeses({ dados: comDados }), [comDados]);
   const orc = useMemo(
-    () => orcamentoMes({ rendasMensais, despesasMes, receitasMes, despesasFixas, config }, ym),
-    [rendasMensais, despesasMes, receitasMes, despesasFixas, config, ym]
+    () => orcamentoMes({ rendasMensais, despesasMes, receitasMes, receitasSkips, despesasFixas, config }, ym),
+    [rendasMensais, despesasMes, receitasMes, receitasSkips, despesasFixas, config, ym]
   );
   const fixasAtivas = totalFixasNoMes(despesasFixas, ym);
   const doMes = useMemo(
     () => [...despesasDoMes(despesasMes, ym)].sort((a, b) => b.valor - a.valor),
     [despesasMes, ym]
   );
-  const receitasDoMesList = useMemo(() => receitasDoMes(receitasMes, ym), [receitasMes, ym]);
+  // inclui as recorrentes que caem no mês (menos as puladas)
+  const receitasDoMesList = useMemo(
+    () => receitasDoMes(receitasMes, ym, receitasSkips),
+    [receitasMes, receitasSkips, ym]
+  );
   // ordem só por valor — pago/não pago não mexe na posição.
   const fixasOrdenadas = [...despesasFixas].sort((a, b) => b.valor - a.valor);
   // resumo de pagamento — só conta fixas que caem no mês (parcelas quitadas/pausadas fora).
@@ -239,23 +285,33 @@ export default function DespesasFixas() {
             ) : (
               <ul className="divide-y divide-[var(--color-line)]">
                 {receitasDoMesList.map((r) => (
-                  <li key={r.id} className="group flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:px-5">
+                  <li key={r.key} className="group flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:px-5">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-400">
                       <ArrowDownLeft size={16} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-slate-200">{r.descricao}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-medium text-slate-200">{r.descricao}</p>
+                        {r.recorrente && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-400">
+                            <Repeat size={10} /> recorrente
+                          </span>
+                        )}
+                      </div>
                       {r.data && <p className="text-xs text-slate-500">{r.data.split("-").reverse().join("/")}</p>}
+                      {r.recorrente && r.mesFim && (
+                        <p className="text-[11px] text-slate-500">até {fmtMonthLabel(r.mesFim)}</p>
+                      )}
                     </div>
                     <div className="flex w-full items-center justify-end gap-1 sm:w-auto sm:gap-2">
                       <span className="tnum font-semibold text-emerald-400">+{fmtMoney(r.valor)}</span>
                       {canOrc && (
                         <>
-                          <button onClick={() => setEditReceita(r)} aria-label={`Editar ${r.descricao}`}
+                          <button onClick={() => pedirReceita(r, "editar")} aria-label={`Editar ${r.descricao}`}
                             className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
                             <Pencil size={15} />
                           </button>
-                          <button onClick={() => setDelReceita(r)} aria-label={`Remover ${r.descricao}`}
+                          <button onClick={() => pedirReceita(r, "excluir")} aria-label={`Remover ${r.descricao}`}
                             className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
                             <Trash2 size={15} />
                           </button>
@@ -568,7 +624,35 @@ export default function DespesasFixas() {
       <DespesaMesModal open={mesOpen} onClose={() => setMesOpen(false)} mes={ym} mesLabel={fmtMonthLabel(ym)} />
       <DespesaMesModal open={!!editMes} despesa={editMes} onClose={() => setEditMes(null)} mes={ym} mesLabel={fmtMonthLabel(ym)} />
       <ReceitaMesModal open={receitaOpen} onClose={() => setReceitaOpen(false)} mes={ym} mesLabel={fmtMonthLabel(ym)} />
-      <ReceitaMesModal open={!!editReceita} receita={editReceita} onClose={() => setEditReceita(null)} mes={ym} mesLabel={fmtMonthLabel(ym)} />
+      <ReceitaMesModal open={!!editReceita} receita={editReceita} escopo={escopoEdicao}
+                       onClose={() => { setEditReceita(null); setEscopoEdicao("todas"); }}
+                       mes={ym} mesLabel={fmtMonthLabel(ym)} />
+
+      {/* Escopo da ação numa receita recorrente */}
+      <Modal open={!!escopoReceita} onClose={() => !delBusy && setEscopoReceita(null)}
+             title={escopoReceita?.acao === "editar" ? "Editar receita recorrente" : "Excluir receita recorrente"}>
+        <div className="space-y-2.5">
+          <p className="text-sm text-slate-400">
+            <b className="text-slate-200">{escopoReceita?.r?.descricao}</b> repete todo mês. O que fazer?
+          </p>
+          <EscopoOpcao titulo={`Só em ${fmtMonthLabel(ym)}`}
+                       desc={escopoReceita?.acao === "editar"
+                         ? "Vira um lançamento avulso deste mês; os outros meses ficam como estão."
+                         : "Pula este mês; os outros meses continuam."}
+                       disabled={delBusy} onClick={() => aplicarEscopo("mes")} />
+          <EscopoOpcao titulo={`De ${fmtMonthLabel(ym)} em diante`}
+                       desc={escopoReceita?.acao === "editar"
+                         ? "Encerra a recorrência no mês anterior e recomeça aqui com os valores novos."
+                         : "Encerra a recorrência no mês anterior; o histórico fica."}
+                       disabled={delBusy} onClick={() => aplicarEscopo("diante")} />
+          <EscopoOpcao titulo="Todos os meses"
+                       desc={escopoReceita?.acao === "editar"
+                         ? "Altera a receita recorrente inteira, inclusive os meses passados."
+                         : "Apaga a receita e todo o histórico dela."}
+                       tone={escopoReceita?.acao === "excluir" ? "danger" : undefined}
+                       disabled={delBusy} onClick={() => aplicarEscopo("todas")} />
+        </div>
+      </Modal>
 
       <Modal open={!!delFixa} onClose={() => !delBusy && setDelFixa(null)} title="Excluir despesa fixa">
         {delFixa && (

@@ -89,20 +89,35 @@ export const updateDespesaMesSchema = z.object({
   nota,
 });
 
+// Receita recorrente: `mes` passa a ser a âncora e `mesFim` fecha a janela
+// (null = sem fim). O fim nunca vem antes da âncora.
+const recorrencia = {
+  recorrente: z.boolean().optional(),
+  mesFim: ym.nullable().optional(),
+};
+const fimDepoisDoInicio = (d: { mes?: string; mesFim?: string | null }) =>
+  !d.mesFim || !d.mes || d.mesFim >= d.mes;
+const fimOpts = { message: "O mês final vem depois do inicial", path: ["mesFim"] };
+
 export const addReceitaMesSchema = z
   .object({
     mes: ym,
     descricao: descricao("Receita extra"),
     valor,
     data: ymd.optional(),
+    ...recorrencia,
   })
-  .refine(dataNoMes, dataNoMesOpts);
+  .refine(dataNoMes, dataNoMesOpts)
+  .refine(fimDepoisDoInicio, fimOpts);
 
-export const updateReceitaMesSchema = z.object({
-  descricao: z.string().trim().min(1, "Informe a descrição").max(120, "A descrição passa de 120 caracteres").optional(),
-  valor: valor.optional(),
-  data: ymd.optional(),
-});
+export const updateReceitaMesSchema = z
+  .object({
+    descricao: z.string().trim().min(1, "Informe a descrição").max(120, "A descrição passa de 120 caracteres").optional(),
+    valor: valor.optional(),
+    data: ymd.optional(),
+    ...recorrencia,
+  })
+  .refine(fimDepoisDoInicio, fimOpts);
 
 // ── Ações em lote ───────────────────────────────────────────────────────────
 // 200 ids por chamada: o lote existe pra evitar N requests, não pra virar job.

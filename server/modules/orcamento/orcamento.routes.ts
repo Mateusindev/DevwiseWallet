@@ -139,4 +139,23 @@ export const orcamentoRoutes = new Hono<AuthEnv>()
     c.json(
       await orcamentoService.removeReceitaMes(c.get("user").id, c.req.param("esp"), c.req.param("id"))
     )
-  );
+  )
+  // recorrente: pular só um mês, desfazer o pulo, ou encerrar daquele mês em diante
+  .put(`${base}/receitas/:id/skip/:ym`, manage, async (c) => {
+    const { ym } = ymParamSchema.parse({ ym: c.req.param("ym") });
+    return c.json(
+      await orcamentoService.skipReceitaMes(c.get("user").id, c.req.param("esp"), c.req.param("id"), ym)
+    );
+  })
+  .delete(`${base}/receitas/:id/skip/:ym`, manage, async (c) => {
+    const { ym } = ymParamSchema.parse({ ym: c.req.param("ym") });
+    return c.json(
+      await orcamentoService.unskipReceitaMes(c.get("user").id, c.req.param("esp"), c.req.param("id"), ym)
+    );
+  })
+  .patch(`${base}/receitas/:id/encerrar/:ym`, manage, async (c) => {
+    const { ym } = ymParamSchema.parse({ ym: c.req.param("ym") });
+    return c.json(
+      await orcamentoService.encerrarReceitaMes(c.get("user").id, c.req.param("esp"), c.req.param("id"), ym)
+    );
+  });

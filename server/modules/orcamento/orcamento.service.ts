@@ -85,14 +85,31 @@ function clampPago(valorPago: number, valor: number): number {
   return Math.min(Math.max(round(valorPago), 0), round(valor));
 }
 
-function receitaView(r: { id: string; mes: string; descricao: string; valor: unknown; data: Date }) {
+function receitaView(r: {
+  id: string;
+  mes: string;
+  descricao: string;
+  valor: unknown;
+  data: Date;
+  recorrente: boolean;
+  mesFim: string | null;
+}) {
   return {
     id: r.id,
     mes: r.mes,
     descricao: r.descricao,
     valor: num(r.valor as never),
     data: isoDate(r.data),
+    recorrente: r.recorrente,
+    mesFim: r.mesFim,
   };
+}
+
+// 'YYYY-MM' − 1 mês (usado pelo "encerrar deste mês em diante").
+function mesAnterior(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 export const orcamentoService = {
@@ -305,6 +322,8 @@ export const orcamentoService = {
       descricao: dto.descricao,
       valor: round(dto.valor),
       data: parseDate(dto.data || `${dto.mes}-01`),
+      recorrente: dto.recorrente ?? false,
+      mesFim: dto.recorrente ? dto.mesFim ?? null : null,
     });
     return receitaView(rm);
   },
@@ -317,7 +336,43 @@ export const orcamentoService = {
     if (patch.descricao !== undefined) data.descricao = patch.descricao;
     if (patch.valor !== undefined) data.valor = round(patch.valor);
     if (patch.data !== undefined) data.data = parseDate(patch.data);
+    if (patch.recorrente !== undefined) {
+      data.recorrente = patch.recorrente;
+      // deixar de repetir apaga a janela (senão sobraria um fim órfão)
+      if (!patch.recorrente) data.mesFim = null;
+    }
+    if ("mesFim" in patch && patch.recorrente !== false) data.mesFim = patch.mesFim ?? null;
     const rm = await orcamentoRepository.updateReceitaMes(id, data);
+    return receitaView(rm);
+  },
+
+  // Pula a recorrente só no mês `ym` (os outros meses seguem valendo).
+  async skipReceitaMes(userId: string, espacoId: string, id: string, ym: string) {
+    const found = await orcamentoRepository.findReceitaMes(id, userId);
+    assertPertence(found, espacoId, "Receita do mês", id);
+    if (!found!.recorrente) throw new AppError("Só receita recorrente pode ser pulada num mês", 422);
+    await orcamentoRepository.upsertSkipReceita(id, ym);
+    return { receitaId: id, ym };
+  },
+
+  async unskipReceitaMes(userId: string, espacoId: string, id: string, ym: string) {
+    const found = await orcamentoRepository.findReceitaMes(id, userId);
+    assertPertence(found, espacoId, "Receita do mês", id);
+    await orcamentoRepository.deleteSkipReceita(id, ym);
+    return { receitaId: id, ym };
+  },
+
+  // "Deste mês em diante não recebo mais": fecha a janela no mês anterior a `ym`.
+  // Se `ym` é a própria âncora, a recorrência deixa de existir (nada a manter).
+  async encerrarReceitaMes(userId: string, espacoId: string, id: string, ym: string) {
+    const found = await orcamentoRepository.findReceitaMes(id, userId);
+    assertPertence(found, espacoId, "Receita do mês", id);
+    if (!found!.recorrente) throw new AppError("Só receita recorrente pode ser encerrada", 422);
+    if (ym <= found!.mes) {
+      const rm = await orcamentoRepository.updateReceitaMes(id, { recorrente: false, mesFim: null });
+      return receitaView(rm);
+    }
+    const rm = await orcamentoRepository.updateReceitaMes(id, { mesFim: mesAnterior(ym) });
     return receitaView(rm);
   },
 

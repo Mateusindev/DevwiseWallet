@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { Modal, Field, TextInput, Textarea, MoneyInput, PercentInput, Button } from "./ui/primitives.jsx";
-import { Select, SelectItem, CheckboxField, NumberInput, DayInput, DateInput, FormError } from "./ui/fields.jsx";
+import { Select, SelectItem, CheckboxField, NumberInput, DayInput, DateInput, MonthSelect, FormError } from "./ui/fields.jsx";
 import { useFormState } from "./ui/useFormState.js";
 import { dataValida, texto } from "../lib/formErrors.js";
-import { fmtMoney, todayISO } from "../lib/format.js";
+import { addMonths, fmtMoney, fmtMonthLabel, todayISO } from "../lib/format.js";
 import { acento, parcelaInfo, sugereFechamento, sugereVencimento } from "../lib/calc.js";
 import { useAuth } from "./AuthGate";
 
@@ -390,32 +390,63 @@ export function DespesaMesModal({ open, onClose, mes, mesLabel, despesa }) {
 }
 
 // ── Receita do mês (dinheiro extra por fora) ─────────────────────────────────
-export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita }) {
-  const { addReceitaMes, updateReceitaMes } = useFinance();
+// `escopo` só importa quando a receita editada é recorrente:
+//   "todas"  → altera a linha real (vale pra todos os meses)
+//   "mes"    → desanexa: pula a recorrente neste mês e cria uma avulsa com os
+//              valores novos (a combinação é o que dá "editar só este mês")
+//   "diante" → encerra a recorrente no mês anterior e reancora uma nova aqui
+export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita, escopo = "todas" }) {
+  const { addReceitaMes, updateReceitaMes, skipReceitaMes, encerrarReceitaMes } = useFinance();
   const editing = !!receita;
+  const recorrenteEditada = editing && receita.recorrente && escopo !== "todas";
   const init = () =>
     receita
-      ? { descricao: receita.descricao, valor: receita.valor, data: receita.data }
-      : { descricao: "", valor: 0, data: `${mes}-15` };
-  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+      ? {
+          descricao: receita.descricao,
+          valor: receita.valor,
+          data: receita.data,
+          recorrente: !!receita.recorrente,
+          mesFim: receita.mesFim ?? null,
+        }
+      : { descricao: "", valor: 0, data: `${mes}-15`, recorrente: false, mesFim: null };
+  const { f, set, patch, errors, formError, touch, submitting, submit, reset } = useFormState(
     init,
     (f) => ({
       descricao: texto(f.descricao, { obrigatorio: true, max: 120, campo: "A descrição" }),
       valor: exigeValor(f.valor),
       data: exigeData(f.data, mes),
+      mesFim: f.recorrente && f.mesFim && f.mesFim < mes ? "O mês final vem depois deste mês." : "",
     }),
     async (f) => {
       const base = { descricao: f.descricao, valor: f.valor, data: f.data };
-      if (editing) await updateReceitaMes(receita.id, base);
-      else await addReceitaMes({ mes, ...base });
+      const recorrencia = { recorrente: !!f.recorrente, mesFim: f.recorrente ? f.mesFim : null };
+      if (!editing) {
+        await addReceitaMes({ mes, ...base, ...recorrencia });
+      } else if (escopo === "mes") {
+        await skipReceitaMes(receita.id, mes);
+        await addReceitaMes({ mes, ...base });
+      } else if (escopo === "diante") {
+        await encerrarReceitaMes(receita.id, mes);
+        await addReceitaMes({ mes, ...base, ...recorrencia });
+      } else {
+        await updateReceitaMes(receita.id, { ...base, ...recorrencia });
+      }
       close();
     }
   );
 
   function close() { reset(); onClose(); }
 
+  const titulo = !editing
+    ? `Receita extra · ${mesLabel}`
+    : escopo === "mes"
+      ? `Editar só em ${mesLabel}`
+      : escopo === "diante"
+        ? `Editar de ${mesLabel} em diante`
+        : "Editar receita";
+
   return (
-    <Modal open={open} onClose={close} title={editing ? "Editar receita" : `Receita extra · ${mesLabel}`}>
+    <Modal open={open} onClose={close} title={titulo}>
       <form onSubmit={submit} className="space-y-4" noValidate>
         <FormError>{formError}</FormError>
         <Field label="Descrição" required error={errors.descricao}>
@@ -430,6 +461,43 @@ export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita }) {
             <DateInput name="data" value={f.data} onValue={(v) => set("data", v)} month={mes} />
           </Field>
         </div>
+
+        {/* "só neste mês" cria uma avulsa: não faz sentido oferecer recorrência */}
+        {escopo !== "mes" && (
+          <div className="rounded-xl border border-[var(--color-line)] bg-white/[0.03] p-3">
+            <CheckboxField
+              label="Repete todo mês"
+              hint="aparece automaticamente nos meses seguintes"
+              checked={!!f.recorrente}
+              onChecked={(recorrente) => patch({ recorrente, ...(recorrente ? {} : { mesFim: null }) })}
+            />
+            {f.recorrente && (
+              <div className="mt-3">
+                <Field label="Até (opcional)" hint={f.mesFim ? `última vez em ${fmtMonthLabel(f.mesFim)}` : "sem data de fim"}
+                       error={errors.mesFim}>
+                  <div className="flex items-center gap-2">
+                    <MonthSelect value={f.mesFim || addMonths(mes, 11)} onValue={(v) => set("mesFim", v)} min={mes} />
+                    {f.mesFim && (
+                      <button type="button" onClick={() => set("mesFim", null)}
+                              className="text-xs font-medium text-slate-400 hover:text-slate-200 cursor-pointer">
+                        sem fim
+                      </button>
+                    )}
+                  </div>
+                </Field>
+              </div>
+            )}
+          </div>
+        )}
+
+        {recorrenteEditada && (
+          <p className="text-xs text-slate-500">
+            {escopo === "mes"
+              ? "A recorrente segue valendo nos outros meses."
+              : "A recorrente atual é encerrada no mês anterior e recomeça aqui com os valores novos."}
+          </p>
+        )}
+
         <Acoes onCancel={close} submitting={submitting} variant="growth">{editing ? "Salvar" : "Adicionar"}</Acoes>
       </form>
     </Modal>

@@ -235,6 +235,27 @@ export async function bulkDespesasFixas(espacoId: string, dto: Body<(typeof clie
   );
 }
 
+// Receita recorrente: pular um mês, desfazer o pulo e encerrar daquele mês em diante.
+export async function skipReceitaMes(espacoId: string, id: string, ym: string) {
+  return unwrap(
+    client.api.despesas.espacos[":esp"].receitas[":id"].skip[":ym"].$put({ param: { esp: espacoId, id, ym } })
+  );
+}
+
+export async function unskipReceitaMes(espacoId: string, id: string, ym: string) {
+  return unwrap(
+    client.api.despesas.espacos[":esp"].receitas[":id"].skip[":ym"].$delete({ param: { esp: espacoId, id, ym } })
+  );
+}
+
+export async function encerrarReceitaMes(espacoId: string, id: string, ym: string) {
+  return unwrap(
+    client.api.despesas.espacos[":esp"].receitas[":id"].encerrar[":ym"].$patch({
+      param: { esp: espacoId, id, ym },
+    })
+  );
+}
+
 // ── Renda do mês (por espaço) ─────────────────────────────────────────────────
 export async function setRendaMes(espacoId: string, ym: string, valor: number) {
   return unwrap(

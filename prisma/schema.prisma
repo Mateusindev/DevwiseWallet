@@ -331,16 +331,36 @@ model DespesaMes {
 model ReceitaMes {
   id        String   @id @default(uuid()) @db.Uuid
   espacoId  String   @map("espaco_id") @db.Uuid
+  // Para `recorrente`, `mes` é a ÂNCORA (primeiro mês em que vale) — a coluna
+  // não foi renomeada de propósito: evita migration destrutiva e mantém a
+  // receitaView compatível.
   mes       String   @db.Char(7)
   descricao String
   valor     Decimal  @db.Decimal(12, 2)
   data      DateTime @db.Date
+  recorrente Boolean @default(false)
+  mesFim    String?  @map("mes_fim") @db.Char(7) // último mês em que vale (null = sem fim)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  espaco Espaco @relation(fields: [espacoId], references: [id], onDelete: Cascade)
+  espaco Espaco           @relation(fields: [espacoId], references: [id], onDelete: Cascade)
+  skips  ReceitaMesSkip[]
 
   @@index([espacoId, mes])
   @@map("receitas_mes")
+}
+
+// Exceção pontual: receita recorrente pulada num mês específico. Sem user_id —
+// herda o dono via receita → espaco → userId (padrão do repo pro que pende de
+// agregado raiz).
+model ReceitaMesSkip {
+  receitaId String   @map("receita_id") @db.Uuid
+  ym        String   @db.Char(7)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  receita ReceitaMes @relation(fields: [receitaId], references: [id], onDelete: Cascade)
+
+  @@id([receitaId, ym])
+  @@map("receita_mes_skip")
 }
 
 model RendaMensal {

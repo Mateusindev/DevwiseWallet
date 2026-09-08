@@ -21,6 +21,7 @@ const initial = {
   despesasFixas: [],
   despesasMes: [],
   receitasMes: [],
+  receitasSkips: [], // [{ receitaId, ym }] — meses em que uma recorrente foi pulada
   pagamentosFixas: [], // [{ despesaFixaId, ym }] — fixas marcadas pagas por mês
   rendasMensais: {},
   config: { rendaMensal: 0, moeda: "BRL" },
@@ -196,6 +197,23 @@ function reducer(state, action) {
       );
       return { ...state, pagamentosFixas: [...outros, ...action.pagamentos] };
     }
+
+    // exceções de receita recorrente (pular um mês)
+    case "ADD_SKIP_RECEITA": {
+      const existe = (state.receitasSkips || []).some(
+        (x) => x.receitaId === action.receitaId && x.ym === action.ym
+      );
+      return existe
+        ? state
+        : { ...state, receitasSkips: [...(state.receitasSkips || []), { receitaId: action.receitaId, ym: action.ym }] };
+    }
+    case "REMOVE_SKIP_RECEITA":
+      return {
+        ...state,
+        receitasSkips: (state.receitasSkips || []).filter(
+          (x) => !(x.receitaId === action.receitaId && x.ym === action.ym)
+        ),
+      };
 
     case "SET_RENDA":
       return { ...state, rendasMensais: { ...state.rendasMensais, [action.ym]: action.valor } };
@@ -470,6 +488,21 @@ export function FinanceProvider({ children }) {
     },
     async updateReceitaMes(id, patch) {
       const rm = await api.updateReceitaMes(esp, id, patch);
+      dispatch({ type: "UPSERT_RM", rm });
+      return rm;
+    },
+    // Recorrente: pula só o mês `ym` (a receita continua valendo nos outros).
+    async skipReceitaMes(id, ym) {
+      await api.skipReceitaMes(esp, id, ym);
+      dispatch({ type: "ADD_SKIP_RECEITA", receitaId: id, ym });
+    },
+    async unskipReceitaMes(id, ym) {
+      await api.unskipReceitaMes(esp, id, ym);
+      dispatch({ type: "REMOVE_SKIP_RECEITA", receitaId: id, ym });
+    },
+    // "Deste mês em diante": fecha a janela no mês anterior a `ym`.
+    async encerrarReceitaMes(id, ym) {
+      const rm = await api.encerrarReceitaMes(esp, id, ym);
       dispatch({ type: "UPSERT_RM", rm });
       return rm;
     },

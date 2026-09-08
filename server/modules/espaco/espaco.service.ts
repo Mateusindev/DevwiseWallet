@@ -42,7 +42,13 @@ export function orcamentoView(esp: EspacoComOrcamento) {
       descricao: r.descricao,
       valor: num(r.valor),
       data: isoDate(r.data),
+      recorrente: r.recorrente,
+      mesFim: r.mesFim,
     })),
+    // mesmo formato de espacosOcultos/pagamentosFixas: lista plana de exceções
+    receitasSkips: esp.receitasMes.flatMap((r) =>
+      r.skips.map((s) => ({ receitaId: s.receitaId, ym: s.ym }))
+    ),
     pagamentosFixas: esp.pagamentosFixas.map((p) => ({
       despesaFixaId: p.despesaFixaId,
       ym: p.ym,
