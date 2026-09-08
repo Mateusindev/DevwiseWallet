@@ -318,12 +318,12 @@ export function mesesComDados({ rendasMensais, despesasMes, receitasMes }) { /* 
 
 ### 4.4 Checklist E4
 
-- [ ] `janelaMeses` + `mesesComDados` em `lib/calc.js` com testes (janela estica com dado antigo; mínimo respeitado; virada de ano)
-- [ ] `MonthSelect` recebendo `min`/`max`/`marked`/`current`
-- [ ] `DespesasFixas.jsx` migrado + setas ‹ ›
-- [ ] `Cartoes.jsx` migrado + setas ‹ ›
-- [ ] `reloadCartoes(ym)` continua disparando na troca de mês (`Cartoes.jsx:28`)
-- [ ] Gate verde
+- [x] `janelaMeses` + `mesesComDados` em `lib/calc.js` com testes (janela estica com dado antigo; mínimo respeitado; virada de ano) — mais `mesesComFatura` pros pontinhos da aba de cartões
+- [x] `MonthSelect` recebendo `min`/`max`/`marked`/`current`
+- [x] `DespesasFixas.jsx` migrado + setas ‹ › (`MonthStepper`)
+- [x] `Cartoes.jsx` migrado + setas ‹ › (`MonthStepper`)
+- [x] `reloadCartoes(ym)` continua disparando na troca de mês (efeito intocado)
+- [x] Gate verde: typecheck ok · unit 20 arquivos ok · int 264 pass · build ok
 - [ ] QA: escolher janeiro do ano passado (sem dados) e ver a tela vazia coerente, não uma opção faltando
 
 **Aceite**: em Despesas e em Cartões dá para chegar a qualquer mês dos últimos 24 e dos próximos 12; meses com lançamento aparecem marcados.

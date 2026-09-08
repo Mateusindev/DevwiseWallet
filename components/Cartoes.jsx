@@ -3,14 +3,15 @@ import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users, Receipt, Flag, 
 import { Card, Button, ProgressBar, Donut } from "./ui/primitives.jsx";
 import { CartaoModal } from "./forms.jsx";
 import { CompartilharModal, MeusCompartilhamentos } from "./Compartilhamento.jsx";
-import { fmtMoney, fmtMonthLabel, fmtMonthShort, currentMonthKey, monthRange } from "../lib/format.js";
-import { acento, quitacaoParceladas, quitacaoPorCartao } from "../lib/calc.js";
+import { fmtMoney, fmtMonthLabel, fmtMonthShort, currentMonthKey } from "../lib/format.js";
+import { acento, janelaMeses, mesesComFatura, quitacaoParceladas, quitacaoPorCartao } from "../lib/calc.js";
+import { MonthStepper } from "./ui/fields.jsx";
 import { useFinance } from "../store/FinanceContext.jsx";
 import * as api from "../services/financeApi";
 import { useAuth } from "./AuthGate";
 
 export default function Cartoes() {
-  const { cartoes, reloadCartoes, removeCartao } = useFinance();
+  const { cartoes, reloadCartoes, removeCartao, despesasFixas, despesasMes } = useFinance();
   const { can } = useAuth();
   const canManage = can("cartao:manage");
   const canShare = can("cartao:share");
@@ -19,8 +20,9 @@ export default function Cartoes() {
   const [novoOpen, setNovoOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [sharing, setSharing] = useState(null);
-  // meses ao redor do atual (−3 … +6) pra escolher a fatura
-  const meses = useMemo(() => monthRange(-3, 6), []);
+  // Janela de faturas: 12 meses pra cada lado, esticada pelas parcelas em aberto.
+  const comFatura = useMemo(() => mesesComFatura(despesasFixas, despesasMes), [despesasFixas, despesasMes]);
+  const janela = useMemo(() => janelaMeses({ dados: comFatura, atras: 12, frente: 12 }), [comFatura]);
 
   // recarrega os agregados quando troca o mês
   useEffect(() => {
@@ -46,10 +48,7 @@ export default function Cartoes() {
           <p className="text-sm text-slate-400">Limites, faturas e parcelas em aberto.</p>
         </div>
         <div className="flex items-center gap-2">
-          <select value={ym} onChange={(e) => setYm(e.target.value)}
-                  className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3.5 py-2 text-sm text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30">
-            {meses.map((m) => <option key={m} value={m}>{fmtMonthLabel(m)}</option>)}
-          </select>
+          <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comFatura} />
           {canManage && <Button onClick={() => setNovoOpen(true)}><Plus size={16} /> Novo cartão</Button>}
         </div>
       </header>

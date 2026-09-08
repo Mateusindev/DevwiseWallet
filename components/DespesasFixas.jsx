@@ -4,10 +4,10 @@ import {
   Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2,
 } from "lucide-react";
 import { Card, Button, MoneyInput, Spinner, Modal } from "./ui/primitives.jsx";
-import { Checkbox, CheckboxField } from "./ui/fields.jsx";
+import { Checkbox, CheckboxField, MonthStepper } from "./ui/fields.jsx";
 import { DespesaFixaModal, DespesaMesModal, ReceitaMesModal, EspacoModal } from "./forms.jsx";
 import { fmtMoney, fmtMonthLabel, currentMonthKey } from "../lib/format.js";
-import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, mesesOrcamento, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes } from "../lib/calc.js";
+import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, janelaMeses, mesesComDados, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 
@@ -90,7 +90,12 @@ export default function DespesasFixas() {
     finally { setDelBusy(false); }
   }
 
-  const meses = useMemo(() => mesesOrcamento(rendasMensais, despesasMes, receitasMes), [rendasMensais, despesasMes, receitasMes]);
+  // Pontinho nos meses com lançamento; janela navegável esticada pelo dado mais antigo.
+  const comDados = useMemo(
+    () => mesesComDados({ rendasMensais, despesasMes, receitasMes }),
+    [rendasMensais, despesasMes, receitasMes]
+  );
+  const janela = useMemo(() => janelaMeses({ dados: comDados }), [comDados]);
   const orc = useMemo(
     () => orcamentoMes({ rendasMensais, despesasMes, receitasMes, despesasFixas, config }, ym),
     [rendasMensais, despesasMes, receitasMes, despesasFixas, config, ym]
@@ -133,10 +138,7 @@ export default function DespesasFixas() {
           </h2>
           <p className="text-sm text-slate-400">Quanto recebeu, quanto saiu, quanto sobrou.</p>
         </div>
-        <select value={ym} onChange={(e) => setYm(e.target.value)}
-          className="rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3.5 py-2 text-sm text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30">
-          {meses.map((m) => <option key={m} value={m}>{fmtMonthLabel(m)}</option>)}
-        </select>
+        <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comDados} />
       </header>
 
       {/* conteúdo do orçamento — esmaece durante troca de espaço */}
