@@ -191,6 +191,11 @@ export async function restaurarEspacoMes(id: string, ym: string) {
   return unwrap(client.api.despesas.espacos[":id"].ocultar[":ym"].$delete({ param: { id, ym } }));
 }
 
+// Resumo da fatura mês a mês (por cartão e por categoria) — base dos gráficos.
+export async function getResumoCartoes(de?: string, ate?: string) {
+  return unwrap(client.api.cartoes.resumo.$get({ query: { de, ate } }));
+}
+
 // ── Despesas fixas (por espaço) ──────────────────────────────────────────────
 export async function addDespesaFixa(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["fixas"]["$post"]>) {
   return unwrap(client.api.despesas.espacos[":esp"].fixas.$post({ param: { esp: espacoId }, json: dto }));

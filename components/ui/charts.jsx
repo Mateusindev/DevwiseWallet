@@ -93,3 +93,63 @@ export function LineTrend({ points, height = 120, color = "#3b82f6", format = fm
     </div>
   );
 }
+
+// ── Stacked vertical bars (composição do total por período) ─────────────────
+// data:   [{ key, label, valores: { [serieKey]: number } }]
+// series: [{ key, name, color }] — ordem FIXA (nunca por ranking: a cor tem que
+//         seguir a entidade, senão trocar de mês repinta as barras).
+//
+// Segmentos separados por 2px da superfície e legenda sempre presente: as cores
+// vêm do cadastro do usuário (cartão/categoria), então podem cair em pares
+// difíceis de distinguir — o rótulo e o tooltip é que garantem a identidade.
+export function StackedBars({ data, series, height = 168, format = fmtMoneyCompact, destaque, empty = "Sem dados." }) {
+  const totais = data.map((d) => series.reduce((s, sr) => s + (d.valores[sr.key] || 0), 0));
+  const max = Math.max(1, ...totais);
+  if (data.length === 0 || totais.every((t) => t === 0)) {
+    return <p className="py-6 text-center text-sm text-slate-500">{empty}</p>;
+  }
+  return (
+    <div>
+      <div className="flex items-end gap-2 overflow-x-auto pb-1 sm:gap-3">
+        {data.map((d, i) => {
+          const total = totais[i];
+          const destacado = destaque != null && (d.key ?? d.label) === destaque;
+          const visiveis = series.filter((sr) => (d.valores[sr.key] || 0) > 0);
+          return (
+            <div key={d.key ?? d.label} className="flex min-w-[38px] flex-1 flex-col items-center gap-1.5">
+              {/* rótulo direto só no mês destacado — número em toda coluna é ruído */}
+              <span className={cx("tnum text-[10px]", destacado ? "text-slate-200" : "text-transparent")}>
+                {format(total)}
+              </span>
+              <div className="flex w-full max-w-[44px] flex-col-reverse justify-start gap-[2px]" style={{ height }}>
+                {visiveis.map((sr, k) => {
+                  const v = d.valores[sr.key] || 0;
+                  const h = Math.max((v / max) * height, 3);
+                  const topo = k === visiveis.length - 1;
+                  return (
+                    <div key={sr.key} className="group relative w-full shrink-0"
+                         style={{ height: h, backgroundColor: sr.color, borderRadius: topo ? "4px 4px 0 0" : 0 }}>
+                      <span className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 ring-1 ring-white/10 transition-opacity group-hover:opacity-100">
+                        {sr.name}: {format(v)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <span className={cx("text-[10px]", destacado ? "font-semibold text-slate-300" : "text-slate-500")}>
+                {d.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
+        {series.map((sr) => (
+          <span key={sr.key} className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: sr.color }} /> {sr.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}

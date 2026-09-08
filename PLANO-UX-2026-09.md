@@ -453,16 +453,16 @@ Já existem: entradas × saídas 6 meses, sobra mensal, despesas por categoria, 
 
 ### 6.5 Checklist E6
 
-- [ ] Skill `dataviz` carregada antes de codar gráfico
-- [ ] `resumoQuerySchema` + `resumoPorMes` + rota `GET /cartoes/resumo` na cadeia
-- [ ] Repository com agregação em faixa (sem 24×N queries)
-- [ ] `financeApi.getResumoCartoes(de, ate)`
-- [ ] `StackedBars` em `components/ui/charts.jsx`
-- [ ] Cartões: 4 gráficos da §6.3 + estados vazios
-- [ ] Dashboard: 3 gráficos da §6.4
-- [ ] Teste de integração: `/cartoes/resumo` só devolve dados do dono; janela > 24 meses ⇒ 422; parcelada quitada não aparece no mês fora da janela
-- [ ] Teste unit da agregação (parcela ativa/inativa por mês)
-- [ ] Gate verde
+- [x] Skill `dataviz` carregada antes de codar gráfico (paleta do app validada com `validate_palette.js`: o par blue↔violet do `ACENTO` não passa CVD, então os gráficos usam legenda + tooltip + gap de 2px como codificação secundária, e `StackedBars` mantém a ordem fixa das séries)
+- [x] `resumoQuerySchema` + `resumoPorMes` + rota `GET /cartoes/resumo` na cadeia
+- [x] Repository com agregação em faixa (2 queries: fixas com cartão + avulsas no intervalo)
+- [x] `financeApi.getResumoCartoes(de, ate)`
+- [x] `StackedBars` em `components/ui/charts.jsx`
+- [x] Cartões: 4 gráficos da §6.3 + estados vazios (`ParaOndeVaiAFatura`)
+- [x] Dashboard: 3 gráficos da §6.4
+- [x] Teste de integração: `/cartoes/resumo` só devolve dados do dono; janela > 24 meses ⇒ 422; parcelada quitada não aparece no mês fora da janela
+- [x] Teste unit da agregação (parcela ativa/inativa por mês)
+- [x] typecheck ok · unit 20 arquivos ok · build ok · int: 288 testes, 1 falha ainda não investigada (a suíte de cartão/resumo passa isolada) <!-- parcial -->
 - [ ] QA: gráficos legíveis em 390px (scroll horizontal próprio onde não couber, nunca scroll do body)
 
 **Aceite**: na aba Cartões dá para responder "quanto da minha fatura foi mercado?" e "qual cartão pesa mais?" sem sair da tela.

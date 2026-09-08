@@ -7,6 +7,8 @@ const state: {
   fixas: Row[];
   avulsas: Row[];
   parceladas: Row[];
+  fixasComCartao: Row[];
+  avulsasIntervalo: Row[];
   created: Row | null;
   updated: { id: string; data: Row } | null;
   deleted: string | null;
@@ -14,6 +16,8 @@ const state: {
   fixas: [],
   avulsas: [],
   parceladas: [],
+  fixasComCartao: [],
+  avulsasIntervalo: [],
   created: null,
   updated: null,
   deleted: null,
@@ -59,6 +63,9 @@ mock.module("@/server/modules/cartao/cartao.repository", () => ({
     fixasAtivasDoCartao: async () => state.fixas,
     avulsasDoCartaoNoMes: async () => state.avulsas,
     fixasParceladas: async () => state.parceladas,
+    fixasComCartaoDoUsuario: async () => state.fixasComCartao,
+    avulsasComCartaoNoIntervalo: async (_u: string, de: string, ate: string) =>
+      state.avulsasIntervalo.filter((d) => (d.mes as string) >= de && (d.mes as string) <= ate),
   },
 }));
 
@@ -70,6 +77,8 @@ beforeEach(() => {
   state.fixas = [];
   state.avulsas = [];
   state.parceladas = [];
+  state.fixasComCartao = [];
+  state.avulsasIntervalo = [];
   state.created = null;
   state.updated = null;
   state.deleted = null;
@@ -253,5 +262,47 @@ describe("cartaoService.remove", () => {
   it("cartão de outro dono → 404 e nada é apagado", async () => {
     expect(cartaoService.remove(U, "alheio")).rejects.toBeInstanceOf(NotFoundError);
     expect(state.deleted).toBeNull();
+  });
+});
+
+describe("cartaoService.resumoPorMes", () => {
+  it("soma por mês, por cartão e por categoria", async () => {
+    state.fixasComCartao = [
+      fixa({ id: "f1", valor: 100, cartaoId: "ct-1", categoriaId: "cat-1" }),
+      fixa({ id: "f2", valor: 50, cartaoId: "ct-2", categoriaId: null }),
+    ];
+    state.avulsasIntervalo = [
+      { id: "m1", mes: "2026-07", valor: 30, cartaoId: "ct-1", categoriaId: "cat-2" },
+    ];
+
+    const r = await cartaoService.resumoPorMes(U, "2026-06", "2026-07");
+    expect(r.meses.map((m) => m.ym)).toEqual(["2026-06", "2026-07"]);
+    expect(r.meses[0].total).toBe(150);
+    expect(r.meses[1].total).toBe(180);
+    expect(r.meses[1].porCartao).toEqual([
+      { cartaoId: "ct-1", total: 130 },
+      { cartaoId: "ct-2", total: 50 },
+    ]);
+    // fixa sem categoria vira null (o front rotula como "Sem categoria")
+    expect(r.meses[1].porCategoria).toEqual([
+      { categoriaId: "cat-1", total: 100 },
+      { categoriaId: null, total: 50 },
+      { categoriaId: "cat-2", total: 30 },
+    ]);
+  });
+
+  it("parcelada só conta nos meses da janela dela", async () => {
+    state.fixasComCartao = [
+      fixa({ id: "f1", valor: 200, cartaoId: "ct-1", categoriaId: null,
+             parcelado: true, parcelaAtual: 2, totalParcelas: 3, parcelaMesRef: "2026-06" }),
+    ];
+    const r = await cartaoService.resumoPorMes(U, "2026-05", "2026-09");
+    expect(r.meses.map((m) => m.total)).toEqual([200, 200, 200, 0, 0]);
+  });
+
+  it("vira o ano e devolve mês vazio com total 0", async () => {
+    const r = await cartaoService.resumoPorMes(U, "2026-11", "2027-01");
+    expect(r.meses.map((m) => m.ym)).toEqual(["2026-11", "2026-12", "2027-01"]);
+    expect(r.meses.every((m) => m.total === 0 && m.porCartao.length === 0)).toBe(true);
   });
 });

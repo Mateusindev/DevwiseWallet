@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users, Receipt, Flag, TrendingDown, ChevronDown } from "lucide-react";
 import { Card, Button, ProgressBar, Donut } from "./ui/primitives.jsx";
+import { HBars, StackedBars } from "./ui/charts.jsx";
 import { CartaoModal } from "./forms.jsx";
 import { CompartilharModal, MeusCompartilhamentos } from "./Compartilhamento.jsx";
-import { fmtMoney, fmtMonthLabel, fmtMonthShort, currentMonthKey } from "../lib/format.js";
+import { fmtMoney, fmtMoneyCompact, fmtMonthLabel, fmtMonthShort, currentMonthKey, addMonths } from "../lib/format.js";
 import { acento, janelaMeses, mesesComFatura, quitacaoParceladas, quitacaoPorCartao } from "../lib/calc.js";
 import { MonthStepper } from "./ui/fields.jsx";
 import { useFinance } from "../store/FinanceContext.jsx";
@@ -101,6 +102,8 @@ export default function Cartoes() {
         </>
       )}
 
+      {cartoes.length > 0 && <ParaOndeVaiAFatura ym={ym} cartoes={cartoes} />}
+
       <QuitacaoParceladas ym={ym} cartoes={cartoes} />
 
       {canViewShared && <MeusCompartilhamentos ym={ym} />}
@@ -109,6 +112,111 @@ export default function Cartoes() {
       <CartaoModal open={!!editing} cartao={editing} onClose={() => setEditing(null)} />
       <CompartilharModal open={!!sharing} cartao={sharing} ym={ym} onClose={() => setSharing(null)} />
     </section>
+  );
+}
+
+const CINZA = "#64748b"; // "sem categoria" — neutro de propósito, não é uma série
+
+// "Para onde vai a fatura": composição do mês (categoria e cartão), histórico de
+// 6 meses e uso do limite. Um endpoint só (`/cartoes/resumo`) alimenta os três
+// primeiros — 6 meses × N cartões em requests separadas seria dezenas de idas.
+function ParaOndeVaiAFatura({ ym, cartoes }) {
+  const { categorias } = useFinance();
+  const [resumo, setResumo] = useState(null);
+  const de = addMonths(ym, -5);
+
+  useEffect(() => {
+    let vivo = true;
+    api.getResumoCartoes(de, ym)
+      .then((r) => vivo && setResumo(r))
+      .catch(() => vivo && setResumo(null));
+    return () => { vivo = false; };
+  }, [de, ym]);
+
+  const cartoesMap = useMemo(() => Object.fromEntries(cartoes.map((c) => [c.id, c])), [cartoes]);
+  const catMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
+  const doMes = resumo?.meses?.find((m) => m.ym === ym);
+
+  const porCategoria = (doMes?.porCategoria || []).map((x) => {
+    const c = x.categoriaId ? catMap[x.categoriaId] : null;
+    return { label: c?.nome || "Sem categoria", value: x.total, color: c ? acento(c.cor).dot : CINZA };
+  });
+  const porCartao = (doMes?.porCartao || []).map((x) => {
+    const c = cartoesMap[x.cartaoId];
+    return { label: c?.nome || "Cartão removido", value: x.total, color: acento(c?.cor).dot };
+  });
+  const totalMes = doMes?.total || 0;
+
+  // Série empilhada por cartão. Ordem das séries = ordem dos cartões (fixa):
+  // por ranking, trocar de mês repintaria as barras.
+  const series = cartoes.map((c) => ({ key: c.id, name: c.nome, color: acento(c.cor).dot }));
+  const serie = (resumo?.meses || []).map((m) => ({
+    key: m.ym,
+    label: fmtMonthShort(m.ym),
+    valores: Object.fromEntries(m.porCartao.map((x) => [x.cartaoId ?? "sem", x.total])),
+  }));
+
+  // Uso do limite: % da fatura + comprometido futuro sobre o limite de cada cartão.
+  const usoLimite = cartoes
+    .filter((c) => (c.limite || 0) > 0)
+    .map((c) => {
+      const usado = (c.faturaMes || 0) + (c.comprometido || 0);
+      const pct = Math.round((usado / c.limite) * 100);
+      return {
+        label: c.nome,
+        value: Math.min(pct, 100),
+        color: c.disponivel < 0 ? "#f43f5e" : acento(c.cor).dot,
+        sub: `${fmtMoneyCompact(usado)} de ${fmtMoneyCompact(c.limite)}${c.disponivel < 0 ? " · estourou o limite" : ""}`,
+      };
+    })
+    .sort((a, b) => b.value - a.value);
+
+  return (
+    <div className="space-y-4">
+      <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+        <TrendingDown size={17} /> Para onde vai a fatura
+      </h3>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-5">
+          <h4 className="mb-4 text-sm font-semibold text-white">Fatura por categoria · {fmtMonthLabel(ym)}</h4>
+          {porCategoria.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-500">Nada na fatura deste mês.</p>
+          ) : (
+            <div className="flex flex-col items-center gap-5 sm:flex-row">
+              <Donut size={150} segments={porCategoria.map((c) => ({ value: c.value, color: c.color }))}
+                     centerSub="fatura" centerLabel={fmtMoneyCompact(totalMes)} />
+              <ul className="flex-1 space-y-2 self-stretch">
+                {porCategoria.map((c) => (
+                  <li key={c.label} className="flex items-center gap-2 text-sm">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: c.color }} />
+                    <span className="min-w-0 flex-1 truncate text-slate-300">{c.label}</span>
+                    <span className="tnum text-slate-400">{Math.round((c.value / (totalMes || 1)) * 100)}%</span>
+                    <span className="tnum w-20 text-right font-medium text-slate-200">{fmtMoneyCompact(c.value)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <h4 className="mb-4 text-sm font-semibold text-white">Fatura por cartão · {fmtMonthLabel(ym)}</h4>
+          <HBars items={porCartao} empty="Nada na fatura deste mês." />
+        </Card>
+
+        <Card className="p-5 lg:col-span-2">
+          <h4 className="mb-4 text-sm font-semibold text-white">Fatura total · 6 meses</h4>
+          <StackedBars data={serie} series={series} destaque={ym} empty="Sem fatura nesse período." />
+        </Card>
+
+        <Card className="p-5 lg:col-span-2">
+          <h4 className="mb-1 text-sm font-semibold text-white">Uso do limite por cartão</h4>
+          <p className="mb-4 text-xs text-slate-500">Fatura do mês + parcelas ainda por vir.</p>
+          <HBars items={usoLimite} format={(v) => `${v}%`} empty="Nenhum cartão com limite definido." />
+        </Card>
+      </div>
+    </div>
   );
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, PiggyBank, Target, LifeBuoy, ChevronRight } from "lucide-react";
 import { Card, Donut, Button, ProgressBar, Modal } from "./ui/primitives.jsx";
 import { Select, SelectItem } from "./ui/fields.jsx";
-import { GroupedBars, HBars, LineTrend } from "./ui/charts.jsx";
+import { GroupedBars, HBars, LineTrend, StackedBars } from "./ui/charts.jsx";
 import CaixinhaCard from "./CaixinhaCard.jsx";
 import { AporteModal, DespesaVariavelModal, CaixinhaModal, ReservaEmergenciaModal } from "./forms.jsx";
 import { fmtMoney, fmtMoneyCompact, currentMonthKey, fmtMonthLabel, fmtMonthShort, lastMonths } from "../lib/format.js";
@@ -96,6 +96,66 @@ export default function Dashboard({ onOpenCaixinha }) {
   }, [cartoes]);
 
   const gastoCartao = porCategoria.reduce((s, c) => s + c.value, 0);
+
+  // Top 5 categorias no período + "outras": mais que isso e a legenda deixa de
+  // ser legível (e a paleta não tem cor honesta pra uma 9ª série).
+  const categoriaNoTempo = useMemo(() => {
+    const totalPorCat = new Map();
+    const porMes = serie.map((sm) => {
+      const acc = new Map();
+      const add = (id, v) => {
+        const k = id || "__none";
+        acc.set(k, (acc.get(k) || 0) + v);
+        totalPorCat.set(k, (totalPorCat.get(k) || 0) + v);
+      };
+      dFixas.filter((d) => fixaContaNoMes(d, sm.ym)).forEach((d) => add(d.categoriaId, d.valor));
+      dMes.filter((d) => d.mes === sm.ym).forEach((d) => add(d.categoriaId, d.valor));
+      return { ym: sm.ym, acc };
+    });
+
+    const top = [...totalPorCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k);
+    const series = top.map((k) => {
+      const c = k !== "__none" ? catMap[k] : null;
+      return { key: k, name: c?.nome || "Sem categoria", color: c ? acento(c.cor).dot : GREY };
+    });
+    if (totalPorCat.size > top.length) series.push({ key: "__outras", name: "Outras", color: "#475569" });
+
+    const data = porMes.map((m) => {
+      const valores = {};
+      let outras = 0;
+      for (const [k, v] of m.acc) {
+        if (top.includes(k)) valores[k] = v;
+        else outras += v;
+      }
+      if (outras > 0) valores.__outras = outras;
+      return { key: m.ym, label: fmtMonthShort(m.ym), valores };
+    });
+    return { series, data };
+  }, [serie, dFixas, dMes, catMap]);
+
+  // Gasto por espaço no mês. Busca o orçamento de cada página em paralelo (o
+  // contexto só tem o do espaço ativo). Deps só de espacos/ym pra não refazer a
+  // busca a cada mutação local.
+  const [porEspaco, setPorEspaco] = useState([]);
+  useEffect(() => {
+    if (espacos.length === 0) { setPorEspaco([]); return; }
+    let cancel = false;
+    Promise.all(
+      espacos.map(async (e) => {
+        const o = await api.getOrcamento(e.id).catch(() => null);
+        if (!o) return null;
+        const m = orcamentoMes(
+          { rendasMensais: o.rendasMensais, despesasMes: o.despesasMes, receitasMes: o.receitasMes, despesasFixas: o.despesasFixas, config: o.config },
+          ym
+        );
+        return { label: `${e.emoji ? `${e.emoji} ` : ""}${e.nome}`, value: m.saiu, cor: e.cor };
+      })
+    ).then((linhas) => {
+      if (cancel) return;
+      setPorEspaco(linhas.filter(Boolean).filter((l) => l.value > 0).sort((a, b) => b.value - a.value));
+    });
+    return () => { cancel = true; };
+  }, [espacos, ym]);
 
   const [aporte, setAporte] = useState(false);
   const [despesa, setDespesa] = useState(false);
@@ -297,6 +357,42 @@ export default function Dashboard({ onOpenCaixinha }) {
                   </dl>
                 </div>
               )}
+            </Card>
+            {/* Fixas × variáveis: mostra se o aperto é estrutural ou pontual */}
+            <Card className="p-5 lg:col-span-2">
+              <h3 className="mb-4 text-sm font-semibold text-white">Fixas × variáveis · 6 meses</h3>
+              <StackedBars
+                destaque={ym}
+                series={[
+                  { key: "fixas", name: "Fixas", color: "#3987e5" },
+                  { key: "variaveis", name: "Do mês", color: "#d95926" },
+                ]}
+                data={serie.map((sm) => ({
+                  key: sm.ym,
+                  label: fmtMonthShort(sm.ym),
+                  valores: { fixas: sm.fixas, variaveis: sm.variaveis },
+                }))}
+                empty="Sem despesas nesse período."
+              />
+            </Card>
+
+            {/* Categoria ao longo do tempo */}
+            <Card className="p-5 lg:col-span-2">
+              <h3 className="mb-4 text-sm font-semibold text-white">Categorias · 6 meses</h3>
+              <StackedBars
+                destaque={ym}
+                series={categoriaNoTempo.series}
+                data={categoriaNoTempo.data}
+                empty="Sem despesas nesse período."
+              />
+            </Card>
+
+            {/* Gasto por página no mês (todas as páginas, não só a visualizada) */}
+            <Card className="p-5 lg:col-span-2">
+              <h3 className="mb-1 text-sm font-semibold text-white">Gasto por página · {fmtMonthLabel(ym)}</h3>
+              <p className="mb-4 text-xs text-slate-500">Fixas do mês + despesas lançadas, em todas as páginas.</p>
+              <HBars items={porEspaco.map((l) => ({ label: l.label, value: l.value, color: acento(l.cor).dot }))}
+                     empty="Nenhuma despesa neste mês." />
             </Card>
           </div>
           </div>

@@ -4,6 +4,13 @@ import { NotFoundError } from "@/server/lib/errors";
 import { num, round, currentMonth, effectiveParcela, parcelaAtivaNoMes, parcelaView } from "@/server/lib/serialize";
 import type { CreateCartaoDTO, UpdateCartaoDTO } from "./cartao.dto";
 
+// 'YYYY-MM' + 1 mês (vira o ano sozinho).
+function proximoMes(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 // Parcelas futuras (depois do mês `mes`) de uma fixa parcelada, já auto-avançadas.
 function parcelasRestantes(d: DespesaFixa, mes: string) {
   if (!d.parcelado || !d.totalParcelas) return 0;
@@ -124,6 +131,59 @@ export const cartaoService = {
         .filter((p) => ids.has(p.despesaFixaId))
         .map((p) => ({ despesaFixaId: p.despesaFixaId, ym: p.ym, valorPago: num(p.valorPago) })),
     };
+  },
+
+  // Resumo da fatura mês a mês, por cartão e por categoria. Um endpoint só:
+  // 24 meses × N cartões viraria centenas de requests no front.
+  //
+  // Escopo = conta (todos os espaços), igual ao `comprometido` de cada card:
+  // fatura é assunto de cartão, não de espaço.
+  async resumoPorMes(userId: string, de: string, ate: string) {
+    const [fixas, avulsas] = await Promise.all([
+      cartaoRepository.fixasComCartaoDoUsuario(userId),
+      cartaoRepository.avulsasComCartaoNoIntervalo(userId, de, ate),
+    ]);
+
+    const avulsasPorMes = new Map<string, typeof avulsas>();
+    for (const d of avulsas) {
+      const lista = avulsasPorMes.get(d.mes);
+      if (lista) lista.push(d);
+      else avulsasPorMes.set(d.mes, [d]);
+    }
+
+    const meses = [];
+    for (let ym = de; ym <= ate; ym = proximoMes(ym)) {
+      const porCartao = new Map<string, number>();
+      const porCategoria = new Map<string, number>();
+      const soma = (mapa: Map<string, number>, chave: string, valor: number) =>
+        mapa.set(chave, round((mapa.get(chave) ?? 0) + valor));
+
+      // fixa parcelada só entra nos meses da janela dela; fixa normal, sempre
+      for (const d of fixas) {
+        if (!parcelaAtivaNoMes(d, ym)) continue;
+        const valor = num(d.valor);
+        soma(porCartao, d.cartaoId as string, valor);
+        soma(porCategoria, d.categoriaId ?? "", valor);
+      }
+      for (const d of avulsasPorMes.get(ym) ?? []) {
+        const valor = num(d.valor);
+        soma(porCartao, d.cartaoId as string, valor);
+        soma(porCategoria, d.categoriaId ?? "", valor);
+      }
+
+      const lista = (mapa: Map<string, number>, campo: "cartaoId" | "categoriaId") =>
+        [...mapa.entries()]
+          .map(([id, total]) => ({ [campo]: id || null, total }))
+          .sort((a, b) => b.total - a.total);
+
+      meses.push({
+        ym,
+        total: round([...porCartao.values()].reduce((s, v) => s + v, 0)),
+        porCartao: lista(porCartao, "cartaoId") as { cartaoId: string | null; total: number }[],
+        porCategoria: lista(porCategoria, "categoriaId") as { categoriaId: string | null; total: number }[],
+      });
+    }
+    return { de, ate, meses };
   },
 
   // Lista com agregados de um mês (default: mês corrente).

@@ -375,6 +375,66 @@ describe("GET /api/cartoes/parceladas", () => {
   });
 });
 
+describe("GET /api/cartoes/resumo", () => {
+  it("soma a fatura mês a mês, por cartão e por categoria", async () => {
+    const nubank = await novoCartao({ nome: "Nubank" });
+    const inter = await novoCartao({ nome: "Inter" });
+    const cat = (await api.post("/categorias", { nome: "Mercado" })).body;
+    const mes = currentMonth();
+
+    await fixaNoCartao(nubank.id, { valor: 100, categoriaId: cat.id });
+    await fixaNoCartao(inter.id, { valor: 40 });
+    await avulsaNoCartao(nubank.id, { valor: 250, mes, categoriaId: cat.id });
+
+    const res = await api.get(`/cartoes/resumo?de=${mes}&ate=${mes}`);
+    expect(res.status).toBe(200);
+    expect(res.body.meses).toHaveLength(1);
+    expect(res.body.meses[0]).toMatchObject({ ym: mes, total: 390 });
+    expect(res.body.meses[0].porCartao).toEqual([
+      { cartaoId: nubank.id, total: 350 },
+      { cartaoId: inter.id, total: 40 },
+    ]);
+    expect(res.body.meses[0].porCategoria).toEqual([
+      { categoriaId: cat.id, total: 350 },
+      { categoriaId: null, total: 40 },
+    ]);
+  });
+
+  it("sem parâmetros usa a janela de 6 meses até o mês atual", async () => {
+    const res = await api.get("/cartoes/resumo");
+    expect(res.body.meses).toHaveLength(6);
+    expect(res.body.meses[5].ym).toBe(currentMonth());
+  });
+
+  it("parcelada quitada não aparece no mês fora da janela dela", async () => {
+    const cartao = await novoCartao();
+    const mes = currentMonth();
+    // 3/3 ancorada no mês atual → no mês seguinte já acabou
+    await fixaNoCartao(cartao.id, { valor: 90, parcelado: true, parcelaAtual: 3, totalParcelas: 3 });
+
+    const res = await api.get(`/cartoes/resumo?de=${mes}&ate=${addMonths(mes, 1)}`);
+    expect(res.body.meses.map((m: { total: number }) => m.total)).toEqual([90, 0]);
+  });
+
+  it("só devolve dados do dono", async () => {
+    const outro = await account({ roles: ["membro"] });
+    const espAlheio = (await outro.api.post("/despesas/espacos", { nome: "Alheio" })).body.id;
+    const cartaoAlheio = (await outro.api.post("/cartoes", { nome: "Alheio" })).body;
+    await outro.api.post(`/despesas/espacos/${espAlheio}/fixas`, {
+      descricao: "Fixa alheia", valor: 999, cartaoId: cartaoAlheio.id,
+    });
+
+    const res = await api.get("/cartoes/resumo");
+    expect(res.body.meses.every((m: { total: number }) => m.total === 0)).toBe(true);
+  });
+
+  it("janela maior que 24 meses ou invertida → 422", async () => {
+    expect((await api.get("/cartoes/resumo?de=2024-01&ate=2026-02")).status).toBe(422);
+    expect((await api.get("/cartoes/resumo?de=2026-05&ate=2026-01")).status).toBe(422);
+    expect((await api.get("/cartoes/resumo?de=2026/05&ate=2026-06")).status).toBe(422);
+  });
+});
+
 describe("permissions", () => {
   it("leitor lê fatura e lista, não muta", async () => {
     const cartao = await novoCartao();
@@ -391,5 +451,6 @@ describe("permissions", () => {
     const sem = await account({ permissions: ["state:view"] });
     expect((await sem.api.get("/cartoes")).status).toBe(403);
     expect((await sem.api.get("/cartoes/parceladas")).status).toBe(403);
+    expect((await sem.api.get("/cartoes/resumo")).status).toBe(403);
   });
 });

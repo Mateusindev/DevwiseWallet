@@ -40,6 +40,20 @@ export const cartaoRepository = {
     return prisma.despesaFixa.findMany({ where: { cartaoId, parcelado: true, ativa: true } });
   },
 
+  // ── Resumo por mês (uma query por faixa, não 24 × N) ─────────────────────
+  // Fixas ativas com cartão: a janela de parcela é resolvida em memória (a
+  // âncora + total é que dizem em que meses cada uma cai).
+  fixasComCartaoDoUsuario(userId: string) {
+    return prisma.despesaFixa.findMany({
+      where: { ativa: true, cartaoId: { not: null }, espaco: { userId } },
+    });
+  },
+  avulsasComCartaoNoIntervalo(userId: string, de: string, ate: string) {
+    return prisma.despesaMes.findMany({
+      where: { cartaoId: { not: null }, mes: { gte: de, lte: ate }, espaco: { userId } },
+    });
+  },
+
   // Toda parcelada ativa do dono, de QUALQUER espaço — a aba de cartões é da
   // conta, não de um espaço, então o painel de quitação tem que ver tudo (é o
   // mesmo escopo do `comprometido` de cada cartão). Inclui parcelada sem cartão
