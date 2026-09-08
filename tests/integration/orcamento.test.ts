@@ -82,6 +82,19 @@ describe("POST /fixas", () => {
     expect((await addFixa({ nota: "   " })).nota).toBeNull();
   });
 
+  it("dia do vencimento vazio → 422 com issue no campo", async () => {
+    const res = await api.post(`/despesas/espacos/${esp}/fixas`, { valor: 10, diaVencimento: "" });
+    expect(res.status).toBe(422);
+    expect(res.body.issues.some((i: { path: string[] }) => i.path[0] === "diaVencimento")).toBe(true);
+  });
+
+  it("parcela atual além do total → 422", async () => {
+    const res = await api.post(`/despesas/espacos/${esp}/fixas`, {
+      valor: 10, parcelado: true, parcelaAtual: 13, totalParcelas: 12,
+    });
+    expect(res.status).toBe(422);
+  });
+
   it("valor negativo, dia fora de 1..31 e descrição vazia → 422", async () => {
     expect((await api.post(`/despesas/espacos/${esp}/fixas`, { valor: -1 })).status).toBe(422);
     expect((await api.post(`/despesas/espacos/${esp}/fixas`, { valor: 10, diaVencimento: 32 })).status).toBe(
@@ -329,6 +342,17 @@ describe("POST /mes", () => {
     const dm = await addMes({ parcelado: true, totalParcelas: 5 });
     expect(dm.parcelado).toBeUndefined();
   });
+
+  it("data fora do mês → 422 com issue em data", async () => {
+    // a lista filtra por `mes`: data de outro mês faria a linha sumir da tela
+    const res = await api.post(`/despesas/espacos/${esp}/mes`, {
+      mes: "2026-07",
+      valor: 10,
+      data: "2026-08-01",
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.issues.some((i: { path: string[] }) => i.path[0] === "data")).toBe(true);
+  });
 });
 
 describe("PATCH /mes/:id", () => {
@@ -350,6 +374,13 @@ describe("PATCH /mes/:id", () => {
       categoriaId: null,
     });
     expect(res.body).toMatchObject({ cartaoId: null, categoriaId: null });
+  });
+
+  it("data fora do mês do registro → 422", async () => {
+    const dm = await addMes();
+    const res = await api.patch(`/despesas/espacos/${esp}/mes/${dm.id}`, { data: "2026-08-02" });
+    expect(res.status).toBe(422);
+    expect(res.body.error).toContain("2026-07");
   });
 
   it("despesa de outro espaço → 404", async () => {

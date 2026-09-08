@@ -7,7 +7,8 @@ import * as P from "./ui/primitives.jsx";
 const { Card, Button, Modal, Field, TextInput, Badge, Spinner } =
   P as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
 import * as F from "./ui/fields.jsx";
-const { CheckboxField } = F as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
+const { CheckboxField, FormError } = F as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
+import { emailValido, issuesToFields, mensagemDeErro, texto } from "@/lib/formErrors.js";
 import { useAuth } from "./AuthGate";
 import {
   listUsers, createUser, updateUser, deleteUser,
@@ -169,7 +170,8 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
   const [ativo, setAtivo] = useState(true);
   const [roleIds, setRoleIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string>("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open) return;
@@ -178,13 +180,31 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
     setSenha("");
     setAtivo(user?.ativo ?? true);
     setRoleIds(user?.roles.map((r) => r.id) ?? []);
-    setError(null);
+    setError("");
+    setErrors({});
   }, [open, user]);
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  // Senha vazia na edição = manter a atual; na criação é obrigatória.
+  function validar(): Record<string, string> {
+    const e: Record<string, string> = {};
+    const nomeErro = texto(nome, { obrigatorio: true, max: 80, campo: "O nome" });
+    if (nomeErro) e.nome = nomeErro;
+    if (!emailValido(email)) e.email = "Informe um email válido.";
+    if ((!editing || senha) && senha.length < 6) e.senha = "A senha precisa de pelo menos 6 caracteres.";
+    return e;
+  }
+
+  async function submit(ev: FormEvent) {
+    ev.preventDefault();
+    const errs = validar();
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      setError("");
+      return;
+    }
     setBusy(true);
-    setError(null);
+    setError("");
+    setErrors({});
     try {
       if (editing && user) {
         await updateUser(user.id, {
@@ -198,7 +218,9 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
       await onSaved();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao salvar");
+      const doCampo = issuesToFields((err as { issues?: unknown[] })?.issues) as Record<string, string>;
+      setErrors(doCampo);
+      if (Object.keys(doCampo).length === 0) setError(mensagemDeErro(err));
     } finally {
       setBusy(false);
     }
@@ -206,16 +228,18 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
 
   return (
     <Modal open={open} onClose={() => !busy && onClose()} title={editing ? "Editar usuário" : "Novo usuário"}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Nome" required>
-          <TextInput value={nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNome(e.target.value)} required autoFocus />
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{error}</FormError>
+        <Field label="Nome" required error={errors.nome}>
+          <TextInput value={nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNome(e.target.value)} autoFocus />
         </Field>
-        <Field label="Email" required>
-          <TextInput type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} required />
+        <Field label="Email" required error={errors.email}>
+          <TextInput type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
         </Field>
-        <Field label={editing ? "Nova senha" : "Senha"} hint={editing ? "deixe vazio pra manter" : "mínimo 6 caracteres"} required={!editing}>
+        <Field label={editing ? "Nova senha" : "Senha"} hint={editing ? "deixe vazio pra manter" : "mínimo 6 caracteres"}
+               required={!editing} error={errors.senha}>
           <TextInput type="password" value={senha} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSenha(e.target.value)}
-            required={!editing} minLength={6} autoComplete="new-password" />
+            autoComplete="new-password" />
         </Field>
 
         <Field label="Roles" hint="usuário pode ter mais de uma">
@@ -238,8 +262,6 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
         {editing && user && user.id !== meId && (
           <CheckboxField label="Conta ativa" checked={ativo} onChecked={setAtivo} />
         )}
-
-        {error && <p className="text-xs text-rose-400">{error}</p>}
 
         <div className="flex gap-2 pt-1">
           <Button variant="ghost" type="button" className="flex-1" disabled={busy} onClick={onClose}>Cancelar</Button>
@@ -368,6 +390,7 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
   return (
     <Modal open={open} onClose={() => !busy && onClose()} title={editing ? "Editar role" : "Nova role"}>
       <form onSubmit={submit} className="space-y-4">
+        <FormError>{error}</FormError>
         <Field label="Nome" required>
           <TextInput value={nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNome(e.target.value)} required autoFocus />
         </Field>
@@ -391,8 +414,6 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
             ))}
           </div>
         </Field>
-
-        {error && <p className="text-xs text-rose-400">{error}</p>}
 
         <div className="flex gap-2 pt-1">
           <Button variant="ghost" type="button" className="flex-1" disabled={busy} onClick={onClose}>Cancelar</Button>

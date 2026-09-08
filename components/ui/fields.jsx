@@ -22,6 +22,18 @@ const dec = (v) => (v === EMPTY ? "" : v);
 const layer =
   "z-[70] overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-2)] shadow-2xl";
 
+// ── FormError ───────────────────────────────────────────────────────────────
+// Banner de topo do formulário. Renderiza sempre que existir mensagem — é o
+// que impede erro silencioso quando a falha não pertence a nenhum campo.
+export function FormError({ children }) {
+  if (!children) return null;
+  return (
+    <p role="alert" className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-sm text-rose-300 ring-1 ring-rose-500/30">
+      {children}
+    </p>
+  );
+}
+
 // ── Select ──────────────────────────────────────────────────────────────────
 // Composição (não `options={[]}`) pra preservar label rica: cor, emoji,
 // "— saldo R$ x", "3/10".
@@ -267,7 +279,7 @@ const diasNoMes = (ano, mes) => new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate()
 const primeiroDiaSemana = (ano, mes) => new Date(Date.UTC(ano, mes, 1)).getUTCDay();
 const SEMANA = ["D", "S", "T", "Q", "Q", "S", "S"];
 
-export function DateInput({ value, onValue, min, max, month, className, disabled }) {
+export function DateInput({ value, onValue, min, max, month, className, disabled, name }) {
   const [open, setOpen] = useState(false);
   const base = month || (value || todayISO()).slice(0, 7);
   const [visto, setVisto] = useState(base);
@@ -283,6 +295,7 @@ export function DateInput({ value, onValue, min, max, month, className, disabled
   return (
     <RPopover.Root open={open} onOpenChange={(o) => { setOpen(o); if (o) setVisto(base); }}>
       <RPopover.Trigger
+        name={name}
         disabled={disabled}
         className={cx(inputBase, "flex cursor-pointer items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50", className)}
       >

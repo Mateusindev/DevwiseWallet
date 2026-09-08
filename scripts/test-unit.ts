@@ -17,9 +17,17 @@ const args = passthrough.filter((a) => a !== "--coverage");
 
 const COVERAGE_DIR = "coverage/unit";
 
-const arquivos = (await Array.fromAsync(new Glob("server/**/*.test.ts").scan("."))).sort();
+// `lib/` entra junto: é domínio puro (cálculo, validação de form) e sem ele os
+// testes de lib/*.test.js nunca rodariam no CI.
+const arquivos = (
+  await Promise.all(
+    ["server/**/*.test.ts", "lib/**/*.test.js"].map((p) => Array.fromAsync(new Glob(p).scan(".")))
+  )
+)
+  .flat()
+  .sort();
 if (arquivos.length === 0) {
-  console.error("Nenhum teste unitário encontrado em server/.");
+  console.error("Nenhum teste unitário encontrado em server/ ou lib/.");
   process.exit(1);
 }
 

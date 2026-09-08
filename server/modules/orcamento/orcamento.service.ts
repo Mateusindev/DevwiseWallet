@@ -3,7 +3,7 @@ import { orcamentoRepository } from "./orcamento.repository";
 import { espacoService } from "../espaco/espaco.service";
 import { cartaoService } from "../cartao/cartao.service";
 import { categoriaService } from "../categoria/categoria.service";
-import { NotFoundError } from "@/server/lib/errors";
+import { AppError, NotFoundError } from "@/server/lib/errors";
 import { num, isoDate, parseDate, round, parcelaView, parcelaWrite, currentMonth } from "@/server/lib/serialize";
 import type {
   AddDespesaFixaDTO,
@@ -15,6 +15,14 @@ import type {
 } from "./orcamento.dto";
 
 // Garante que a entidade pertence ao espaço informado.
+// O create valida isso no DTO (`data` dentro de `mes`); no update o mês vem do
+// registro, então a checagem mora aqui.
+function assertDataNoMes(data: string | undefined, mes: string) {
+  if (data && data.slice(0, 7) !== mes) {
+    throw new AppError(`A data precisa estar dentro de ${mes}`, 422);
+  }
+}
+
 function assertPertence(found: { espacoId: string } | null, espacoId: string, label: string, id: string) {
   if (!found || found.espacoId !== espacoId) {
     throw new NotFoundError(`${label} não encontrada: ${id}`);
@@ -166,6 +174,7 @@ export const orcamentoService = {
   async updateDespesaMes(userId: string, espacoId: string, id: string, patch: UpdateDespesaMesDTO) {
     const found = await orcamentoRepository.findDespesaMes(id, userId);
     assertPertence(found, espacoId, "Despesa do mês", id);
+    assertDataNoMes(patch.data, found!.mes);
     await assertVinculos(userId, patch);
     const data: Record<string, unknown> = {};
     if (patch.descricao !== undefined) data.descricao = patch.descricao;
@@ -211,6 +220,7 @@ export const orcamentoService = {
   async updateReceitaMes(userId: string, espacoId: string, id: string, patch: UpdateReceitaMesDTO) {
     const found = await orcamentoRepository.findReceitaMes(id, userId);
     assertPertence(found, espacoId, "Receita do mês", id);
+    assertDataNoMes(patch.data, found!.mes);
     const data: Record<string, unknown> = {};
     if (patch.descricao !== undefined) data.descricao = patch.descricao;
     if (patch.valor !== undefined) data.valor = round(patch.valor);

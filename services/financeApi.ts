@@ -11,6 +11,21 @@ const client = hc<AppType>("/");
 // Corpo (json) esperado por um endpoint, inferido do próprio client.
 type Body<T> = InferRequestType<T> extends { json: infer J } ? J : never;
 
+// Erro de API com o que o back mandou: `status` e, no 422, os `issues` do zod
+// (é o que deixa o form marcar o campo culpado em vez de só mostrar
+// "Validação falhou"). Continua sendo um Error — `catch (e) { e.message }` segue
+// funcionando.
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly issues?: unknown[]
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 // Resposta do hc: propaga mensagem de erro do back-end, devolve JSON tipado.
 async function unwrap<
   R extends { ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> }
@@ -20,7 +35,7 @@ async function unwrap<
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
     const msg = data?.error || data?.message || `HTTP ${res.status}`;
-    throw new Error(msg);
+    throw new ApiError(msg, res.status, data?.issues);
   }
   return data;
 }

@@ -1,19 +1,33 @@
 import { useState } from "react";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { Modal, Field, TextInput, Textarea, MoneyInput, PercentInput, Button } from "./ui/primitives.jsx";
-import { Select, SelectItem, CheckboxField, NumberInput, DayInput, DateInput } from "./ui/fields.jsx";
+import { Select, SelectItem, CheckboxField, NumberInput, DayInput, DateInput, FormError } from "./ui/fields.jsx";
+import { useFormState } from "./ui/useFormState.js";
+import { dataValida, texto } from "../lib/formErrors.js";
 import { fmtMoney, todayISO } from "../lib/format.js";
 import { acento, parcelaInfo } from "../lib/calc.js";
 import { useAuth } from "./AuthGate";
 
+// Regras que repetem em quase todo form daqui.
+const exigeValor = (v) => (v > 0 ? "" : "Informe um valor maior que zero.");
+const exigeNota = (v) => texto(v, { max: 1000, campo: "A nota" });
+const exigeData = (v, mes) => {
+  if (!dataValida(v)) return "Escolha uma data válida.";
+  // A lista filtra por `mes`, não por `data`: data de outro mês faria a linha
+  // "desaparecer" logo depois de salvar.
+  if (mes && v.slice(0, 7) !== mes) return "A data precisa ser deste mês.";
+  return "";
+};
+
 // ── Bloco compartilhado: vincular cartão (+ parcelamento, só fixas) ───────────
 // `f`/`set` = estado do form. `comParcela` liga os campos de parcela (fixas).
-function CartaoParcelaFields({ f, set, comParcela = true }) {
+function CartaoParcelaFields({ f, set, errors = {}, comParcela = true }) {
   const { cartoes } = useFinance();
   return (
     <>
       <Field label="Cartão de crédito" hint={cartoes.length ? "" : "Cadastre um cartão na página Cartões"}>
         <Select
+          name="cartaoId"
           value={f.cartaoId || ""}
           // limpa parcelamento se tirar o cartão
           onValue={(cartaoId) => set({ cartaoId, ...(cartaoId ? {} : { parcelado: false }) })}
@@ -38,12 +52,12 @@ function CartaoParcelaFields({ f, set, comParcela = true }) {
 
           {f.parcelado && (
             <div className="mt-3 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
-              <Field label="Parcela atual" hint="ex: 3">
-                <NumberInput value={f.parcelaAtual} min={1} max={480}
+              <Field label="Parcela atual" hint="ex: 3" error={errors.parcelaAtual}>
+                <NumberInput name="parcelaAtual" value={f.parcelaAtual} min={1} max={480}
                              onValue={(parcelaAtual) => set({ parcelaAtual })} />
               </Field>
-              <Field label="Total de parcelas" hint="ex: 10">
-                <NumberInput value={f.totalParcelas} min={1} max={480} allowEmpty
+              <Field label="Total de parcelas" hint="ex: 10" error={errors.totalParcelas}>
+                <NumberInput name="totalParcelas" value={f.totalParcelas} min={1} max={480} allowEmpty
                              onValue={(totalParcelas) => set({ totalParcelas })} />
               </Field>
             </div>
@@ -52,6 +66,16 @@ function CartaoParcelaFields({ f, set, comParcela = true }) {
       )}
     </>
   );
+}
+
+// Valida o bloco de parcelamento (usado só pelas fixas).
+function errosParcela(f) {
+  if (!f.cartaoId || !f.parcelado) return {};
+  const erros = {};
+  if (!(f.parcelaAtual >= 1)) erros.parcelaAtual = "Informe a parcela atual (1 ou mais).";
+  if (!(f.totalParcelas >= 1)) erros.totalParcelas = "Informe o total de parcelas.";
+  else if (f.parcelaAtual > f.totalParcelas) erros.parcelaAtual = `A parcela atual não pode passar de ${f.totalParcelas}.`;
+  return erros;
 }
 
 // Seletor de categoria (compartilhado por fixas e despesas do mês).
@@ -65,7 +89,7 @@ function CategoriaField({ f, set }) {
   const [novoOpen, setNovoOpen] = useState(false);
   return (
     <Field label="Categoria">
-      <Select value={f.categoriaId || ""}
+      <Select name="categoriaId" value={f.categoriaId || ""}
               onValue={(v) => {
                 if (v === NOVA_CATEGORIA) { setNovoOpen(true); return; }
                 set("categoriaId", v);
@@ -96,51 +120,46 @@ function cartaoPayload(f) {
   return {
     cartaoId: f.cartaoId,
     parcelado,
-    parcelaAtual: parcelado ? Number(f.parcelaAtual) || 1 : null,
-    totalParcelas: parcelado ? Number(f.totalParcelas) || null : null,
+    parcelaAtual: parcelado ? f.parcelaAtual || 1 : null,
+    totalParcelas: parcelado ? f.totalParcelas || null : null,
   };
+}
+
+// Rodapé padrão: cancelar + salvar.
+function Acoes({ onCancel, submitting, variant = "primary", children }) {
+  return (
+    <div className="flex gap-2 pt-1">
+      <Button type="button" variant="ghost" className="flex-1" onClick={onCancel}>Cancelar</Button>
+      <Button type="submit" variant={variant} className="flex-1" loading={submitting}>{children}</Button>
+    </div>
+  );
 }
 
 // ── Aporte ──────────────────────────────────────────────────────────────────
 export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
   const { addAporte } = useFinance();
-  const [form, setForm] = useState(null);
-  const f = form ?? init();
-  function init() {
-    return { caixinhaId: defaultCaixinhaId || caixinhas[0]?.id || "", valor: 0, descricao: "", data: todayISO() };
-  }
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+    () => ({ caixinhaId: defaultCaixinhaId || caixinhas[0]?.id || "", valor: 0, descricao: "", data: todayISO() }),
+    (f) => ({
+      caixinhaId: f.caixinhaId ? "" : "Escolha uma caixinha.",
+      valor: exigeValor(f.valor),
+      data: exigeData(f.data),
+    }),
+    async (f) => { await addAporte(f); close(); }
+  );
 
   const cx = caixinhas.find((c) => c.id === f.caixinhaId);
   // pre-fill with the caixinha's planned monthly contribution
   const sugestao = cx?.aporteMensal || 0;
 
-  async function submit(e) {
-    e.preventDefault();
-    if (f.valor <= 0) return setErr("Informe um valor maior que zero.");
-    setBusy(true);
-    try {
-      await addAporte(f);
-      close();
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  function close() {
-    setForm(null);
-    setErr("");
-    onClose();
-  }
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title="Registrar aporte">
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Caixinha" required>
-          <Select value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
+        <Field label="Caixinha" required error={errors.caixinhaId}>
+          <Select name="caixinhaId" value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
             {caixinhas.map((c) => (
               <SelectItem key={c.id} value={c.id}>
                 <span className="inline-flex items-center gap-2">
@@ -151,9 +170,10 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
             ))}
           </Select>
         </Field>
-        <Field label="Valor" required error={err && f.valor <= 0 ? err : ""}
+        <Field label="Valor" required error={errors.valor}
                hint={sugestao ? `Aporte mensal planejado: ${fmtMoney(sugestao)}` : ""}>
-          <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} autoFocus />
+          <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)}
+                      onBlur={() => touch("valor")} autoFocus />
         </Field>
         {sugestao > 0 && f.valor !== sugestao && (
           <button type="button" onClick={() => set("valor", sugestao)}
@@ -162,17 +182,15 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
           </button>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Data">
-            <DateInput value={f.data} onValue={(v) => set("data", v)} />
+          <Field label="Data" error={errors.data}>
+            <DateInput name="data" value={f.data} onValue={(v) => set("data", v)} />
           </Field>
           <Field label="Descrição">
-            <TextInput value={f.descricao} placeholder="Aporte mensal" onChange={(e) => set("descricao", e.target.value)} />
+            <TextInput name="descricao" value={f.descricao} placeholder="Aporte mensal"
+                       onChange={(e) => set("descricao", e.target.value)} />
           </Field>
         </div>
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" variant="growth" className="flex-1" loading={busy}>Adicionar</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting} variant="growth">Adicionar</Acoes>
       </form>
     </Modal>
   );
@@ -181,35 +199,27 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
 // ── Despesa variável (deduz da caixinha) ─────────────────────────────────────
 export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
   const { addDespesaVariavel } = useFinance();
-  const [form, setForm] = useState(null);
-  const f = form ?? { caixinhaId: defaultCaixinhaId || caixinhas[0]?.id || "", valor: 0, descricao: "", data: todayISO() };
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+    () => ({ caixinhaId: defaultCaixinhaId || caixinhas[0]?.id || "", valor: 0, descricao: "", data: todayISO() }),
+    (f) => ({
+      caixinhaId: f.caixinhaId ? "" : "Escolha uma caixinha.",
+      valor: exigeValor(f.valor),
+      data: exigeData(f.data),
+    }),
+    async (f) => { await addDespesaVariavel(f); close(); }
+  );
 
   const cx = caixinhas.find((c) => c.id === f.caixinhaId);
   const insuficiente = cx && f.valor > cx.saldo;
 
-  async function submit(e) {
-    e.preventDefault();
-    if (f.valor <= 0) return setErr("Informe um valor maior que zero.");
-    setBusy(true);
-    try {
-      await addDespesaVariavel(f);
-      close();
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  function close() { setForm(null); setErr(""); onClose(); }
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title="Registrar despesa">
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Debitar da caixinha" required>
-          <Select value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
+        <Field label="Debitar da caixinha" required error={errors.caixinhaId}>
+          <Select name="caixinhaId" value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
             {caixinhas.map((c) => (
               <SelectItem key={c.id} value={c.id}>
                 <span className="inline-flex items-center gap-2">
@@ -220,10 +230,10 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
             ))}
           </Select>
         </Field>
-        <Field label="Valor" required
-               error={err && f.valor <= 0 ? err : ""}
+        <Field label="Valor" required error={errors.valor}
                hint={cx ? `Saldo disponível: ${fmtMoney(cx.saldo)}` : ""}>
-          <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} autoFocus />
+          <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)}
+                      onBlur={() => touch("valor")} autoFocus />
         </Field>
         {insuficiente && (
           <p className="-mt-2 text-xs text-amber-400">
@@ -231,17 +241,15 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
           </p>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Data">
-            <DateInput value={f.data} onValue={(v) => set("data", v)} />
+          <Field label="Data" error={errors.data}>
+            <DateInput name="data" value={f.data} onValue={(v) => set("data", v)} />
           </Field>
           <Field label="Descrição">
-            <TextInput value={f.descricao} placeholder="Mercado, farmácia…" onChange={(e) => set("descricao", e.target.value)} />
+            <TextInput name="descricao" value={f.descricao} placeholder="Mercado, farmácia…"
+                       onChange={(e) => set("descricao", e.target.value)} />
           </Field>
         </div>
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" variant="danger" className="flex-1" loading={busy}>Registrar saída</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting} variant="danger">Registrar saída</Acoes>
       </form>
     </Modal>
   );
@@ -251,7 +259,6 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
 export function DespesaFixaModal({ open, onClose, despesa }) {
   const { addDespesaFixa, updateDespesaFixa } = useFinance();
   const editing = !!despesa;
-  const [form, setForm] = useState(null);
   const init = () => {
     if (!despesa) return { descricao: "", valor: 0, diaVencimento: 5, cartaoId: "", categoriaId: "", nota: "", parcelado: false, parcelaAtual: 1, totalParcelas: null };
     // prefill com a parcela EFETIVA do mês atual (editar re-ancora "agora estou na X")
@@ -263,51 +270,48 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
       totalParcelas: despesa.totalParcelas ?? null,
     };
   };
-  const f = form ?? init();
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const patch = (p) => setForm({ ...f, ...p });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!f.descricao.trim()) return setErr("Dê um nome para a despesa.");
-    if (f.valor <= 0) return setErr("Informe um valor maior que zero.");
-    setBusy(true);
-    const dto = { descricao: f.descricao, valor: f.valor, diaVencimento: f.diaVencimento, categoriaId: f.categoriaId || null, nota: f.nota.trim() || null, ...cartaoPayload(f) };
-    try {
+  const { f, set, patch, errors, formError, touch, submitting, submit, reset } = useFormState(
+    init,
+    (f) => ({
+      descricao: texto(f.descricao, { obrigatorio: true, max: 120, campo: "A descrição" }),
+      valor: exigeValor(f.valor),
+      diaVencimento: f.diaVencimento >= 1 && f.diaVencimento <= 31 ? "" : "Informe o dia do vencimento (1 a 31).",
+      nota: exigeNota(f.nota),
+      ...errosParcela(f),
+    }),
+    async (f) => {
+      const dto = { descricao: f.descricao, valor: f.valor, diaVencimento: f.diaVencimento, categoriaId: f.categoriaId || null, nota: f.nota.trim() || null, ...cartaoPayload(f) };
       if (editing) await updateDespesaFixa(despesa.id, dto);
       else await addDespesaFixa(dto);
       close();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-  function close() { setForm(null); setErr(""); onClose(); }
+    }
+  );
+
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title={editing ? "Editar despesa fixa" : "Nova despesa fixa"}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Descrição" required error={err && !f.descricao.trim() ? err : ""}>
-          <TextInput value={f.descricao} placeholder="Aluguel, internet, jiu-jitsu…" autoFocus
-                     onChange={(e) => { set("descricao", e.target.value); setErr(""); }} />
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
+        <Field label="Descrição" required error={errors.descricao}>
+          <TextInput name="descricao" value={f.descricao} placeholder="Aluguel, internet, jiu-jitsu…" autoFocus
+                     onChange={(e) => set("descricao", e.target.value)} onBlur={() => touch("descricao")} />
         </Field>
         <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
-          <Field label={f.parcelado ? "Valor da parcela" : "Valor mensal"} required error={err && f.valor <= 0 ? err : ""}>
-            <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} />
+          <Field label={f.parcelado ? "Valor da parcela" : "Valor mensal"} required error={errors.valor}>
+            <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} onBlur={() => touch("valor")} />
           </Field>
-          <Field label="Dia do vencimento" hint="1 a 31">
-            <DayInput value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)} allowEmpty />
+          <Field label="Dia do vencimento" required hint="1 a 31" error={errors.diaVencimento}>
+            <DayInput name="diaVencimento" value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)} allowEmpty />
           </Field>
         </div>
         <CategoriaField f={f} set={set} />
-        <CartaoParcelaFields f={f} set={patch} />
-        <Field label="Nota" hint="observação livre — opcional">
-          <Textarea value={f.nota} placeholder="Detalhes, lembrete, referência…"
+        <CartaoParcelaFields f={f} set={patch} errors={errors} />
+        <Field label="Nota" hint="observação livre — opcional" error={errors.nota}>
+          <Textarea name="nota" value={f.nota} placeholder="Detalhes, lembrete, referência…"
                     onChange={(e) => set("nota", e.target.value)} />
         </Field>
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" className="flex-1" loading={busy}>Salvar</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting}>Salvar</Acoes>
       </form>
     </Modal>
   );
@@ -317,56 +321,51 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
 export function DespesaMesModal({ open, onClose, mes, mesLabel, despesa }) {
   const { addDespesaMes, updateDespesaMes } = useFinance();
   const editing = !!despesa;
-  const [form, setForm] = useState(null);
   const init = () =>
     despesa
       ? { descricao: despesa.descricao, valor: despesa.valor, data: despesa.data, cartaoId: despesa.cartaoId || "", categoriaId: despesa.categoriaId || "", nota: despesa.nota || "" }
       : { descricao: "", valor: 0, data: `${mes}-15`, cartaoId: "", categoriaId: "", nota: "" };
-  const f = form ?? init();
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const patch = (p) => setForm({ ...f, ...p });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!f.descricao.trim()) return setErr("Dê um nome para a despesa.");
-    if (f.valor <= 0) return setErr("Informe um valor maior que zero.");
-    setBusy(true);
-    const base = { descricao: f.descricao, valor: f.valor, data: f.data, cartaoId: f.cartaoId || null, categoriaId: f.categoriaId || null, nota: f.nota.trim() || null };
-    try {
+  const { f, set, patch, errors, formError, touch, submitting, submit, reset } = useFormState(
+    init,
+    (f) => ({
+      descricao: texto(f.descricao, { obrigatorio: true, max: 120, campo: "A descrição" }),
+      valor: exigeValor(f.valor),
+      data: exigeData(f.data, mes),
+      nota: exigeNota(f.nota),
+    }),
+    async (f) => {
+      const base = { descricao: f.descricao, valor: f.valor, data: f.data, cartaoId: f.cartaoId || null, categoriaId: f.categoriaId || null, nota: f.nota.trim() || null };
       if (editing) await updateDespesaMes(despesa.id, base);
       else await addDespesaMes({ mes, ...base });
       close();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-  function close() { setForm(null); setErr(""); onClose(); }
+    }
+  );
+
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title={editing ? "Editar despesa" : `Despesa de ${mesLabel}`}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Descrição" required error={err && !f.descricao.trim() ? err : ""}>
-          <TextInput value={f.descricao} placeholder="Mercado, transporte, geladeira…" autoFocus
-                     onChange={(e) => { set("descricao", e.target.value); setErr(""); }} />
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
+        <Field label="Descrição" required error={errors.descricao}>
+          <TextInput name="descricao" value={f.descricao} placeholder="Mercado, transporte, geladeira…" autoFocus
+                     onChange={(e) => set("descricao", e.target.value)} onBlur={() => touch("descricao")} />
         </Field>
         <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
-          <Field label="Valor" required error={err && f.valor <= 0 ? err : ""}>
-            <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} />
+          <Field label="Valor" required error={errors.valor}>
+            <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} onBlur={() => touch("valor")} />
           </Field>
-          <Field label="Data">
-            <DateInput value={f.data} onValue={(v) => set("data", v)} month={mes} />
+          <Field label="Data" error={errors.data}>
+            <DateInput name="data" value={f.data} onValue={(v) => set("data", v)} month={mes} />
           </Field>
         </div>
         <CategoriaField f={f} set={set} />
-        <CartaoParcelaFields f={f} set={patch} comParcela={false} />
-        <Field label="Nota" hint="observação livre — opcional">
-          <Textarea value={f.nota} placeholder="Detalhes, lembrete, referência…"
+        <CartaoParcelaFields f={f} set={patch} errors={errors} comParcela={false} />
+        <Field label="Nota" hint="observação livre — opcional" error={errors.nota}>
+          <Textarea name="nota" value={f.nota} placeholder="Detalhes, lembrete, referência…"
                     onChange={(e) => set("nota", e.target.value)} />
         </Field>
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" variant="danger" className="flex-1" loading={busy}>{editing ? "Salvar" : "Adicionar"}</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting} variant="danger">{editing ? "Salvar" : "Adicionar"}</Acoes>
       </form>
     </Modal>
   );
@@ -376,49 +375,44 @@ export function DespesaMesModal({ open, onClose, mes, mesLabel, despesa }) {
 export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita }) {
   const { addReceitaMes, updateReceitaMes } = useFinance();
   const editing = !!receita;
-  const [form, setForm] = useState(null);
   const init = () =>
     receita
       ? { descricao: receita.descricao, valor: receita.valor, data: receita.data }
       : { descricao: "", valor: 0, data: `${mes}-15` };
-  const f = form ?? init();
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!f.descricao.trim()) return setErr("Dê um nome para a receita.");
-    if (f.valor <= 0) return setErr("Informe um valor maior que zero.");
-    setBusy(true);
-    const base = { descricao: f.descricao, valor: f.valor, data: f.data };
-    try {
+  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+    init,
+    (f) => ({
+      descricao: texto(f.descricao, { obrigatorio: true, max: 120, campo: "A descrição" }),
+      valor: exigeValor(f.valor),
+      data: exigeData(f.data, mes),
+    }),
+    async (f) => {
+      const base = { descricao: f.descricao, valor: f.valor, data: f.data };
       if (editing) await updateReceitaMes(receita.id, base);
       else await addReceitaMes({ mes, ...base });
       close();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-  function close() { setForm(null); setErr(""); onClose(); }
+    }
+  );
+
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title={editing ? "Editar receita" : `Receita extra · ${mesLabel}`}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Descrição" required error={err && !f.descricao.trim() ? err : ""}>
-          <TextInput value={f.descricao} placeholder="Freela, bônus, venda, presente…" autoFocus
-                     onChange={(e) => { set("descricao", e.target.value); setErr(""); }} />
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
+        <Field label="Descrição" required error={errors.descricao}>
+          <TextInput name="descricao" value={f.descricao} placeholder="Freela, bônus, venda, presente…" autoFocus
+                     onChange={(e) => set("descricao", e.target.value)} onBlur={() => touch("descricao")} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Valor" required error={err && f.valor <= 0 ? err : ""}>
-            <MoneyInput value={f.valor} onValue={(v) => { set("valor", v); setErr(""); }} />
+          <Field label="Valor" required error={errors.valor}>
+            <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} onBlur={() => touch("valor")} />
           </Field>
-          <Field label="Data">
-            <DateInput value={f.data} onValue={(v) => set("data", v)} month={mes} />
+          <Field label="Data" error={errors.data}>
+            <DateInput name="data" value={f.data} onValue={(v) => set("data", v)} month={mes} />
           </Field>
         </div>
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" variant="growth" className="flex-1" loading={busy}>{editing ? "Salvar" : "Adicionar"}</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting} variant="growth">{editing ? "Salvar" : "Adicionar"}</Acoes>
       </form>
     </Modal>
   );
@@ -429,46 +423,46 @@ const CORES = ["emerald", "blue", "violet", "amber", "rose", "cyan"];
 export function CaixinhaModal({ open, onClose, caixinha }) {
   const { addCaixinha, updateCaixinha } = useFinance();
   const editing = !!caixinha;
-  const [form, setForm] = useState(null);
   const init = () =>
     caixinha
       ? { nome: caixinha.nome, aporteMensal: caixinha.aporteMensal, taxaJuros: caixinha.taxaJuros ?? 0, meta: caixinha.meta ?? 0, cor: caixinha.cor, acumulaSobra: !!caixinha.acumulaSobra }
       : { nome: "", aporteMensal: 0, taxaJuros: 0, meta: 0, cor: "blue", acumulaSobra: false };
-  const f = form ?? init();
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!f.nome.trim()) return setErr("Dê um nome para a caixinha.");
-    setBusy(true);
-    const dto = { ...f, meta: f.meta > 0 ? f.meta : null };
-    try {
+  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+    init,
+    (f) => ({
+      nome: texto(f.nome, { obrigatorio: true, max: 80, campo: "O nome" }),
+      meta: f.meta >= 0 ? "" : "A meta não pode ser negativa.",
+      taxaJuros: f.taxaJuros >= 0 && f.taxaJuros <= 100 ? "" : "O rendimento vai de 0 a 100% a.a.",
+    }),
+    async (f) => {
+      const dto = { ...f, meta: f.meta > 0 ? f.meta : null };
       if (editing) await updateCaixinha(caixinha.id, dto);
       else await addCaixinha(dto);
       close();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-  function close() { setForm(null); setErr(""); onClose(); }
+    }
+  );
+
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title={editing ? "Editar caixinha" : "Nova caixinha"}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Nome" required error={err}>
-          <TextInput value={f.nome} placeholder="Reserva de Sonhos, Crédito…" autoFocus
-                     onChange={(e) => { set("nome", e.target.value); setErr(""); }} />
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
+        <Field label="Nome" required error={errors.nome}>
+          <TextInput name="nome" value={f.nome} placeholder="Reserva de Sonhos, Crédito…" autoFocus
+                     onChange={(e) => set("nome", e.target.value)} onBlur={() => touch("nome")} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Aporte mensal">
-            <MoneyInput value={f.aporteMensal} onValue={(v) => set("aporteMensal", v)} />
+            <MoneyInput name="aporteMensal" value={f.aporteMensal} onValue={(v) => set("aporteMensal", v)} />
           </Field>
-          <Field label="Meta" hint="Deixe 0 se não houver">
-            <MoneyInput value={f.meta} onValue={(v) => set("meta", v)} />
+          <Field label="Meta" hint="Deixe 0 se não houver" error={errors.meta}>
+            <MoneyInput name="meta" value={f.meta} onValue={(v) => set("meta", v)} />
           </Field>
         </div>
-        <Field label="Rendimento" hint="Juros compostos usados só na previsão da meta — o saldo continua vindo das movimentações">
-          <PercentInput value={f.taxaJuros} onValue={(v) => set("taxaJuros", v)} />
+        <Field label="Rendimento" error={errors.taxaJuros}
+               hint="Juros compostos usados só na previsão da meta — o saldo continua vindo das movimentações">
+          <PercentInput name="taxaJuros" value={f.taxaJuros} onValue={(v) => set("taxaJuros", v)} />
         </Field>
         <Field label="Cor">
           <div className="flex gap-2">
@@ -482,10 +476,7 @@ export function CaixinhaModal({ open, onClose, caixinha }) {
         </Field>
         <CheckboxField label="Acumula o que sobrar no mês" checked={f.acumulaSobra}
                        onChecked={(v) => set("acumulaSobra", v)} />
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar caixinha"}</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting}>{editing ? "Salvar" : "Criar caixinha"}</Acoes>
       </form>
     </Modal>
   );
@@ -495,32 +486,24 @@ export function CaixinhaModal({ open, onClose, caixinha }) {
 // A meta não é digitada: sai de "quantos meses de segurança" × "gasto mensal".
 // Também coleta aporte mensal (previsão) e saldo já guardado. Grava via update.
 const MESES_SUGERIDOS = [3, 6, 12];
+const metaReserva = (f) => Math.round((f.meses || 0) * (f.gasto || 0) * 100) / 100;
 export function ReservaEmergenciaModal({ open, onClose, caixinha, onCreated }) {
   const { addCaixinha, updateCaixinha } = useFinance();
   const editing = !!caixinha;
-  const [form, setForm] = useState(null);
   const init = () => ({
     meses: 6,
     gasto: caixinha?.meta ? Math.round(caixinha.meta / 6) : 0,
     aporte: caixinha?.aporteMensal ?? 0,
     saldo: caixinha?.saldo ?? 0,
   });
-  const f = form ?? init();
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  const meta = Math.round((f.meses || 0) * (f.gasto || 0) * 100) / 100;
-  // Previsão grosseira de meses p/ completar o que falta com o aporte informado.
-  const falta = Math.max(0, meta - (f.saldo || 0));
-  const mesesAteMeta = f.aporte > 0 ? Math.ceil(falta / f.aporte) : null;
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!(f.meses > 0)) return setErr("Escolha quantos meses de segurança.");
-    if (!(f.gasto > 0)) return setErr("Informe seu gasto mensal.");
-    setBusy(true);
-    try {
+  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+    init,
+    (f) => ({
+      meses: f.meses >= 1 ? "" : "Escolha quantos meses de segurança.",
+      gasto: f.gasto > 0 ? "" : "Informe seu gasto mensal.",
+    }),
+    async (f) => {
+      const meta = metaReserva(f);
       if (editing) {
         await updateCaixinha(caixinha.id, { meta, aporteMensal: f.aporte || 0, saldo: f.saldo || 0 });
       } else {
@@ -533,28 +516,34 @@ export function ReservaEmergenciaModal({ open, onClose, caixinha, onCreated }) {
         onCreated?.(nova);
       }
       close();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-  function close() { setForm(null); setErr(""); onClose(); }
+    }
+  );
+
+  const meta = metaReserva(f);
+  // Previsão grosseira de meses p/ completar o que falta com o aporte informado.
+  const falta = Math.max(0, meta - (f.saldo || 0));
+  const mesesAteMeta = f.aporte > 0 ? Math.ceil(falta / f.aporte) : null;
+
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title={editing ? "Configurar reserva de emergência" : "Nova reserva de emergência"}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Meses de segurança" hint="Quantos meses de gasto quer ter guardados" error={err}>
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
+        <Field label="Meses de segurança" hint="Quantos meses de gasto quer ter guardados" error={errors.meses}>
           <div className="flex flex-wrap items-center gap-2">
             {MESES_SUGERIDOS.map((m) => (
-              <button key={m} type="button" onClick={() => { set("meses", m); setErr(""); }}
+              <button key={m} type="button" onClick={() => set("meses", m)}
                       className={`rounded-xl px-3.5 py-2 text-sm font-semibold cursor-pointer transition-colors ${f.meses === m ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-500/40" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>
                 {m} meses
               </button>
             ))}
-            <NumberInput value={f.meses} min={1} max={120}
-                         onValue={(v) => { set("meses", v ?? 0); setErr(""); }}
-                         className="w-20" />
+            <NumberInput name="meses" value={f.meses} min={1} max={120}
+                         onValue={(v) => set("meses", v)} className="w-20" />
           </div>
         </Field>
-        <Field label="Gasto por mês" hint="Quanto você gasta em média por mês">
-          <MoneyInput value={f.gasto} onValue={(v) => { set("gasto", v); setErr(""); }} />
+        <Field label="Gasto por mês" hint="Quanto você gasta em média por mês" error={errors.gasto}>
+          <MoneyInput name="gasto" value={f.gasto} onValue={(v) => set("gasto", v)} onBlur={() => touch("gasto")} />
         </Field>
 
         <div className="rounded-xl bg-emerald-500/10 px-3.5 py-3 text-sm ring-1 ring-emerald-500/20">
@@ -569,10 +558,10 @@ export function ReservaEmergenciaModal({ open, onClose, caixinha, onCreated }) {
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Já tenho guardado" hint="Saldo inicial">
-            <MoneyInput value={f.saldo} onValue={(v) => set("saldo", v)} />
+            <MoneyInput name="saldo" value={f.saldo} onValue={(v) => set("saldo", v)} />
           </Field>
           <Field label="Guardar por mês" hint="Aporte mensal">
-            <MoneyInput value={f.aporte} onValue={(v) => set("aporte", v)} />
+            <MoneyInput name="aporte" value={f.aporte} onValue={(v) => set("aporte", v)} />
           </Field>
         </div>
         {mesesAteMeta != null && falta > 0 && (
@@ -581,10 +570,7 @@ export function ReservaEmergenciaModal({ open, onClose, caixinha, onCreated }) {
           </p>
         )}
 
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar reserva" : "Criar reserva"}</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting}>{editing ? "Salvar reserva" : "Criar reserva"}</Acoes>
       </form>
     </Modal>
   );
@@ -594,30 +580,25 @@ export function ReservaEmergenciaModal({ open, onClose, caixinha, onCreated }) {
 const EMOJIS = ["💑", "🧍", "🏠", "🏢", "✈️", "🐶", "🎯", "💰"];
 export function EspacoModal({ open, onClose, onCreated }) {
   const { addEspaco } = useFinance();
-  const [form, setForm] = useState(null);
-  const f = form ?? { nome: "", emoji: "📁", tipo: "outro" };
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!f.nome.trim()) return setErr("Dê um nome para o espaço.");
-    setBusy(true);
-    try {
+  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+    () => ({ nome: "", emoji: "📁", tipo: "outro" }),
+    (f) => ({ nome: texto(f.nome, { obrigatorio: true, max: 60, campo: "O nome" }) }),
+    async (f) => {
       const novo = await addEspaco(f);
       onCreated?.(novo);
       close();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-  function close() { setForm(null); setErr(""); onClose(); }
+    }
+  );
+
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title="Novo espaço de despesa">
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Nome" required error={err}>
-          <TextInput value={f.nome} placeholder="Nosso, Meu, Viagem…" autoFocus
-                     onChange={(e) => { set("nome", e.target.value); setErr(""); }} />
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
+        <Field label="Nome" required error={errors.nome}>
+          <TextInput name="nome" value={f.nome} placeholder="Nosso, Meu, Viagem…" autoFocus
+                     onChange={(e) => set("nome", e.target.value)} onBlur={() => touch("nome")} />
         </Field>
         <Field label="Ícone">
           <div className="flex flex-wrap gap-2">
@@ -634,10 +615,7 @@ export function EspacoModal({ open, onClose, onCreated }) {
           Só o orçamento é separado — despesas fixas, despesas do mês e renda próprias.
           As caixinhas (economias) são compartilhadas entre todos os espaços.
         </p>
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" className="flex-1" loading={busy}>Criar espaço</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting}>Criar espaço</Acoes>
       </form>
     </Modal>
   );
@@ -648,7 +626,6 @@ const CORES_CARTAO = ["violet", "blue", "emerald", "amber", "rose", "cyan"];
 export function CartaoModal({ open, onClose, cartao }) {
   const { addCartao, updateCartao } = useFinance();
   const editing = !!cartao;
-  const [form, setForm] = useState(null);
   const init = () =>
     cartao
       ? {
@@ -656,53 +633,54 @@ export function CartaoModal({ open, onClose, cartao }) {
           diaFechamento: cartao.diaFechamento ?? null, diaVencimento: cartao.diaVencimento, cor: cartao.cor,
         }
       : { nome: "", bandeira: "", limite: 0, diaFechamento: null, diaVencimento: 10, cor: "violet" };
-  const f = form ?? init();
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!f.nome.trim()) return setErr("Dê um nome para o cartão.");
-    setBusy(true);
-    const dto = {
-      nome: f.nome,
-      bandeira: f.bandeira.trim() || null,
-      limite: f.limite,
-      diaFechamento: f.diaFechamento ?? null,
-      diaVencimento: f.diaVencimento ?? 1,
-      cor: f.cor,
-    };
-    try {
+  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+    init,
+    (f) => ({
+      nome: texto(f.nome, { obrigatorio: true, max: 60, campo: "O nome" }),
+      limite: f.limite >= 0 ? "" : "O limite não pode ser negativo.",
+      diaVencimento: f.diaVencimento >= 1 && f.diaVencimento <= 31 ? "" : "Informe o dia do vencimento (1 a 31).",
+      diaFechamento: f.diaFechamento == null || (f.diaFechamento >= 1 && f.diaFechamento <= 31) ? "" : "O dia do fechamento vai de 1 a 31.",
+    }),
+    async (f) => {
+      const dto = {
+        nome: f.nome,
+        bandeira: f.bandeira.trim() || null,
+        limite: f.limite,
+        diaFechamento: f.diaFechamento ?? null,
+        diaVencimento: f.diaVencimento,
+        cor: f.cor,
+      };
       if (editing) await updateCartao(cartao.id, dto);
       else await addCartao(dto);
       close();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-  function close() { setForm(null); setErr(""); onClose(); }
+    }
+  );
+
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title={editing ? "Editar cartão" : "Novo cartão"}>
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Nome" required error={err}>
-            <TextInput value={f.nome} placeholder="Nubank, Inter…" autoFocus
-                       onChange={(e) => { set("nome", e.target.value); setErr(""); }} />
+          <Field label="Nome" required error={errors.nome}>
+            <TextInput name="nome" value={f.nome} placeholder="Nubank, Inter…" autoFocus
+                       onChange={(e) => set("nome", e.target.value)} onBlur={() => touch("nome")} />
           </Field>
           <Field label="Bandeira" hint="opcional">
-            <TextInput value={f.bandeira} placeholder="Visa, Master…"
+            <TextInput name="bandeira" value={f.bandeira} placeholder="Visa, Master…"
                        onChange={(e) => set("bandeira", e.target.value)} />
           </Field>
         </div>
-        <Field label="Limite">
-          <MoneyInput value={f.limite} onValue={(v) => set("limite", v)} />
+        <Field label="Limite" error={errors.limite}>
+          <MoneyInput name="limite" value={f.limite} onValue={(v) => set("limite", v)} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Dia do fechamento" hint="opcional">
-            <DayInput value={f.diaFechamento} onValue={(v) => set("diaFechamento", v)} allowEmpty />
+          <Field label="Dia do fechamento" hint="opcional" error={errors.diaFechamento}>
+            <DayInput name="diaFechamento" value={f.diaFechamento} onValue={(v) => set("diaFechamento", v)} allowEmpty />
           </Field>
-          <Field label="Dia do vencimento" hint="1 a 31">
-            <DayInput value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)} allowEmpty />
+          <Field label="Dia do vencimento" required hint="1 a 31" error={errors.diaVencimento}>
+            <DayInput name="diaVencimento" value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)} allowEmpty />
           </Field>
         </div>
         <Field label="Cor">
@@ -714,10 +692,7 @@ export function CartaoModal({ open, onClose, cartao }) {
             ))}
           </div>
         </Field>
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar cartão"}</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting}>{editing ? "Salvar" : "Criar cartão"}</Acoes>
       </form>
     </Modal>
   );
@@ -728,31 +703,26 @@ const CORES_CATEGORIA = ["blue", "emerald", "violet", "amber", "rose", "cyan"];
 export function CategoriaModal({ open, onClose, categoria, onCreated }) {
   const { addCategoria, updateCategoria } = useFinance();
   const editing = !!categoria;
-  const [form, setForm] = useState(null);
   const init = () => (categoria ? { nome: categoria.nome, cor: categoria.cor } : { nome: "", cor: "blue" });
-  const f = form ?? init();
-  const set = (k, v) => setForm({ ...f, [k]: v });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!f.nome.trim()) return setErr("Dê um nome para a categoria.");
-    setBusy(true);
-    try {
+  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+    init,
+    (f) => ({ nome: texto(f.nome, { obrigatorio: true, max: 60, campo: "O nome" }) }),
+    async (f) => {
       if (editing) await updateCategoria(categoria.id, { nome: f.nome, cor: f.cor });
       else { const cat = await addCategoria({ nome: f.nome, cor: f.cor }); onCreated?.(cat); }
       close();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-  function close() { setForm(null); setErr(""); onClose(); }
+    }
+  );
+
+  function close() { reset(); onClose(); }
 
   return (
     <Modal open={open} onClose={close} title={editing ? "Editar categoria" : "Nova categoria"}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Nome" required error={err}>
-          <TextInput value={f.nome} placeholder="Moradia, Alimentação, Lazer…" autoFocus
-                     onChange={(e) => { set("nome", e.target.value); setErr(""); }} />
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <FormError>{formError}</FormError>
+        <Field label="Nome" required error={errors.nome}>
+          <TextInput name="nome" value={f.nome} placeholder="Moradia, Alimentação, Lazer…" autoFocus
+                     onChange={(e) => set("nome", e.target.value)} onBlur={() => touch("nome")} />
         </Field>
         <Field label="Cor">
           <div className="flex gap-2">
@@ -763,10 +733,7 @@ export function CategoriaModal({ open, onClose, categoria, onCreated }) {
             ))}
           </div>
         </Field>
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1" onClick={close}>Cancelar</Button>
-          <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar categoria"}</Button>
-        </div>
+        <Acoes onCancel={close} submitting={submitting}>{editing ? "Salvar" : "Criar categoria"}</Acoes>
       </form>
     </Modal>
   );

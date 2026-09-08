@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Users, Trash2, Plus, HandCoins } from "lucide-react";
 import { Card, Button, Modal, Field, TextInput, MoneyInput } from "./ui/primitives.jsx";
-import { Select, SelectItem, NumberInput } from "./ui/fields.jsx";
+import { Select, SelectItem, NumberInput, FormError } from "./ui/fields.jsx";
+import { useFormState } from "./ui/useFormState.js";
+import { emailValido, texto } from "../lib/formErrors.js";
 import { fmtMoney } from "../lib/format.js";
 import { acento } from "../lib/calc.js";
 import * as api from "../services/financeApi";
@@ -11,19 +13,55 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
   const [contatos, setContatos] = useState([]);
   const [linhas, setLinhas] = useState([]);
   const [shares, setShares] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
 
-  // form
-  const [contatoId, setContatoId] = useState("");
-  const [novoNome, setNovoNome] = useState("");
-  const [novoEmail, setNovoEmail] = useState("");
-  const [tipo, setTipo] = useState("linha");
-  const [linhaKey, setLinhaKey] = useState("");
-  const [divisao, setDivisao] = useState("inteira");
-  const [percentual, setPercentual] = useState(50);
-  const [valor, setValor] = useState(0);
-  const [recorrencia, setRecorrencia] = useState("recorrente");
+  const NOVA_PESSOA = "__novo__";
+  const { f, set, patch, errors, formError, submitting, submit, reset } = useFormState(
+    () => ({
+      contatoId: "", novoNome: "", novoEmail: "", tipo: "linha", linhaKey: "",
+      divisao: "inteira", percentual: 50, valor: 0, recorrencia: "recorrente",
+    }),
+    (f) => {
+      const nova = f.contatoId === NOVA_PESSOA;
+      const comValor = f.tipo === "valor" || (f.tipo === "linha" && f.divisao === "valor");
+      return {
+        contatoId: f.contatoId ? "" : "Escolha ou cadastre uma pessoa.",
+        novoNome: nova ? texto(f.novoNome, { obrigatorio: true, max: 80, campo: "O nome" }) : "",
+        novoEmail: nova && f.novoEmail.trim() && !emailValido(f.novoEmail) ? "Email inválido." : "",
+        linhaKey: f.tipo === "linha" && !f.linhaKey ? "Escolha a linha da fatura." : "",
+        percentual:
+          f.tipo === "linha" && f.divisao === "percentual" && !(f.percentual >= 1 && f.percentual <= 100)
+            ? "O percentual vai de 1 a 100."
+            : "",
+        valor: comValor && !(f.valor > 0) ? "Informe um valor maior que zero." : "",
+      };
+    },
+    async (f) => {
+      // contato novo é criado antes do share (o back só aceita id existente)
+      let cid = f.contatoId;
+      if (cid === NOVA_PESSOA) {
+        const novo = await api.addContato({ nome: f.novoNome.trim(), email: f.novoEmail.trim() || null });
+        cid = novo.id;
+      }
+
+      let dto;
+      if (f.tipo === "linha") {
+        const [ltipo, lid] = f.linhaKey.split(":");
+        dto = {
+          contatoId: cid,
+          tipo: "linha",
+          [ltipo === "fixa" ? "despesaFixaId" : "despesaMesId"]: lid,
+          ...(f.divisao === "percentual" ? { percentual: f.percentual } : {}),
+          ...(f.divisao === "valor" ? { valor: f.valor } : {}),
+        };
+      } else {
+        dto = { contatoId: cid, tipo: "valor", valor: f.valor, mesRef: f.recorrencia === "pontual" ? ym : null };
+      }
+      await api.addCartaoShare(cartao.id, dto);
+      // segue no modal pra compartilhar a próxima linha com a mesma pessoa
+      patch({ contatoId: cid, novoNome: "", novoEmail: "", linhaKey: "", valor: 0 });
+      await reload();
+    }
+  );
 
   async function reload() {
     if (!cartao) return;
@@ -40,63 +78,9 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
   useEffect(() => {
     if (open) {
       reload();
-      setErr("");
-      setContatoId("");
-      setNovoNome("");
-      setNovoEmail("");
-      setTipo("linha");
-      setLinhaKey("");
-      setDivisao("inteira");
+      reset();
     }
   }, [open, cartao?.id, ym]);
-
-  async function submit(e) {
-    e.preventDefault();
-    setErr("");
-    setBusy(true);
-    try {
-      // resolve contato (existente ou novo)
-      let cid = contatoId;
-      if (cid === "__novo__" || (!cid && novoNome.trim())) {
-        if (!novoNome.trim()) throw new Error("Informe o nome da pessoa.");
-        const novo = await api.addContato({ nome: novoNome.trim(), email: novoEmail.trim() || null });
-        cid = novo.id;
-      }
-      if (!cid) throw new Error("Escolha ou cadastre um contato.");
-
-      let dto;
-      if (tipo === "linha") {
-        if (!linhaKey) throw new Error("Selecione uma linha da fatura.");
-        const [ltipo, lid] = linhaKey.split(":");
-        dto = {
-          contatoId: cid,
-          tipo: "linha",
-          [ltipo === "fixa" ? "despesaFixaId" : "despesaMesId"]: lid,
-          ...(divisao === "percentual" ? { percentual: Number(percentual) } : {}),
-          ...(divisao === "valor" ? { valor: Number(valor) } : {}),
-        };
-      } else {
-        if (!valor) throw new Error("Informe o valor.");
-        dto = {
-          contatoId: cid,
-          tipo: "valor",
-          valor: Number(valor),
-          mesRef: recorrencia === "pontual" ? ym : null,
-        };
-      }
-      await api.addCartaoShare(cartao.id, dto);
-      setContatoId(cid);
-      setNovoNome("");
-      setNovoEmail("");
-      setLinhaKey("");
-      setValor(0);
-      await reload();
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function remove(id) {
     await api.removeCartaoShare(id);
@@ -144,38 +128,41 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
         <div className="border-t border-[var(--color-line)]" />
 
         {/* form novo share */}
-        <form onSubmit={submit} className="space-y-4">
-          <Field label="Pessoa" error={err}>
-            <Select value={contatoId} onValue={setContatoId} placeholder="Selecione…">
+        <form onSubmit={submit} className="space-y-4" noValidate>
+          <FormError>{formError}</FormError>
+          <Field label="Pessoa" required error={errors.contatoId}>
+            <Select name="contatoId" value={f.contatoId} onValue={(v) => set("contatoId", v)} placeholder="Selecione…">
               {contatos.map((c) => (
                 <SelectItem key={c.id} value={c.id}>{c.nome}{c.vinculado ? " ✓" : ""}</SelectItem>
               ))}
-              <SelectItem value="__novo__">+ Nova pessoa</SelectItem>
+              <SelectItem value={NOVA_PESSOA}>+ Nova pessoa</SelectItem>
             </Select>
           </Field>
 
-          {contatoId === "__novo__" && (
+          {f.contatoId === NOVA_PESSOA && (
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Nome">
-                <TextInput value={novoNome} placeholder="Maria" onChange={(e) => setNovoNome(e.target.value)} />
+              <Field label="Nome" required error={errors.novoNome}>
+                <TextInput name="novoNome" value={f.novoNome} placeholder="Maria"
+                           onChange={(e) => set("novoNome", e.target.value)} />
               </Field>
-              <Field label="Email" hint="p/ ela ver quando tiver conta">
-                <TextInput value={novoEmail} placeholder="maria@email.com" onChange={(e) => setNovoEmail(e.target.value)} />
+              <Field label="Email" hint="p/ ela ver quando tiver conta" error={errors.novoEmail}>
+                <TextInput name="novoEmail" value={f.novoEmail} placeholder="maria@email.com"
+                           onChange={(e) => set("novoEmail", e.target.value)} />
               </Field>
             </div>
           )}
 
           <Field label="O que compartilhar">
-            <Select value={tipo} onValue={setTipo}>
+            <Select name="tipo" value={f.tipo} onValue={(v) => set("tipo", v)}>
               <SelectItem value="linha">Uma linha da fatura</SelectItem>
               <SelectItem value="valor">Um valor da fatura</SelectItem>
             </Select>
           </Field>
 
-          {tipo === "linha" ? (
+          {f.tipo === "linha" ? (
             <>
-              <Field label="Linha">
-                <Select value={linhaKey} onValue={setLinhaKey} placeholder="Selecione…">
+              <Field label="Linha" required error={errors.linhaKey}>
+                <Select name="linhaKey" value={f.linhaKey} onValue={(v) => set("linhaKey", v)} placeholder="Selecione…">
                   {linhas.map((l) => (
                     <SelectItem key={`${l.tipo}:${l.id}`} value={`${l.tipo}:${l.id}`}>
                       {l.descricao} · {fmtMoney(l.valor)}
@@ -185,30 +172,31 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
                 </Select>
               </Field>
               <Field label="Quanto dessa linha">
-                <Select value={divisao} onValue={setDivisao}>
+                <Select name="divisao" value={f.divisao} onValue={(v) => set("divisao", v)}>
                   <SelectItem value="inteira">Linha inteira (100%)</SelectItem>
                   <SelectItem value="percentual">Percentual</SelectItem>
                   <SelectItem value="valor">Valor fixo por mês</SelectItem>
                 </Select>
               </Field>
-              {divisao === "percentual" && (
-                <Field label="Percentual (%)">
-                  <NumberInput value={percentual} min={1} max={100} onValue={setPercentual} />
+              {f.divisao === "percentual" && (
+                <Field label="Percentual (%)" error={errors.percentual}>
+                  <NumberInput name="percentual" value={f.percentual} min={1} max={100}
+                               onValue={(v) => set("percentual", v)} />
                 </Field>
               )}
-              {divisao === "valor" && (
-                <Field label="Valor por mês">
-                  <MoneyInput value={valor} onValue={setValor} />
+              {f.divisao === "valor" && (
+                <Field label="Valor por mês" error={errors.valor}>
+                  <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} />
                 </Field>
               )}
             </>
           ) : (
             <>
-              <Field label="Valor">
-                <MoneyInput value={valor} onValue={setValor} />
+              <Field label="Valor" required error={errors.valor}>
+                <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} />
               </Field>
               <Field label="Recorrência">
-                <Select value={recorrencia} onValue={setRecorrencia}>
+                <Select name="recorrencia" value={f.recorrencia} onValue={(v) => set("recorrencia", v)}>
                   <SelectItem value="recorrente">Todo mês</SelectItem>
                   <SelectItem value="pontual">Só neste mês ({ym})</SelectItem>
                 </Select>
@@ -216,7 +204,7 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
             </>
           )}
 
-          <Button type="submit" className="w-full" loading={busy}>
+          <Button type="submit" className="w-full" loading={submitting}>
             <Plus size={16} /> Compartilhar
           </Button>
         </form>

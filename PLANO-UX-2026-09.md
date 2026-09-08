@@ -227,17 +227,17 @@ Em `server/modules/orcamento/orcamento.dto.ts`:
 
 ### 2.5 Checklist E2
 
-- [ ] `ApiError` em `services/financeApi.ts`, `unwrap` propagando `status` + `issues`
-- [ ] `lib/formErrors.js` (`issuesToFields`, `mensagemDeErro`) + teste unitário
-- [ ] `components/ui/useFormState.js`
-- [ ] `FormError` em `fields.jsx`, aplicado nos 11 formulários
-- [ ] Predicados `err && !f.descricao.trim() ? err : ""` eliminados (grep por `? err :` = 0 ocorrências)
-- [ ] Regras da tabela §2.3 implementadas em cada modal
-- [ ] Foco automático no primeiro campo inválido no submit
-- [ ] DTOs endurecidos + mensagens pt-BR
-- [ ] Teste unitário de DTO: `diaVencimento: ""` ⇒ 422 com issue em `diaVencimento`
-- [ ] Teste de integração: `POST /despesas/espacos/:esp/mes` com `data` fora de `mes` ⇒ 422
-- [ ] Gate verde
+- [x] `ApiError` em `services/financeApi.ts`, `unwrap` propagando `status` + `issues`
+- [x] `lib/formErrors.js` (`issuesToFields`, `mensagemDeErro`, + `texto`/`dataValida`/`emailValido`) + `lib/formErrors.test.js` <!-- desvio: `scripts/test-unit.ts` passou a incluir `lib/**/*.test.js` no glob — sem isso nem esse teste nem o `lib/calc.test.js` rodavam no CI -->
+- [x] `components/ui/useFormState.js`
+- [x] `FormError` em `fields.jsx`, aplicado nos 13 formulários (10 de `forms.jsx` + `CompartilharModal` + `UserModal` e `RoleModal` do Admin)
+- [x] Predicados `err && !f.descricao.trim() ? err : ""` eliminados (grep por `? err :` = 0 ocorrências)
+- [x] Regras da tabela §2.3 implementadas em cada modal
+- [x] Foco automático no primeiro campo inválido no submit (via `name` do campo, em `useFormState`) <!-- parcial: Admin valida por campo mas não foca — não usa o hook -->
+- [x] DTOs endurecidos + mensagens pt-BR (+ refine de parcela e de `data` no mês; update checa o mês no service)
+- [x] Teste unitário de DTO: `diaVencimento: ""` ⇒ 422 com issue em `diaVencimento` (`server/modules/orcamento/orcamento.dto.test.ts`)
+- [x] Teste de integração: `POST /despesas/espacos/:esp/mes` com `data` fora de `mes` ⇒ 422 (+ PATCH e fixas)
+- [x] Gate verde: typecheck ok · unit 20 arquivos ok · int 264 pass · build ok
 - [ ] QA manual: limpar o dia do vencimento e salvar ⇒ erro **no campo**, sem request; forçar 500 (desligar o banco) ⇒ banner de topo aparece
 
 **Aceite**: com o campo `dia do vencimento` vazio, o submit não dispara request e o campo fica marcado em rose com "Informe o dia do vencimento (1 a 31)". Nenhum caminho de erro fica sem texto na tela.
