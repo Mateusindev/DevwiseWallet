@@ -6,6 +6,7 @@ import { categoriaService } from "../categoria/categoria.service";
 import { AppError, NotFoundError } from "@/server/lib/errors";
 import { num, isoDate, parseDate, round, parcelaAtivaNoMes, parcelaView, parcelaWrite, currentMonth } from "@/server/lib/serialize";
 import type {
+  ImportMesDTO,
   BulkFixaDTO,
   BulkMesDTO,
   AddDespesaFixaDTO,
@@ -77,6 +78,7 @@ function mesView(d: DespesaMes) {
     cartaoId: d.cartaoId,
     categoriaId: d.categoriaId,
     nota: d.nota,
+    fitid: d.fitid,
   };
 }
 
@@ -220,6 +222,51 @@ export const orcamentoService = {
     assertPertence(found, espacoId, "Despesa do mês", id);
     await orcamentoRepository.deleteDespesaMes(id);
     return { id };
+  },
+
+  // Importa transações de um OFX como despesas do mês.
+  //   - `fitid` que já existe no espaço é ignorado (reimportar o mesmo arquivo
+  //     não duplica nada);
+  //   - cartão e cada categoria distinta são validados como do dono UMA vez
+  //     (um getOrThrow por id único, não por item);
+  //   - insere tudo numa transação.
+  async importDespesasMes(userId: string, espacoId: string, dto: ImportMesDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
+    if (dto.cartaoId) await cartaoService.getOrThrow(userId, dto.cartaoId);
+    const categorias = [...new Set(dto.itens.map((i) => i.categoriaId).filter(Boolean))] as string[];
+    for (const id of categorias) await categoriaService.getOrThrow(userId, id);
+
+    const fitids = dto.itens.map((i) => i.fitid).filter(Boolean) as string[];
+    const jaTem = new Set(
+      fitids.length > 0
+        ? (await orcamentoRepository.fitidsExistentes(espacoId, fitids)).map((r) => r.fitid)
+        : []
+    );
+
+    const ignoradas: { fitid: string; motivo: "duplicado" }[] = [];
+    const novas = [];
+    const vistos = new Set<string>();
+    for (const item of dto.itens) {
+      // duplicado pode estar no banco OU repetido dentro do próprio arquivo
+      if (item.fitid && (jaTem.has(item.fitid) || vistos.has(item.fitid))) {
+        ignoradas.push({ fitid: item.fitid, motivo: "duplicado" });
+        continue;
+      }
+      if (item.fitid) vistos.add(item.fitid);
+      novas.push({
+        espacoId,
+        mes: dto.mes,
+        descricao: item.descricao,
+        valor: round(item.valor),
+        data: parseDate(item.data),
+        cartaoId: dto.cartaoId ?? null,
+        categoriaId: item.categoriaId ?? null,
+        fitid: item.fitid ?? null,
+      });
+    }
+
+    const criadas = novas.length > 0 ? await orcamentoRepository.createDespesasMes(novas) : [];
+    return { criadas: criadas.map(mesView), ignoradas };
   },
 
   // Aplica uma operação em várias despesas do mês numa só requisição.

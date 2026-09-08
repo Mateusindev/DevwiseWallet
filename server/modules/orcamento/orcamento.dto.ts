@@ -149,6 +149,31 @@ export const bulkFixaSchema = z
   .refine(temAlvo("categoriaId", "categoria"), { message: "Escolha a categoria a aplicar", path: ["categoriaId"] })
   .refine(temAlvo("cartaoId", "cartao"), { message: "Escolha o cartão a aplicar", path: ["cartaoId"] });
 
+// ── Import de OFX ───────────────────────────────────────────────────────────
+// O parse é no cliente; aqui cada item é revalidado como se fosse um lançamento
+// manual. `fitid` é a chave de dedup (o service ignora o que já existe).
+export const importMesSchema = z
+  .object({
+    mes: ym,
+    cartaoId: z.string().uuid().nullable().optional(),
+    itens: z
+      .array(
+        z.object({
+          fitid: z.string().trim().max(255).nullable().optional(),
+          data: ymd,
+          descricao: z.string().trim().min(1, "Informe a descrição").max(120, "A descrição passa de 120 caracteres"),
+          valor: z.coerce.number().positive("O valor precisa ser maior que zero"),
+          categoriaId,
+        })
+      )
+      .min(1, "Selecione pelo menos uma transação")
+      .max(500, "No máximo 500 transações por import"),
+  })
+  .refine((d) => d.itens.every((i) => i.data.slice(0, 7) === d.mes), {
+    message: "Toda data precisa estar dentro do mês",
+    path: ["itens"],
+  });
+
 export const setRendaSchema = z.object({ valor });
 
 // Quanto foi pago (valor absoluto) de uma fixa/despesa do mês.
@@ -160,6 +185,7 @@ export type AddDespesaFixaDTO = z.infer<typeof addDespesaFixaSchema>;
 export type UpdateDespesaFixaDTO = z.infer<typeof updateDespesaFixaSchema>;
 export type AddDespesaMesDTO = z.infer<typeof addDespesaMesSchema>;
 export type UpdateDespesaMesDTO = z.infer<typeof updateDespesaMesSchema>;
+export type ImportMesDTO = z.infer<typeof importMesSchema>;
 export type BulkMesDTO = z.infer<typeof bulkMesSchema>;
 export type BulkFixaDTO = z.infer<typeof bulkFixaSchema>;
 export type AddReceitaMesDTO = z.infer<typeof addReceitaMesSchema>;

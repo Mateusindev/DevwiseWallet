@@ -3,6 +3,7 @@ import { zValidator } from "@/server/lib/validator";
 import { requirePermission, type AuthEnv } from "@/server/auth/middleware";
 import { orcamentoService } from "./orcamento.service";
 import {
+  importMesSchema,
   bulkFixaSchema,
   bulkMesSchema,
   addDespesaFixaSchema,
@@ -116,6 +117,13 @@ export const orcamentoRoutes = new Hono<AuthEnv>()
   )
   .post(`${base}/mes/bulk`, manage, zValidator("json", bulkMesSchema), async (c) =>
     c.json(await orcamentoService.bulkMes(c.get("user").id, c.req.param("esp"), c.req.valid("json")))
+  )
+  // import de OFX (parse no cliente; aqui é dedup + insert em transação)
+  .post(`${base}/mes/import`, manage, zValidator("json", importMesSchema), async (c) =>
+    c.json(
+      await orcamentoService.importDespesasMes(c.get("user").id, c.req.param("esp"), c.req.valid("json")),
+      201
+    )
   )
 
   // ── Receitas do mês ──────────────────────────────────────────────────────

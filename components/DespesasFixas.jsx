@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2, Repeat,
+  Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2, Repeat, Upload,
 } from "lucide-react";
 import { Card, Button, Field, MoneyInput, Spinner, Modal } from "./ui/primitives.jsx";
 import { Checkbox, CheckboxField, FormError, MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
 import BulkBar, { BulkAcao } from "./BulkBar.jsx";
+import ImportOfxModal from "./ImportOfx.jsx";
 import { useSelecao } from "./ui/useSelecao.js";
 import { mensagemDeErro } from "../lib/formErrors.js";
 import { DespesaFixaModal, DespesaMesModal, ReceitaMesModal, EspacoModal } from "./forms.jsx";
@@ -85,6 +86,7 @@ export default function DespesasFixas() {
   const [fixaOpen, setFixaOpen] = useState(false);
   const [mesOpen, setMesOpen] = useState(false);
   const [receitaOpen, setReceitaOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editFixa, setEditFixa] = useState(null);
   const [editMes, setEditMes] = useState(null);
   const [editReceita, setEditReceita] = useState(null);
@@ -341,6 +343,12 @@ export default function DespesasFixas() {
                             aria-label="Selecionar todas as despesas do mês" />
                   todas
                 </label>
+              )}
+              {canOrc && (
+                <button onClick={() => setImportOpen(true)} title="Importar extrato/fatura OFX"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-400 hover:text-slate-200 cursor-pointer">
+                  <Upload size={15} /> OFX
+                </button>
               )}
               {canOrc && (
                 <button onClick={() => setMesOpen(true)}
@@ -623,6 +631,7 @@ export default function DespesasFixas() {
       <DespesaFixaModal open={!!editFixa} despesa={editFixa} onClose={() => setEditFixa(null)} />
       <DespesaMesModal open={mesOpen} onClose={() => setMesOpen(false)} mes={ym} mesLabel={fmtMonthLabel(ym)} />
       <DespesaMesModal open={!!editMes} despesa={editMes} onClose={() => setEditMes(null)} mes={ym} mesLabel={fmtMonthLabel(ym)} />
+      <ImportOfxModal open={importOpen} onClose={() => setImportOpen(false)} mes={ym} mesLabel={fmtMonthLabel(ym)} />
       <ReceitaMesModal open={receitaOpen} onClose={() => setReceitaOpen(false)} mes={ym} mesLabel={fmtMonthLabel(ym)} />
       <ReceitaMesModal open={!!editReceita} receita={editReceita} escopo={escopoEdicao}
                        onClose={() => { setEditReceita(null); setEscopoEdicao("todas"); }}

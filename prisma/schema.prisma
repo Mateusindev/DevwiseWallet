@@ -315,6 +315,9 @@ model DespesaMes {
   cartaoId    String?  @map("cartao_id") @db.Uuid
   categoriaId String?  @map("categoria_id") @db.Uuid
   nota        String?
+  // Id da transação no arquivo OFX importado — chave de dedup. Null repetido é
+  // aceito pelo Postgres num unique composto, então lançamento manual segue livre.
+  fitid       String?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   espaco    Espaco        @relation(fields: [espacoId], references: [id], onDelete: Cascade)
@@ -322,6 +325,7 @@ model DespesaMes {
   categoria Categoria?    @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
   shares    CartaoShare[]
 
+  @@unique([espacoId, fitid], map: "despesa_mes_espaco_fitid_key")
   @@index([espacoId, mes])
   @@index([cartaoId])
   @@index([categoriaId])

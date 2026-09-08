@@ -290,6 +290,7 @@ describe("orcamentoView", () => {
         cartaoId: null,
         categoriaId: null,
         nota: "feira",
+        fitid: null,
       },
     ],
     receitasMes: [
@@ -339,6 +340,7 @@ describe("orcamentoView", () => {
       cartaoId: null,
       categoriaId: null,
       nota: "feira",
+      fitid: null,
     });
     expect(v.receitasMes[0]).toEqual({
       id: "rm-1",

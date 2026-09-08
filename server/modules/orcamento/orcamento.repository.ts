@@ -115,6 +115,19 @@ export const orcamentoRepository = {
     return prisma.receitaMes.delete({ where: { id } });
   },
 
+  // ── Import de OFX ────────────────────────────────────────────────────────
+  // Quais desses fitid já existem no espaço (dedup antes de inserir).
+  fitidsExistentes(espacoId: string, fitids: string[]) {
+    return prisma.despesaMes.findMany({
+      where: { espacoId, fitid: { in: fitids } },
+      select: { fitid: true },
+    });
+  },
+  // Tudo ou nada: 1 import = 1 transação.
+  createDespesasMes(linhas: Prisma.DespesaMesUncheckedCreateInput[]) {
+    return prisma.$transaction(linhas.map((data) => prisma.despesaMes.create({ data })));
+  },
+
   // ── Exceções de receita recorrente ───────────────────────────────────────
   // Sem user_id: herda o dono via receita → espaco (o service resolve a receita
   // por `findReceitaMes`, que já cruza o userId).

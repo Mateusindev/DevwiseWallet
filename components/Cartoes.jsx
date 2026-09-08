@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users, Receipt, Flag, TrendingDown, ChevronDown } from "lucide-react";
+import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users, Receipt, Flag, TrendingDown, ChevronDown, Upload } from "lucide-react";
 import { Card, Button, ProgressBar, Donut } from "./ui/primitives.jsx";
 import { HBars, StackedBars } from "./ui/charts.jsx";
 import { CartaoModal } from "./forms.jsx";
+import ImportOfxModal from "./ImportOfx.jsx";
 import { CompartilharModal, MeusCompartilhamentos } from "./Compartilhamento.jsx";
 import { fmtMoney, fmtMoneyCompact, fmtMonthLabel, fmtMonthShort, currentMonthKey, addMonths } from "../lib/format.js";
 import { acento, janelaMeses, mesesComFatura, quitacaoParceladas, quitacaoPorCartao } from "../lib/calc.js";
@@ -21,6 +22,7 @@ export default function Cartoes() {
   const [novoOpen, setNovoOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [sharing, setSharing] = useState(null);
+  const [importando, setImportando] = useState(null); // cartão pré-selecionado no import
   // Janela de faturas: 12 meses pra cada lado, esticada pelas parcelas em aberto.
   const comFatura = useMemo(() => mesesComFatura(despesasFixas, despesasMes), [despesasFixas, despesasMes]);
   const janela = useMemo(() => janelaMeses({ dados: comFatura, atras: 12, frente: 12 }), [comFatura]);
@@ -50,6 +52,11 @@ export default function Cartoes() {
         </div>
         <div className="flex items-center gap-2">
           <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comFatura} />
+          {canManage && cartoes.length > 0 && (
+            <Button variant="ghost" onClick={() => setImportando(cartoes[0])} title="Importar fatura OFX">
+              <Upload size={16} /> OFX
+            </Button>
+          )}
           {canManage && <Button onClick={() => setNovoOpen(true)}><Plus size={16} /> Novo cartão</Button>}
         </div>
       </header>
@@ -107,6 +114,9 @@ export default function Cartoes() {
       <QuitacaoParceladas ym={ym} cartoes={cartoes} />
 
       {canViewShared && <MeusCompartilhamentos ym={ym} />}
+
+      <ImportOfxModal open={!!importando} cartaoId={importando?.id} onClose={() => setImportando(null)}
+                      mes={ym} mesLabel={fmtMonthLabel(ym)} />
 
       <CartaoModal open={novoOpen} onClose={() => setNovoOpen(false)} />
       <CartaoModal open={!!editing} cartao={editing} onClose={() => setEditing(null)} />

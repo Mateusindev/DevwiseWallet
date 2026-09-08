@@ -288,6 +288,14 @@ export async function removeDespesaMes(espacoId: string, id: string) {
   return unwrap(client.api.despesas.espacos[":esp"].mes[":id"].$delete({ param: { esp: espacoId, id } }));
 }
 
+// Import de OFX: cria as despesas do mês e devolve o que foi ignorado por fitid
+// repetido.
+export async function importDespesasMes(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["mes"]["import"]["$post"]>) {
+  return unwrap(
+    client.api.despesas.espacos[":esp"].mes.import.$post({ param: { esp: espacoId }, json: dto })
+  );
+}
+
 // Ação em lote nas despesas do mês: pagar/despagar, excluir, categoria, cartão.
 export async function bulkDespesasMes(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["mes"]["bulk"]["$post"]>) {
   return unwrap(

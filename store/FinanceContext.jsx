@@ -435,6 +435,13 @@ export function FinanceProvider({ children }) {
       reloadCartoes();
       return r;
     },
+    // Import de OFX — um dispatch em lote e um reloadCartoes no fim.
+    async importDespesasMes(dto) {
+      const r = await api.importDespesasMes(esp, dto);
+      if (r.criadas.length > 0) dispatch({ type: "UPSERT_MANY_DM", dms: r.criadas });
+      reloadCartoes();
+      return r;
+    },
     async bulkMes(dto) {
       const r = await api.bulkDespesasMes(esp, dto);
       if (r.removidos.length > 0) dispatch({ type: "REMOVE_MANY_DM", ids: r.removidos });

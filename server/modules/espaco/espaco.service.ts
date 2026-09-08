@@ -35,6 +35,7 @@ export function orcamentoView(esp: EspacoComOrcamento) {
       cartaoId: d.cartaoId,
       categoriaId: d.categoriaId,
       nota: d.nota,
+      fitid: d.fitid, // o front usa pra marcar o que já veio de um OFX
     })),
     receitasMes: esp.receitasMes.map((r) => ({
       id: r.id,

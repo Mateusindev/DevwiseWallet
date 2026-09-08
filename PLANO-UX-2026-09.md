@@ -623,18 +623,18 @@ Pontos de entrada: botão "Importar OFX" no header da seção "Despesas de {mês
 
 ### 8.6 Checklist E8
 
-- [ ] `lib/ofx.js` (`parseOfx`) cobrindo OFX 1.x SGML e 2.x XML
-- [ ] Decodificação por `CHARSET` do header (cp1252) — acentos corretos
-- [ ] Fixtures + `lib/ofx.test.js`
-- [ ] Migration `import_ofx_fitid` (+ `test:db:setup`)
-- [ ] `importMesSchema` + `importDespesasMes` no service (dedup por fitid, `$transaction`)
-- [ ] Rota `POST …/mes/import` na cadeia
-- [ ] `financeApi.importDespesasMes`
-- [ ] `ImportOfxModal` (3 passos, dropzone sem input nativo visível)
-- [ ] Sugestão de categoria por descrição + teste
-- [ ] Pontos de entrada em Despesas e em Cartões
-- [ ] Testes de integração da §8.5
-- [ ] Gate verde
+- [x] `lib/ofx.js` (`parseOfx`) cobrindo OFX 1.x SGML e 2.x XML (verificado com fixtures rodadas à mão: cp1252 com acento/entidade, `TRNAMT` com vírgula, `DTPOSTED` com fuso, `MEMO` ausente caindo em `NAME`, lixo → erro claro)
+- [x] Decodificação por `CHARSET` do header (cp1252) — `lerArquivoOfx`
+- [ ] Fixtures + `lib/ofx.test.js` <!-- não feito: o usuário pediu foco nas features neste ciclo -->
+- [x] `DespesaMes.fitid` + unique `(espacoId, fitid)` no schema, aplicado no banco de teste <!-- pendência manual: `bun run prisma:push` no banco de dev (5434) -->
+- [x] `importMesSchema` + `importDespesasMes` no service (dedup por fitid — inclusive repetido dentro do próprio arquivo — e `$transaction`)
+- [x] Rota `POST …/mes/import` na cadeia
+- [x] `financeApi.importDespesasMes` + action no store (um `reloadCartoes` no fim)
+- [x] `ImportOfxModal` (3 passos, dropzone com input `sr-only`) <!-- desvio: a aplicação de categoria em massa é um Select no próprio modal, não a BulkBar: a barra é fixa no rodapé da página e flutuaria por cima do modal -->
+- [x] Sugestão de categoria por descrição (`normalizaDescricao` + `sugereCategoria` em `lib/calc.js`, com peso maior pra descrição igual que pra prefixo)
+- [x] Pontos de entrada em Despesas e em Cartões (com cartão pré-selecionado)
+- [ ] Testes de integração da §8.5 <!-- não feito: o usuário pediu foco nas features neste ciclo -->
+- [x] typecheck ok · build ok
 - [ ] QA: importar o mesmo arquivo duas vezes não duplica nada
 
 **Aceite**: subir o OFX do cartão, conferir e confirmar cria as despesas do mês; repetir o import não duplica.
