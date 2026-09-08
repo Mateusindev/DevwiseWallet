@@ -45,6 +45,20 @@ Front e back no mesmo projeto Next.js, type-safety ponta a ponta via Hono RPC. S
 - **Serialização**: services convertem Decimal/Date (`num`, `isoDate` em `server/lib/serialize.ts`) — front nunca vê tipos do Prisma.
 - **Prisma singleton** via `globalThis` (`server/lib/prisma.ts`).
 - **Front é SPA client-side**: `app/page.tsx` `'use client'` monta `AuthGate > FinanceProvider > App`. Componentes em `components/` são jsx portados do Vite (`allowJs`).
+- **Rotas em lote / import / resumo** (evitam N requests + N `reloadCartoes`): `POST /despesas/espacos/:esp/mes/bulk` e `.../fixas/bulk` (pagar/despagar · excluir · categoria · cartao · ativar/pausar), `POST .../mes/import` (OFX) e `GET /cartoes/resumo?de&ate` (fatura mês a mês, por cartão e por categoria; janela de 24 meses). Nos lotes, **todos os ids são carregados filtrando por espaço + dono antes de qualquer escrita** — se algum não voltar, 404 e nada é aplicado.
+
+### Front — camadas próprias
+
+- **`components/ui/fields.jsx`**: controles com Radix (`Select`/`SelectItem`, `Checkbox`, `CheckboxField`, `NumberInput`, `DayInput`, `MonthSelect`/`MonthStepper`, `DateInput`, `FormError`). Nenhum controle nativo do sistema aparece na app (só o `<input type="file">` do import OFX, escondido com `sr-only`). `NumberInput` **nunca emite string**: `number | null`, clamp no blur — é o que evita 422 com `""` virando 0 no `z.coerce`. Select dentro de `Modal` exige `Select.Portal` (senão o popup é clipado pelo `overflow-y-auto` do modal) e `z-[70]`.
+- **`components/ui/useFormState.js`**: estado de form + validação pura + erro por campo + banner (`formError`) + foco no primeiro campo inválido (pelo `name` do controle). Erro de API com `issues` (422) vira erro de campo via `lib/formErrors.js`; o que não casa com campo cai no banner. Expõe `touched` e `patch(p, { marcarTocado: false })` — é assim que uma sugestão automática (vencimento = fechamento + 7) não sobrescreve o que o usuário digitou.
+- **`services/financeApi.ts`** lança `ApiError` (`status` + `issues`), não `Error` cru.
+- **`components/ui/useSelecao.js`** + **`components/BulkBar.jsx`**: seleção com Shift+clique e barra de ações em lote (portal no body; dentro da lista o overflow dos Cards cortava a barra). A seleção é resetada por uma chave `${ym}:${espacoId}`.
+- **`lib/ofx.js`**: parser de OFX 1.x (SGML) e 2.x (XML) + `lerArquivoOfx` (escolhe o `TextDecoder` pelo CHARSET do cabeçalho — cp1252 lido como UTF-8 estraga acento). O parse é no cliente; o servidor só faz dedup por `fitid` e insere.
+- **`lib/calc.js`** concentra o domínio puro: janela do seletor de mês (`janelaMeses`, `mesesComDados`, `mesesComFatura`), sugestão de dia de fatura (`diaMaisDias`/`sugere*`), expansão de receita recorrente (`receitasDoMes`) e sugestão de categoria por descrição (`sugereCategoria`).
+
+### Semântica de `ReceitaMes.mes` (âncora)
+
+Receita extra pode ser **recorrente** (`recorrente` + `mesFim` opcional). Nesse caso `mes` deixa de ser "o mês do lançamento" e passa a ser a **âncora** (primeiro mês em que vale) — a coluna não foi renomeada pra não quebrar a `receitaView`. `ReceitaMesSkip (receita_id, ym)` guarda a exceção de um mês. O front expande as instâncias com `receitasDoMes(receitasMes, ym, skips)`, que devolve `key` (`"id:ym"`) e `mesEfetivo`: o `id` se repete entre meses, então **nenhuma key de React nem handler pode usar só o `id`**.
 
 ### Multi-tenancy (dado por usuário)
 
@@ -72,7 +86,7 @@ Front e back no mesmo projeto Next.js, type-safety ponta a ponta via Hono RPC. S
 
 Duas suítes, **processos separados** (`bun run test` roda as duas em sequência). Motivo: `mock.module` do Bun é global no runner — rodar tudo num processo só vaza os repositories mockados dos unitários pra dentro dos testes de integração. Nunca rode `bun test` sem filtro.
 
-- **Unit** (`bun run test:unit`): `*.test.ts` ao lado do código em `server/`, repositories mockados com `mock.module` — não tocam banco. `scripts/test-unit.ts` roda **um processo por arquivo**: `mock.module` não tem como ser desfeito, então um arquivo que mocka um *service* (bootstrap mocka `caixinha.service`; `middleware.test` mocka `auth.service`) serviria o stub pros arquivos seguintes, que testariam o mock do vizinho em vez do módulo real. Como a ordem dos arquivos vem do walk do runner, isso passa numa máquina e quebra em outra — foi o que derrubou o CI no salto do Bun 1.2 → 1.3. A cobertura sai do merge dos lcov de cada processo.
+- **Unit** (`bun run test:unit`): `*.test.ts` ao lado do código em `server/` **e `lib/**/*.test.js`** (domínio puro: cálculo e validação de form), repositories mockados com `mock.module` — não tocam banco. `scripts/test-unit.ts` roda **um processo por arquivo**: `mock.module` não tem como ser desfeito, então um arquivo que mocka um *service* (bootstrap mocka `caixinha.service`; `middleware.test` mocka `auth.service`) serviria o stub pros arquivos seguintes, que testariam o mock do vizinho em vez do módulo real. Como a ordem dos arquivos vem do walk do runner, isso passa numa máquina e quebra em outra — foi o que derrubou o CI no salto do Bun 1.2 → 1.3. A cobertura sai do merge dos lcov de cada processo.
   - Rodar `bun test server` direto (sem o runner) reintroduz o vazamento — use `bun run test:unit`, ou filtre um arquivo só: `bun test server/modules/caixinha`.
 - **Integração** (`bun run test:int`): `tests/integration/*.test.ts`, banco Postgres real + app Hono real via `app.request()`. Nada mockado: passa por `onError`, `requireAuth`, `requirePermission`, `zValidator`, services, repositories e Prisma.
   - `tests/setup/env.ts` é preload de **todos** os testes (`bunfig.toml`) e força `DATABASE_URL` pro banco de teste (`TEST_DATABASE_URL`, default `postgresql://postgres:postgres@localhost:5432/cofre_test`). O nome do banco precisa conter "test" — as suítes truncam todas as tabelas.

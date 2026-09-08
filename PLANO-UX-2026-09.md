@@ -643,17 +643,19 @@ Pontos de entrada: botão "Importar OFX" no header da seção "Despesas de {mês
 
 ## ETAPA 9 — Sweep final
 
-- [ ] `grep -rn '<input\|<select\|<textarea\|<option' components app App.jsx` → só dentro de `components/ui/`
-- [ ] `grep -rn '? err :' components` → 0
-- [ ] Toda rota nova aparece tipada no `financeApi.ts` (prova de que está na cadeia do `AppType`)
-- [ ] `bun run typecheck`
-- [ ] `bun run test:unit --coverage`
-- [ ] `bun run test:int`
-- [ ] `bun run lint`
-- [ ] `bun run build`
-- [ ] QA manual em 390px e desktop: 11 formulários, 3 seletores de mês, bulk bar, import, gráficos
-- [ ] `CLAUDE.md` atualizado: novos módulos (`lib/ofx.js`, `components/ui/fields.jsx`, hook de form), rotas em lote/import/resumo, semântica de `ReceitaMes.mes` como âncora
-- [ ] `.env.example` conferido (não deve mudar neste ciclo — se mudar, listar pendência manual)
+- [x] `grep -rn '<input\|<select\|<textarea\|<option' components app App.jsx` → só `components/ui/` + o `<input type="file">` do import OFX (escondido com `sr-only`; não existe outra forma de abrir o seletor de arquivo)
+- [x] `grep -rn '? err :' components` → 0
+- [x] Toda rota nova aparece tipada no `financeApi.ts` (typecheck verde = está na cadeia do `AppType`)
+- [x] `bun run typecheck`
+- [ ] `bun run test:unit --coverage` <!-- unit passa sem coverage; E7/E8 não ganharam testes por decisão do ciclo -->
+- [ ] `bun run test:int` <!-- 288 testes, 1 falha não investigada desde a E6 -->
+- [x] `bun run lint` (mesmos 10 erros pré-existentes de `react-hooks`, nenhum novo)
+- [x] `bunx next build` (o `prisma generate` do script `build` esbarra no engine travado pelo dev server em execução)
+- [ ] QA manual em 390px e desktop: 13 formulários, 2 seletores de mês, bulk bar, import, gráficos
+
+> **Pendências manuais deste ciclo**: subir o Postgres de dev (5434) e rodar `bun run prisma:push` (o schema ganhou `recorrente`/`mesFim`/`receita_mes_skip` e `despesas_mes.fitid` — foi aplicado só no banco de teste); `bun run prisma:generate` precisa do dev server parado no Windows (engine travado).
+- [x] `CLAUDE.md` atualizado: seção "Front — camadas próprias", rotas em lote/import/resumo e semântica de `ReceitaMes.mes` como âncora
+- [x] `.env.example` conferido — não mudou
 
 ---
 
