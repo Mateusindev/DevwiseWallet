@@ -390,17 +390,17 @@ Service (`orcamento.service.ts`):
 
 ### 5.4 Checklist E5
 
-- [ ] `bulkMesSchema`/`bulkFixaSchema` em `orcamento.dto.ts`
-- [ ] `bulkMes`/`bulkFixa` no service com checagem de dono + `assertVinculos` + `$transaction`
-- [ ] 2 rotas novas **dentro da cadeia** de `orcamentoRoutes`
-- [ ] `financeApi.ts` + reducer/actions em lote
-- [ ] Checkbox por linha + "selecionar todas" (indeterminado) + Shift+clique
-- [ ] `BulkBar` sticky com contagem e total
-- [ ] Ações: pagar/desfazer · excluir (com confirmação) · categoria · cartão · pausar/ativar
-- [ ] Seleção limpa ao trocar mês/espaço
-- [ ] Um único `reloadCartoes()` por operação
-- [ ] Testes de integração e unit da §5.3
-- [ ] Gate verde
+- [x] `bulkMesSchema`/`bulkFixaSchema` em `orcamento.dto.ts`
+- [x] `bulkMes`/`bulkFixa` no service com checagem de dono (`assertLoteCompleto`) + `assertVinculos`; escrita atômica por operação (`updateMany`/`deleteMany` são uma statement; `pagar` usa `$transaction`)
+- [x] 2 rotas novas **dentro da cadeia** de `orcamentoRoutes` (typecheck do `financeApi.ts` prova)
+- [x] `financeApi.ts` + reducer (`UPSERT_MANY_DF/DM`, `REMOVE_MANY_DF/DM`, `SET_PAGAMENTOS_FIXAS`) e actions `bulkMes`/`bulkFixas`
+- [x] Checkbox por linha + "todas" (indeterminado) + Shift+clique (`components/ui/useSelecao.js`)
+- [x] `BulkBar` no rodapé (portal + safe-area) com contagem, total, aviso e erro
+- [x] Ações: pagar/desfazer · excluir (com confirmação listando as linhas) · categoria · cartão · pausar/ativar
+- [x] Seleção limpa ao trocar mês/espaço (chave `${ym}:${espacoId}` no `useSelecao`)
+- [x] Um único `reloadCartoes()` por operação
+- [x] Testes de integração (`tests/integration/orcamento-bulk.test.ts`, 19 casos) e unit dos DTOs de lote
+- [x] Gate verde: typecheck ok · unit 20 arquivos ok · int 283 pass · build ok
 - [ ] QA mobile: `BulkBar` não cobre a última linha da lista (padding compensatório)
 
 **Aceite**: marcar 5 despesas e clicar "Pagar" quita as 5 em uma requisição; passar um id de outro dono não altera nada e responde 404.

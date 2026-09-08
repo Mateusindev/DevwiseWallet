@@ -3,6 +3,8 @@ import {
   addDespesaFixaSchema,
   addDespesaMesSchema,
   addReceitaMesSchema,
+  bulkFixaSchema,
+  bulkMesSchema,
   updateDespesaFixaSchema,
 } from "./orcamento.dto";
 
@@ -72,5 +74,42 @@ describe("data dentro do mês", () => {
   it("data do próprio mês passa, e sem data também", () => {
     expect(addDespesaMesSchema.safeParse({ mes: "2026-09", valor: 50, data: "2026-09-30" }).success).toBe(true);
     expect(addDespesaMesSchema.safeParse({ mes: "2026-09", valor: 50 }).success).toBe(true);
+  });
+});
+
+describe("schemas de lote", () => {
+  // uuid v4 de verdade: o zod v4 confere versão e variante
+  const ID = "11111111-1111-4111-8111-111111111111";
+
+  it("op=categoria sem categoriaId → issue em categoriaId", () => {
+    const r = bulkMesSchema.safeParse({ ids: [ID], op: "categoria" });
+    expect(r.success).toBe(false);
+    expect(erroDe(r, "categoriaId")).toBe("Escolha a categoria a aplicar");
+  });
+
+  it("categoriaId null é válido (tirar a categoria)", () => {
+    expect(bulkMesSchema.safeParse({ ids: [ID], op: "categoria", categoriaId: null }).success).toBe(true);
+  });
+
+  it("op=cartao sem cartaoId → issue em cartaoId", () => {
+    expect(erroDe(bulkMesSchema.safeParse({ ids: [ID], op: "cartao" }), "cartaoId")).toBe(
+      "Escolha o cartão a aplicar"
+    );
+  });
+
+  it("lista vazia ou acima de 200 ids → issue em ids", () => {
+    expect(erroDe(bulkMesSchema.safeParse({ ids: [], op: "pagar" }), "ids")).toBe(
+      "Selecione pelo menos uma linha"
+    );
+    const muitos = Array.from({ length: 201 }, () => ID);
+    expect(erroDe(bulkMesSchema.safeParse({ ids: muitos, op: "pagar" }), "ids")).toBe(
+      "No máximo 200 linhas por vez"
+    );
+  });
+
+  it("fixas exigem ym e aceitam ativar/pausar", () => {
+    expect(bulkFixaSchema.safeParse({ ids: [ID], op: "pausar" }).success).toBe(false);
+    expect(bulkFixaSchema.safeParse({ ids: [ID], op: "pausar", ym: "2026-09" }).success).toBe(true);
+    expect(bulkMesSchema.safeParse({ ids: [ID], op: "pausar" }).success).toBe(false);
   });
 });

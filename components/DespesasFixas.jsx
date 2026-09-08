@@ -3,8 +3,11 @@ import { createPortal } from "react-dom";
 import {
   Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2,
 } from "lucide-react";
-import { Card, Button, MoneyInput, Spinner, Modal } from "./ui/primitives.jsx";
-import { Checkbox, CheckboxField, MonthStepper } from "./ui/fields.jsx";
+import { Card, Button, Field, MoneyInput, Spinner, Modal } from "./ui/primitives.jsx";
+import { Checkbox, CheckboxField, FormError, MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
+import BulkBar, { BulkAcao } from "./BulkBar.jsx";
+import { useSelecao } from "./ui/useSelecao.js";
+import { mensagemDeErro } from "../lib/formErrors.js";
 import { DespesaFixaModal, DespesaMesModal, ReceitaMesModal, EspacoModal } from "./forms.jsx";
 import { fmtMoney, fmtMonthLabel, currentMonthKey } from "../lib/format.js";
 import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, janelaMeses, mesesComDados, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes } from "../lib/calc.js";
@@ -56,6 +59,7 @@ export default function DespesasFixas() {
     despesasFixas, despesasMes, receitasMes, rendasMensais, config,
     espacos, espacosOcultos, activeEspacoId, orcamentoStatus, cartoes, categorias, pagamentosFixas,
     setActiveEspaco, toggleDespesaFixa, removeDespesaFixa, removeDespesaMes, removeReceitaMes, setPagamentoFixa, setPagaMes,
+    bulkMes, bulkFixas,
   } = fin;
   const cartoesMap = useMemo(() => Object.fromEntries(cartoes.map((c) => [c.id, c])), [cartoes]);
   const categoriasMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
@@ -113,6 +117,53 @@ export default function DespesasFixas() {
   const fixasPagasCount = fixasNoMes.filter((d) => fixaPaga(pagamentosFixas, d, ym)).length;
   // falta = soma do que ainda resta em cada fixa (desconta pagamentos parciais).
   const faltaPagar = fixasNoMes.reduce((s, d) => s + fixaFaltaPagar(pagamentosFixas, d, ym), 0);
+
+  // ── Seleção em lote ───────────────────────────────────────────────────────
+  // Uma chave por mês+espaço: trocar de mês não pode deixar id antigo na
+  // seleção (a ação sairia com linha de outro mês).
+  const chaveSel = `${ym}:${activeEspacoId}`;
+  const selMes = useSelecao(useMemo(() => doMes.map((d) => d.id), [doMes]), chaveSel);
+  const selFixas = useSelecao(useMemo(() => fixasOrdenadas.map((d) => d.id), [fixasOrdenadas]), chaveSel);
+  const [loteBusy, setLoteBusy] = useState(false);
+  const [loteErr, setLoteErr] = useState("");
+  const [loteAviso, setLoteAviso] = useState("");
+  const [atribuir, setAtribuir] = useState(null); // "categoria" | "cartao"
+  const [alvoId, setAlvoId] = useState("");
+  const [delLote, setDelLote] = useState(false);
+
+  // As duas listas têm operações diferentes (fixa tem pausar/ativar, mês não),
+  // então a barra atende uma por vez: marcar numa limpa a outra.
+  const marcarMes = (id, shift) => { selFixas.limpar(); zerarFeedback(); selMes.toggle(id, shift); };
+  const marcarFixa = (id, shift) => { selMes.limpar(); zerarFeedback(); selFixas.toggle(id, shift); };
+  const alvoLote = selMes.quantos > 0 ? "mes" : selFixas.quantos > 0 ? "fixas" : null;
+  const linhasLote = alvoLote === "mes" ? doMes.filter((d) => selMes.tem(d.id)) : fixasOrdenadas.filter((d) => selFixas.tem(d.id));
+  const totalLote = linhasLote.reduce((soma, d) => soma + d.valor, 0);
+
+  function zerarFeedback() { setLoteErr(""); setLoteAviso(""); }
+  function limparLote() { selMes.limpar(); selFixas.limpar(); zerarFeedback(); }
+
+  async function aplicarLote(op, extra = {}) {
+    const ids = linhasLote.map((d) => d.id);
+    if (ids.length === 0) return;
+    setLoteBusy(true);
+    zerarFeedback();
+    try {
+      const r = alvoLote === "mes" ? await bulkMes({ ids, op, ...extra }) : await bulkFixas({ ids, op, ym, ...extra });
+      setAtribuir(null);
+      setDelLote(false);
+      // parcelada fora da janela do mês não tem o que pagar: some do lote e o
+      // usuário precisa saber que aquelas linhas ficaram como estavam.
+      if (r.ignoradas > 0) {
+        setLoteAviso(`${r.ignoradas} ${r.ignoradas === 1 ? "linha foi ignorada" : "linhas foram ignoradas"}: parcela fora deste mês.`);
+      } else {
+        limparLote();
+      }
+    } catch (e) {
+      setLoteErr(mensagemDeErro(e));
+    } finally {
+      setLoteBusy(false);
+    }
+  }
 
   const espacoAtivo = espacos.find((e) => e.id === activeEspacoId);
   const loading = orcamentoStatus === "loading";
@@ -225,12 +276,23 @@ export default function DespesasFixas() {
               Despesas de {fmtMonthLabel(ym)}
               <span className="ml-2 tnum text-sm font-normal text-slate-400">{fmtMoney(orc.variaveis)}</span>
             </h3>
-            {canOrc && (
-              <button onClick={() => setMesOpen(true)}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
-                <Plus size={15} /> Adicionar
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {canOrc && doMes.length > 0 && (
+                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                  <Checkbox checked={selMes.estadoTodos}
+                            onChecked={() => {}}
+                            onClick={() => { selFixas.limpar(); zerarFeedback(); selMes.toggleTodos(); }}
+                            aria-label="Selecionar todas as despesas do mês" />
+                  todas
+                </label>
+              )}
+              {canOrc && (
+                <button onClick={() => setMesOpen(true)}
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
+                  <Plus size={15} /> Adicionar
+                </button>
+              )}
+            </div>
           </div>
           <Card className="overflow-hidden">
             {doMes.length === 0 ? (
@@ -242,7 +304,12 @@ export default function DespesasFixas() {
                   const parcial = !pago && (d.valorPago || 0) > 0;
                   const falta = Math.max(d.valor - (d.valorPago || 0), 0);
                   return (
-                  <li key={d.id} className={`group flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 transition-colors sm:px-5 ${pago ? "bg-emerald-500/[0.06]" : parcial ? "bg-amber-500/[0.06]" : ""}`}>
+                  <li key={d.id} className={`group flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 transition-colors sm:px-5 ${selMes.tem(d.id) ? "bg-blue-500/[0.08]" : pago ? "bg-emerald-500/[0.06]" : parcial ? "bg-amber-500/[0.06]" : ""}`}>
+                    {canOrc && (
+                      <Checkbox checked={selMes.tem(d.id)} onChecked={() => {}}
+                                onClick={(e) => marcarMes(d.id, e.shiftKey)}
+                                aria-label={`Selecionar ${d.descricao}`} />
+                    )}
                     <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors ${pago ? "bg-emerald-500/15 text-emerald-400" : parcial ? "bg-amber-500/15 text-amber-400" : "bg-rose-500/15 text-rose-400"}`}>
                       {pago ? <Check size={16} /> : <ArrowUpRight size={16} />}
                     </span>
@@ -317,12 +384,23 @@ export default function DespesasFixas() {
                 </p>
               )}
             </div>
-            {canOrc && (
-              <button onClick={() => setFixaOpen(true)}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
-                <Plus size={15} /> Nova fixa
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {canOrc && fixasOrdenadas.length > 0 && (
+                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                  <Checkbox checked={selFixas.estadoTodos}
+                            onChecked={() => {}}
+                            onClick={() => { selMes.limpar(); zerarFeedback(); selFixas.toggleTodos(); }}
+                            aria-label="Selecionar todas as despesas fixas" />
+                  todas
+                </label>
+              )}
+              {canOrc && (
+                <button onClick={() => setFixaOpen(true)}
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
+                  <Plus size={15} /> Nova fixa
+                </button>
+              )}
+            </div>
           </div>
           <Card className="overflow-hidden">
             {fixasOrdenadas.length === 0 ? (
@@ -340,7 +418,12 @@ export default function DespesasFixas() {
                   const falta = fixaFaltaPagar(pagamentosFixas, d, ym);
                   return (
                     <li key={d.id}
-                      className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 transition-colors sm:px-5 ${!d.ativa ? "opacity-50" : ""} ${paga ? "bg-emerald-500/[0.06]" : parcial ? "bg-amber-500/[0.06]" : ""}`}>
+                      className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 transition-colors sm:px-5 ${!d.ativa ? "opacity-50" : ""} ${selFixas.tem(d.id) ? "bg-blue-500/[0.08]" : paga ? "bg-emerald-500/[0.06]" : parcial ? "bg-amber-500/[0.06]" : ""}`}>
+                      {canOrc && (
+                        <Checkbox checked={selFixas.tem(d.id)} onChecked={() => {}}
+                                  onClick={(e) => marcarFixa(d.id, e.shiftKey)}
+                                  aria-label={`Selecionar ${d.descricao}`} />
+                      )}
                       <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors ${paga ? "bg-emerald-500/15 text-emerald-400" : parcial ? "bg-amber-500/15 text-amber-400" : "bg-white/5 text-slate-400"}`}>
                         {paga ? <Check size={16} /> : <CalendarClock size={16} />}
                       </span>
@@ -397,7 +480,88 @@ export default function DespesasFixas() {
             )}
           </Card>
         </div>
+        {/* espaço pra última linha não ficar debaixo da BulkBar */}
+        {alvoLote && <div className="h-20" aria-hidden />}
       </div>{/* /conteúdo do orçamento */}
+
+      {canOrc && (
+        <BulkBar
+          quantos={linhasLote.length}
+          total={totalLote}
+          label={alvoLote === "mes" ? "selecionadas" : "fixas selecionadas"}
+          aviso={loteAviso}
+          erro={loteErr}
+          onLimpar={limparLote}
+        >
+          <BulkAcao tone="growth" disabled={loteBusy} onClick={() => aplicarLote("pagar")}>Pagar</BulkAcao>
+          <BulkAcao disabled={loteBusy} onClick={() => aplicarLote("despagar")}>Desfazer</BulkAcao>
+          <BulkAcao disabled={loteBusy} onClick={() => { setAlvoId(""); zerarFeedback(); setAtribuir("categoria"); }}>Categoria</BulkAcao>
+          <BulkAcao disabled={loteBusy} onClick={() => { setAlvoId(""); zerarFeedback(); setAtribuir("cartao"); }}>Cartão</BulkAcao>
+          {alvoLote === "fixas" && (
+            <>
+              <BulkAcao disabled={loteBusy} onClick={() => aplicarLote("pausar")}>Pausar</BulkAcao>
+              <BulkAcao disabled={loteBusy} onClick={() => aplicarLote("ativar")}>Ativar</BulkAcao>
+            </>
+          )}
+          <BulkAcao tone="danger" disabled={loteBusy} onClick={() => { zerarFeedback(); setDelLote(true); }}>Excluir</BulkAcao>
+        </BulkBar>
+      )}
+
+      <Modal open={!!atribuir} onClose={() => !loteBusy && setAtribuir(null)}
+             title={atribuir === "cartao" ? "Aplicar cartão" : "Aplicar categoria"}>
+        <div className="space-y-4">
+          <FormError>{loteErr}</FormError>
+          <Field label={atribuir === "cartao" ? "Cartão" : "Categoria"}
+                 hint={`Vai valer para as ${linhasLote.length} linhas selecionadas.`}>
+            <Select value={alvoId} onValue={setAlvoId}>
+              <SelectItem value="">{atribuir === "cartao" ? "Sem cartão (à vista / débito)" : "Sem categoria"}</SelectItem>
+              {(atribuir === "cartao" ? cartoes : categorias).map((x) => (
+                <SelectItem key={x.id} value={x.id}>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(x.cor).dot }} />
+                    {x.nome}
+                  </span>
+                </SelectItem>
+              ))}
+            </Select>
+          </Field>
+          {atribuir === "cartao" && alvoId === "" && alvoLote === "fixas" && (
+            <p className="text-xs text-amber-400">Tirar o cartão também tira o parcelamento das fixas selecionadas.</p>
+          )}
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" disabled={loteBusy} onClick={() => setAtribuir(null)}>Cancelar</Button>
+            <Button className="flex-1" loading={loteBusy}
+                    onClick={() => aplicarLote(atribuir, atribuir === "cartao" ? { cartaoId: alvoId || null } : { categoriaId: alvoId || null })}>
+              Aplicar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={delLote} onClose={() => !loteBusy && setDelLote(false)}
+             title={alvoLote === "fixas" ? "Excluir despesas fixas" : "Excluir despesas"}>
+        <div className="space-y-4">
+          <FormError>{loteErr}</FormError>
+          <p className="text-sm text-slate-300">
+            Excluir <b>{linhasLote.length}</b> {linhasLote.length === 1 ? "linha" : "linhas"} ·{" "}
+            <span className="tnum font-semibold text-white">{fmtMoney(totalLote)}</span>. Não dá pra desfazer.
+          </p>
+          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-xl bg-white/4 p-3 text-sm">
+            {linhasLote.map((d) => (
+              <li key={d.id} className="flex items-center justify-between gap-3">
+                <span className="truncate text-slate-300">{d.descricao}</span>
+                <span className="tnum shrink-0 text-slate-400">{fmtMoney(d.valor)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" disabled={loteBusy} onClick={() => setDelLote(false)}>Cancelar</Button>
+            <Button variant="danger" className="flex-1" loading={loteBusy} onClick={() => aplicarLote("excluir")}>
+              Excluir
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <DespesaFixaModal open={fixaOpen} onClose={() => setFixaOpen(false)} />
       <DespesaFixaModal open={!!editFixa} despesa={editFixa} onClose={() => setEditFixa(null)} />

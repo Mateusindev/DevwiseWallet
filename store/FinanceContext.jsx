@@ -160,6 +160,43 @@ function reducer(state, action) {
             : list,
       };
     }
+    // ── Lote ────────────────────────────────────────────────────────────────
+    // Um dispatch por operação (não um por linha): o React re-renderiza a lista
+    // inteira uma vez só.
+    case "UPSERT_MANY_DF": {
+      const porId = new Map(action.dfs.map((d) => [d.id, d]));
+      const atualizadas = state.despesasFixas.map((d) => porId.get(d.id) ?? d);
+      const novas = action.dfs.filter((d) => !state.despesasFixas.some((x) => x.id === d.id));
+      return { ...state, despesasFixas: [...atualizadas, ...novas] };
+    }
+    case "REMOVE_MANY_DF": {
+      const ids = new Set(action.ids);
+      return {
+        ...state,
+        despesasFixas: state.despesasFixas.filter((d) => !ids.has(d.id)),
+        pagamentosFixas: (state.pagamentosFixas || []).filter((p) => !ids.has(p.despesaFixaId)),
+      };
+    }
+    case "UPSERT_MANY_DM": {
+      const porId = new Map(action.dms.map((d) => [d.id, d]));
+      const atualizadas = state.despesasMes.map((d) => porId.get(d.id) ?? d);
+      const novas = action.dms.filter((d) => !state.despesasMes.some((x) => x.id === d.id));
+      return { ...state, despesasMes: [...atualizadas, ...novas] };
+    }
+    case "REMOVE_MANY_DM": {
+      const ids = new Set(action.ids);
+      return { ...state, despesasMes: state.despesasMes.filter((d) => !ids.has(d.id)) };
+    }
+    // Substitui os pagamentos daquelas fixas naquele mês: quem não voltou na
+    // lista foi desquitado.
+    case "SET_PAGAMENTOS_FIXAS": {
+      const ids = new Set(action.ids);
+      const outros = (state.pagamentosFixas || []).filter(
+        (p) => !(ids.has(p.despesaFixaId) && p.ym === action.ym)
+      );
+      return { ...state, pagamentosFixas: [...outros, ...action.pagamentos] };
+    }
+
     case "SET_RENDA":
       return { ...state, rendasMensais: { ...state.rendasMensais, [action.ym]: action.valor } };
     case "CLEAR_RENDA": {
@@ -368,6 +405,24 @@ export function FinanceProvider({ children }) {
       await api.removeDespesaFixa(esp, id);
       dispatch({ type: "REMOVE_DF", id });
       reloadCartoes();
+    },
+    // Lote de fixas. Um reloadCartoes no fim (não um por linha).
+    async bulkFixas(dto) {
+      const r = await api.bulkDespesasFixas(esp, dto);
+      if (r.removidos.length > 0) dispatch({ type: "REMOVE_MANY_DF", ids: r.removidos });
+      if (r.aplicadas.length > 0) dispatch({ type: "UPSERT_MANY_DF", dfs: r.aplicadas });
+      if (dto.op === "pagar" || dto.op === "despagar") {
+        dispatch({ type: "SET_PAGAMENTOS_FIXAS", ids: dto.ids, ym: dto.ym, pagamentos: r.pagamentos });
+      }
+      reloadCartoes();
+      return r;
+    },
+    async bulkMes(dto) {
+      const r = await api.bulkDespesasMes(esp, dto);
+      if (r.removidos.length > 0) dispatch({ type: "REMOVE_MANY_DM", ids: r.removidos });
+      if (r.aplicadas.length > 0) dispatch({ type: "UPSERT_MANY_DM", dms: r.aplicadas });
+      reloadCartoes();
+      return r;
     },
     async setPagamentoFixa(id, ym, valorPago) {
       const r = await api.setPagamentoFixa(esp, id, ym, valorPago);

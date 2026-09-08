@@ -104,6 +104,36 @@ export const updateReceitaMesSchema = z.object({
   data: ymd.optional(),
 });
 
+// ── Ações em lote ───────────────────────────────────────────────────────────
+// 200 ids por chamada: o lote existe pra evitar N requests, não pra virar job.
+const ids = z
+  .array(z.string().uuid("Id inválido"))
+  .min(1, "Selecione pelo menos uma linha")
+  .max(200, "No máximo 200 linhas por vez");
+
+const alvoLote = {
+  categoriaId: z.string().uuid().nullable().optional(),
+  cartaoId: z.string().uuid().nullable().optional(),
+};
+
+// `op: "categoria"` com `categoriaId` ausente ≠ com `categoriaId: null`: o
+// segundo é "tirar a categoria", o primeiro é payload incompleto.
+const temAlvo = (campo: "categoriaId" | "cartaoId", op: string) => (d: Record<string, unknown>) =>
+  d.op !== op || campo in d;
+
+const opsMes = ["pagar", "despagar", "excluir", "categoria", "cartao"] as const;
+const opsFixa = [...opsMes, "ativar", "pausar"] as const;
+
+export const bulkMesSchema = z
+  .object({ ids, op: z.enum(opsMes), ...alvoLote })
+  .refine(temAlvo("categoriaId", "categoria"), { message: "Escolha a categoria a aplicar", path: ["categoriaId"] })
+  .refine(temAlvo("cartaoId", "cartao"), { message: "Escolha o cartão a aplicar", path: ["cartaoId"] });
+
+export const bulkFixaSchema = z
+  .object({ ids, op: z.enum(opsFixa), ym, ...alvoLote })
+  .refine(temAlvo("categoriaId", "categoria"), { message: "Escolha a categoria a aplicar", path: ["categoriaId"] })
+  .refine(temAlvo("cartaoId", "cartao"), { message: "Escolha o cartão a aplicar", path: ["cartaoId"] });
+
 export const setRendaSchema = z.object({ valor });
 
 // Quanto foi pago (valor absoluto) de uma fixa/despesa do mês.
@@ -115,5 +145,7 @@ export type AddDespesaFixaDTO = z.infer<typeof addDespesaFixaSchema>;
 export type UpdateDespesaFixaDTO = z.infer<typeof updateDespesaFixaSchema>;
 export type AddDespesaMesDTO = z.infer<typeof addDespesaMesSchema>;
 export type UpdateDespesaMesDTO = z.infer<typeof updateDespesaMesSchema>;
+export type BulkMesDTO = z.infer<typeof bulkMesSchema>;
+export type BulkFixaDTO = z.infer<typeof bulkFixaSchema>;
 export type AddReceitaMesDTO = z.infer<typeof addReceitaMesSchema>;
 export type UpdateReceitaMesDTO = z.infer<typeof updateReceitaMesSchema>;

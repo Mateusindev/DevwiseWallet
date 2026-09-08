@@ -19,6 +19,59 @@ export const orcamentoRepository = {
     return prisma.despesaFixa.delete({ where: { id } });
   },
 
+  // ── Lote de fixas ────────────────────────────────────────────────────────
+  // O filtro é sempre espaço + dono; o service compara a contagem com os ids
+  // pedidos antes de escrever qualquer coisa.
+  findDespesasFixasByIds(ids: string[], userId: string, espacoId: string) {
+    return prisma.despesaFixa.findMany({ where: { id: { in: ids }, espacoId, espaco: { userId } } });
+  },
+  updateManyDespesaFixa(ids: string[], data: Prisma.DespesaFixaUncheckedUpdateManyInput) {
+    return prisma.despesaFixa.updateMany({ where: { id: { in: ids } }, data });
+  },
+  deleteManyDespesaFixa(ids: string[]) {
+    return prisma.despesaFixa.deleteMany({ where: { id: { in: ids } } });
+  },
+  // Um upsert por fixa (o valor pago é o valor dela), tudo ou nada.
+  upsertPagamentosFixas(espacoId: string, ym: string, linhas: { id: string; valorPago: number }[]) {
+    return prisma.$transaction(
+      linhas.map((l) =>
+        prisma.pagamentoFixa.upsert({
+          where: { despesaFixaId_ym: { despesaFixaId: l.id, ym } },
+          create: { espacoId, despesaFixaId: l.id, ym, valorPago: l.valorPago },
+          update: { valorPago: l.valorPago },
+        })
+      )
+    );
+  },
+  deletePagamentosFixas(ids: string[], ym: string) {
+    return prisma.pagamentoFixa.deleteMany({ where: { despesaFixaId: { in: ids }, ym } });
+  },
+  findPagamentosFixasByIds(ids: string[], ym: string) {
+    return prisma.pagamentoFixa.findMany({ where: { despesaFixaId: { in: ids }, ym } });
+  },
+
+  // ── Lote de despesas do mês ──────────────────────────────────────────────
+  findDespesasMesByIds(ids: string[], userId: string, espacoId: string) {
+    return prisma.despesaMes.findMany({ where: { id: { in: ids }, espacoId, espaco: { userId } } });
+  },
+  updateManyDespesaMes(ids: string[], data: Prisma.DespesaMesUncheckedUpdateManyInput) {
+    return prisma.despesaMes.updateMany({ where: { id: { in: ids } }, data });
+  },
+  deleteManyDespesaMes(ids: string[]) {
+    return prisma.despesaMes.deleteMany({ where: { id: { in: ids } } });
+  },
+  // "Pagar" é por linha: cada uma quita pelo próprio valor.
+  pagarDespesasMes(linhas: { id: string; valor: number }[]) {
+    return prisma.$transaction(
+      linhas.map((l) =>
+        prisma.despesaMes.update({
+          where: { id: l.id },
+          data: { valorPago: l.valor, paga: l.valor > 0 },
+        })
+      )
+    );
+  },
+
   // ── Pagamentos de fixas (quanto pago por mês) ────────────────────────────
   findPagamentoFixa(despesaFixaId: string, ym: string) {
     return prisma.pagamentoFixa.findUnique({ where: { despesaFixaId_ym: { despesaFixaId, ym } } });

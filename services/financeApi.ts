@@ -222,6 +222,14 @@ export async function setPagamentoFixa(espacoId: string, id: string, ym: string,
   );
 }
 
+// Ação em lote nas fixas: pagar/despagar (no mês `ym`), excluir, categoria,
+// cartão, ativar/pausar. Uma requisição, transação no back.
+export async function bulkDespesasFixas(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["fixas"]["bulk"]["$post"]>) {
+  return unwrap(
+    client.api.despesas.espacos[":esp"].fixas.bulk.$post({ param: { esp: espacoId }, json: dto })
+  );
+}
+
 // ── Renda do mês (por espaço) ─────────────────────────────────────────────────
 export async function setRendaMes(espacoId: string, ym: string, valor: number) {
   return unwrap(
@@ -252,6 +260,13 @@ export async function updateDespesaMes(espacoId: string, id: string, patch: Body
 
 export async function removeDespesaMes(espacoId: string, id: string) {
   return unwrap(client.api.despesas.espacos[":esp"].mes[":id"].$delete({ param: { esp: espacoId, id } }));
+}
+
+// Ação em lote nas despesas do mês: pagar/despagar, excluir, categoria, cartão.
+export async function bulkDespesasMes(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["mes"]["bulk"]["$post"]>) {
+  return unwrap(
+    client.api.despesas.espacos[":esp"].mes.bulk.$post({ param: { esp: espacoId }, json: dto })
+  );
 }
 
 // Define quanto pago de uma despesa do mês (valor absoluto) -> despesa atualizada.

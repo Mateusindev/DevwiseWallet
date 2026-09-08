@@ -3,6 +3,8 @@ import { zValidator } from "@/server/lib/validator";
 import { requirePermission, type AuthEnv } from "@/server/auth/middleware";
 import { orcamentoService } from "./orcamento.service";
 import {
+  bulkFixaSchema,
+  bulkMesSchema,
   addDespesaFixaSchema,
   updateDespesaFixaSchema,
   addDespesaMesSchema,
@@ -57,6 +59,11 @@ export const orcamentoRoutes = new Hono<AuthEnv>()
       await orcamentoService.removeDespesaFixa(c.get("user").id, c.req.param("esp"), c.req.param("id"))
     )
   )
+  // lote: precisa vir antes de nada? não — a rota é literal, mas tem que estar
+  // DENTRO da cadeia, senão não existe pro client RPC.
+  .post(`${base}/fixas/bulk`, manage, zValidator("json", bulkFixaSchema), async (c) =>
+    c.json(await orcamentoService.bulkFixa(c.get("user").id, c.req.param("esp"), c.req.valid("json")))
+  )
 
   // ── Renda do mês ─────────────────────────────────────────────────────────
   .put(`${base}/rendas/:ym`, manage, zValidator("json", setRendaSchema), async (c) => {
@@ -106,6 +113,9 @@ export const orcamentoRoutes = new Hono<AuthEnv>()
     c.json(
       await orcamentoService.removeDespesaMes(c.get("user").id, c.req.param("esp"), c.req.param("id"))
     )
+  )
+  .post(`${base}/mes/bulk`, manage, zValidator("json", bulkMesSchema), async (c) =>
+    c.json(await orcamentoService.bulkMes(c.get("user").id, c.req.param("esp"), c.req.valid("json")))
   )
 
   // ── Receitas do mês ──────────────────────────────────────────────────────

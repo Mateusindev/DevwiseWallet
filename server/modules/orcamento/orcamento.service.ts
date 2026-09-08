@@ -4,8 +4,10 @@ import { espacoService } from "../espaco/espaco.service";
 import { cartaoService } from "../cartao/cartao.service";
 import { categoriaService } from "../categoria/categoria.service";
 import { AppError, NotFoundError } from "@/server/lib/errors";
-import { num, isoDate, parseDate, round, parcelaView, parcelaWrite, currentMonth } from "@/server/lib/serialize";
+import { num, isoDate, parseDate, round, parcelaAtivaNoMes, parcelaView, parcelaWrite, currentMonth } from "@/server/lib/serialize";
 import type {
+  BulkFixaDTO,
+  BulkMesDTO,
   AddDespesaFixaDTO,
   UpdateDespesaFixaDTO,
   AddDespesaMesDTO,
@@ -39,6 +41,15 @@ async function assertVinculos(
 ) {
   if (dto.cartaoId) await cartaoService.getOrThrow(userId, dto.cartaoId);
   if (dto.categoriaId) await categoriaService.getOrThrow(userId, dto.categoriaId);
+}
+
+// Lote é tudo ou nada: um id que não é do dono (ou não é do espaço) derruba a
+// operação inteira ANTES de qualquer escrita. 404 e não 403, como no getOrThrow.
+function assertLoteCompleto<T>(encontradas: T[], ids: string[], label: string) {
+  const pedidos = new Set(ids);
+  if (encontradas.length !== pedidos.size) {
+    throw new NotFoundError(`${label} não encontrada em algum id do lote`);
+  }
 }
 
 function fixaView(d: DespesaFixa) {
@@ -192,6 +203,87 @@ export const orcamentoService = {
     assertPertence(found, espacoId, "Despesa do mês", id);
     await orcamentoRepository.deleteDespesaMes(id);
     return { id };
+  },
+
+  // Aplica uma operação em várias despesas do mês numa só requisição.
+  //   pagar/despagar · excluir · categoria · cartao
+  // Sem isso o front faria N requests (e N reloadCartoes) e poderia parar no meio.
+  async bulkMes(userId: string, espacoId: string, dto: BulkMesDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
+    const linhas = await orcamentoRepository.findDespesasMesByIds(dto.ids, userId, espacoId);
+    assertLoteCompleto(linhas, dto.ids, "Despesa do mês");
+    await assertVinculos(userId, dto);
+
+    const ids = linhas.map((l) => l.id);
+    if (dto.op === "excluir") {
+      await orcamentoRepository.deleteManyDespesaMes(ids);
+      return { op: dto.op, aplicadas: [], removidos: ids, ignoradas: 0 };
+    }
+    if (dto.op === "pagar") {
+      await orcamentoRepository.pagarDespesasMes(linhas.map((l) => ({ id: l.id, valor: num(l.valor) })));
+    } else if (dto.op === "despagar") {
+      await orcamentoRepository.updateManyDespesaMes(ids, { valorPago: 0, paga: false });
+    } else if (dto.op === "categoria") {
+      await orcamentoRepository.updateManyDespesaMes(ids, { categoriaId: dto.categoriaId ?? null });
+    } else {
+      await orcamentoRepository.updateManyDespesaMes(ids, { cartaoId: dto.cartaoId ?? null });
+    }
+    const atualizadas = await orcamentoRepository.findDespesasMesByIds(ids, userId, espacoId);
+    return { op: dto.op, aplicadas: atualizadas.map(mesView), removidos: [], ignoradas: 0 };
+  },
+
+  // Idem para as fixas. `ym` importa: pagar/despagar mexem no PagamentoFixa do
+  // mês, e parcelada fora da janela do mês é ignorada (não há o que pagar).
+  async bulkFixa(userId: string, espacoId: string, dto: BulkFixaDTO) {
+    await espacoService.getOrThrow(userId, espacoId);
+    const linhas = await orcamentoRepository.findDespesasFixasByIds(dto.ids, userId, espacoId);
+    assertLoteCompleto(linhas, dto.ids, "Despesa fixa");
+    await assertVinculos(userId, dto);
+
+    const ids = linhas.map((l) => l.id);
+    if (dto.op === "excluir") {
+      await orcamentoRepository.deleteManyDespesaFixa(ids);
+      return { op: dto.op, aplicadas: [], removidos: ids, ignoradas: 0, pagamentos: [] };
+    }
+
+    let ignoradas = 0;
+    if (dto.op === "pagar" || dto.op === "despagar") {
+      const noMes = linhas.filter((l) => parcelaAtivaNoMes(l, dto.ym));
+      ignoradas = linhas.length - noMes.length;
+      const idsNoMes = noMes.map((l) => l.id);
+      if (dto.op === "pagar") {
+        const aPagar = noMes
+          .map((l) => ({ id: l.id, valorPago: num(l.valor) }))
+          .filter((l) => l.valorPago > 0);
+        ignoradas += idsNoMes.length - aPagar.length;
+        if (aPagar.length > 0) await orcamentoRepository.upsertPagamentosFixas(espacoId, dto.ym, aPagar);
+      } else if (idsNoMes.length > 0) {
+        await orcamentoRepository.deletePagamentosFixas(idsNoMes, dto.ym);
+      }
+      const pagos = await orcamentoRepository.findPagamentosFixasByIds(ids, dto.ym);
+      return {
+        op: dto.op,
+        aplicadas: linhas.filter((l) => idsNoMes.includes(l.id)).map(fixaView),
+        removidos: [],
+        ignoradas,
+        // o front precisa do estado final do mês: quem saiu da lista foi desquitado
+        pagamentos: pagos.map((p) => ({ despesaFixaId: p.despesaFixaId, ym: p.ym, valorPago: num(p.valorPago) })),
+      };
+    }
+
+    if (dto.op === "categoria") {
+      await orcamentoRepository.updateManyDespesaFixa(ids, { categoriaId: dto.categoriaId ?? null });
+    } else if (dto.op === "cartao") {
+      // tirar o cartão tira o parcelamento junto: parcela é do cartão nesse fluxo
+      const data = dto.cartaoId
+        ? { cartaoId: dto.cartaoId }
+        : { cartaoId: null, parcelado: false, parcelaAtual: null, totalParcelas: null, parcelaMesRef: null };
+      await orcamentoRepository.updateManyDespesaFixa(ids, data);
+    } else {
+      await orcamentoRepository.updateManyDespesaFixa(ids, { ativa: dto.op === "ativar" });
+    }
+    const atualizadas = await orcamentoRepository.findDespesasFixasByIds(ids, userId, espacoId);
+    return { op: dto.op, aplicadas: atualizadas.map(fixaView), removidos: [], ignoradas: 0, pagamentos: [] };
   },
 
   // Define quanto foi pago de uma despesa do mês (valor absoluto). paga = pago >= valor.
