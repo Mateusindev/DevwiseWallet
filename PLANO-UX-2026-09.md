@@ -273,13 +273,13 @@ Testes em `lib/calc.test.js`: 12→19, 25→1, 28→4, 1→8, e o inverso; entra
 
 ### 3.4 Checklist E3
 
-- [ ] `diaMaisDias`/`sugereVencimento`/`sugereFechamento` em `lib/calc.js` + testes
-- [ ] `DayInput` com prop `suggestion` (linha clicável)
-- [ ] `CartaoModal`: fechamento → sugere vencimento (+7)
-- [ ] `CartaoModal`: vencimento → sugere fechamento (−7) quando fechamento vazio
-- [ ] Sugestão **nunca** sobrescreve campo tocado
-- [ ] `DespesaFixaModal`: cartão escolhido sugere o dia de vencimento dele
-- [ ] Gate verde
+- [x] `diaMaisDias`/`sugereVencimento`/`sugereFechamento` em `lib/calc.js` + testes
+- [x] `DayInput` com prop `suggestion` (linha clicável) — saiu já na E1
+- [x] `CartaoModal`: fechamento → sugere vencimento (+7)
+- [x] `CartaoModal`: vencimento → sugere fechamento (−7) quando fechamento vazio
+- [x] Sugestão **nunca** sobrescreve campo tocado (`touched` do `useFormState`; escrita automática usa `patch(p, { marcarTocado: false })`)
+- [x] `DespesaFixaModal`: cartão escolhido sugere o dia de vencimento dele
+- [x] Gate verde: typecheck ok · unit 20 arquivos ok · int 264 pass · build ok
 
 **Aceite**: digitar `12` no fechamento preenche `19` no vencimento com hint de sugestão; alterar para `20` e voltar ao fechamento para `15` **não** mexe mais no vencimento.
 

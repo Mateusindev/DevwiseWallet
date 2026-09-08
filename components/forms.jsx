@@ -5,7 +5,7 @@ import { Select, SelectItem, CheckboxField, NumberInput, DayInput, DateInput, Fo
 import { useFormState } from "./ui/useFormState.js";
 import { dataValida, texto } from "../lib/formErrors.js";
 import { fmtMoney, todayISO } from "../lib/format.js";
-import { acento, parcelaInfo } from "../lib/calc.js";
+import { acento, parcelaInfo, sugereFechamento, sugereVencimento } from "../lib/calc.js";
 import { useAuth } from "./AuthGate";
 
 // Regras que repetem em quase todo form daqui.
@@ -21,7 +21,7 @@ const exigeData = (v, mes) => {
 
 // ── Bloco compartilhado: vincular cartão (+ parcelamento, só fixas) ───────────
 // `f`/`set` = estado do form. `comParcela` liga os campos de parcela (fixas).
-function CartaoParcelaFields({ f, set, errors = {}, comParcela = true }) {
+function CartaoParcelaFields({ f, set, errors = {}, comParcela = true, onPickCartao }) {
   const { cartoes } = useFinance();
   return (
     <>
@@ -30,7 +30,10 @@ function CartaoParcelaFields({ f, set, errors = {}, comParcela = true }) {
           name="cartaoId"
           value={f.cartaoId || ""}
           // limpa parcelamento se tirar o cartão
-          onValue={(cartaoId) => set({ cartaoId, ...(cartaoId ? {} : { parcelado: false }) })}
+          onValue={(cartaoId) => {
+            set({ cartaoId, ...(cartaoId ? {} : { parcelado: false }) });
+            onPickCartao?.(cartoes.find((c) => c.id === cartaoId) || null);
+          }}
         >
           <SelectItem value="">Sem cartão (à vista / débito)</SelectItem>
           {cartoes.map((c) => (
@@ -257,7 +260,7 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
 
 // ── Despesa fixa (recorrente) ────────────────────────────────────────────────
 export function DespesaFixaModal({ open, onClose, despesa }) {
-  const { addDespesaFixa, updateDespesaFixa } = useFinance();
+  const { addDespesaFixa, updateDespesaFixa, cartoes } = useFinance();
   const editing = !!despesa;
   const init = () => {
     if (!despesa) return { descricao: "", valor: 0, diaVencimento: 5, cartaoId: "", categoriaId: "", nota: "", parcelado: false, parcelaAtual: 1, totalParcelas: null };
@@ -270,7 +273,7 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
       totalParcelas: despesa.totalParcelas ?? null,
     };
   };
-  const { f, set, patch, errors, formError, touch, submitting, submit, reset } = useFormState(
+  const { f, set, patch, errors, formError, touch, touched, submitting, submit, reset } = useFormState(
     init,
     (f) => ({
       descricao: texto(f.descricao, { obrigatorio: true, max: 120, campo: "A descrição" }),
@@ -289,6 +292,12 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
 
   function close() { reset(); onClose(); }
 
+  // Fixa no cartão costuma vencer com a fatura: sugere o dia dele enquanto o
+  // usuário não tiver mexido no campo.
+  const cartaoSel = cartoes.find((c) => c.id === f.cartaoId);
+  const vencimentoDoCartao =
+    !touched.has("diaVencimento") && cartaoSel?.diaVencimento === f.diaVencimento ? cartaoSel : null;
+
   return (
     <Modal open={open} onClose={close} title={editing ? "Editar despesa fixa" : "Nova despesa fixa"}>
       <form onSubmit={submit} className="space-y-4" noValidate>
@@ -301,12 +310,21 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
           <Field label={f.parcelado ? "Valor da parcela" : "Valor mensal"} required error={errors.valor}>
             <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} onBlur={() => touch("valor")} />
           </Field>
-          <Field label="Dia do vencimento" required hint="1 a 31" error={errors.diaVencimento}>
-            <DayInput name="diaVencimento" value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)} allowEmpty />
+          <Field label="Dia do vencimento" required error={errors.diaVencimento}
+                 hint={vencimentoDoCartao ? `vence com a fatura do ${vencimentoDoCartao.nome}` : "1 a 31"}>
+            <DayInput name="diaVencimento" value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)}
+                      suggestion={cartaoSel?.diaVencimento ?? null} allowEmpty />
           </Field>
         </div>
         <CategoriaField f={f} set={set} />
-        <CartaoParcelaFields f={f} set={patch} errors={errors} />
+        <CartaoParcelaFields
+          f={f} set={patch} errors={errors}
+          onPickCartao={(c) => {
+            if (c?.diaVencimento && !touched.has("diaVencimento")) {
+              patch({ diaVencimento: c.diaVencimento }, { marcarTocado: false });
+            }
+          }}
+        />
         <Field label="Nota" hint="observação livre — opcional" error={errors.nota}>
           <Textarea name="nota" value={f.nota} placeholder="Detalhes, lembrete, referência…"
                     onChange={(e) => set("nota", e.target.value)} />
@@ -633,7 +651,7 @@ export function CartaoModal({ open, onClose, cartao }) {
           diaFechamento: cartao.diaFechamento ?? null, diaVencimento: cartao.diaVencimento, cor: cartao.cor,
         }
       : { nome: "", bandeira: "", limite: 0, diaFechamento: null, diaVencimento: 10, cor: "violet" };
-  const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
+  const { f, set, patch, errors, formError, touch, touched, submitting, submit, reset } = useFormState(
     init,
     (f) => ({
       nome: texto(f.nome, { obrigatorio: true, max: 60, campo: "O nome" }),
@@ -658,6 +676,25 @@ export function CartaoModal({ open, onClose, cartao }) {
 
   function close() { reset(); onClose(); }
 
+  // A fatura vence ~7 dias depois de fechar. Preencher um lado preenche o outro,
+  // mas só enquanto o usuário não tiver mexido nele (`touched`).
+  function mudaFechamento(v) {
+    set("diaFechamento", v);
+    if (v != null && !touched.has("diaVencimento")) {
+      patch({ diaVencimento: sugereVencimento(v) }, { marcarTocado: false });
+    }
+  }
+  function mudaVencimento(v) {
+    set("diaVencimento", v);
+    if (v != null && f.diaFechamento == null && !touched.has("diaFechamento")) {
+      patch({ diaFechamento: sugereFechamento(v) }, { marcarTocado: false });
+    }
+  }
+  const sugestaoVencimento = f.diaFechamento != null ? sugereVencimento(f.diaFechamento) : null;
+  const sugestaoFechamento = f.diaVencimento != null ? sugereFechamento(f.diaVencimento) : null;
+  const vencimentoSugerido = !touched.has("diaVencimento") && f.diaVencimento === sugestaoVencimento;
+  const fechamentoSugerido = !touched.has("diaFechamento") && f.diaFechamento === sugestaoFechamento;
+
   return (
     <Modal open={open} onClose={close} title={editing ? "Editar cartão" : "Novo cartão"}>
       <form onSubmit={submit} className="space-y-4" noValidate>
@@ -676,11 +713,15 @@ export function CartaoModal({ open, onClose, cartao }) {
           <MoneyInput name="limite" value={f.limite} onValue={(v) => set("limite", v)} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Dia do fechamento" hint="opcional" error={errors.diaFechamento}>
-            <DayInput name="diaFechamento" value={f.diaFechamento} onValue={(v) => set("diaFechamento", v)} allowEmpty />
+          <Field label="Dia do fechamento" error={errors.diaFechamento}
+                 hint={fechamentoSugerido ? "sugerido: 7 dias antes do vencimento — pode mudar" : "opcional"}>
+            <DayInput name="diaFechamento" value={f.diaFechamento} onValue={mudaFechamento}
+                      suggestion={sugestaoFechamento} allowEmpty />
           </Field>
-          <Field label="Dia do vencimento" required hint="1 a 31" error={errors.diaVencimento}>
-            <DayInput name="diaVencimento" value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)} allowEmpty />
+          <Field label="Dia do vencimento" required error={errors.diaVencimento}
+                 hint={vencimentoSugerido ? "sugerido: 7 dias após o fechamento — pode mudar" : "1 a 31"}>
+            <DayInput name="diaVencimento" value={f.diaVencimento} onValue={mudaVencimento}
+                      suggestion={sugestaoVencimento} allowEmpty />
           </Field>
         </div>
         <Field label="Cor">

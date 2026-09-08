@@ -15,6 +15,9 @@ export function useFormState(init, validar, salvar) {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Campos em que o usuário já mexeu — é o que impede uma sugestão automática
+  // (ex: vencimento = fechamento + 7) de sobrescrever escolha dele.
+  const [touched, setTouched] = useState(() => new Set());
 
   const limpar = (campos) =>
     setErrors((e) => {
@@ -24,12 +27,24 @@ export function useFormState(init, validar, salvar) {
       return next;
     });
 
+  const marcar = (campos) =>
+    setTouched((t) => {
+      if (campos.every((k) => t.has(k))) return t;
+      const next = new Set(t);
+      for (const k of campos) next.add(k);
+      return next;
+    });
+
   // Editar um campo apaga o erro dele (e o banner) — o texto velho não pode
-  // sobreviver à correção.
-  const patch = (p) => {
-    setForm({ ...f, ...p });
+  // sobreviver à correção. `marcarTocado: false` é pra escrita automática
+  // (sugestão), que não conta como "o usuário mexeu".
+  // Atualização funcional de propósito: dois patches no mesmo handler (mexer no
+  // fechamento também sugere o vencimento) não podem partir do mesmo snapshot.
+  const patch = (p, { marcarTocado = true } = {}) => {
+    setForm((prev) => ({ ...(prev ?? init()), ...p }));
     limpar(Object.keys(p));
     setFormError("");
+    if (marcarTocado) marcar(Object.keys(p));
   };
   const set = (k, v) => patch({ [k]: v });
 
@@ -37,6 +52,7 @@ export function useFormState(init, validar, salvar) {
 
   // Valida no blur: erro aparece assim que o usuário sai do campo, não só no submit.
   const touch = (k) => {
+    marcar([k]);
     const erro = soErros(validar(f))[k];
     setErrors((e) => (erro ? { ...e, [k]: erro } : e));
   };
@@ -51,6 +67,7 @@ export function useFormState(init, validar, salvar) {
     setForm(null);
     setErrors({});
     setFormError("");
+    setTouched(new Set());
   }
 
   async function submit(e) {
@@ -60,6 +77,7 @@ export function useFormState(init, validar, salvar) {
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       setFormError("");
+      marcar(Object.keys(f));
       focarPrimeiro(formEl, Object.keys(errs)[0]);
       return false;
     }
@@ -83,7 +101,7 @@ export function useFormState(init, validar, salvar) {
     }
   }
 
-  return { f, set, patch, errors, formError, setFormError, touch, validateNow, submitting, submit, reset };
+  return { f, set, patch, errors, formError, setFormError, touch, touched, validateNow, submitting, submit, reset };
 }
 
 // `name` do campo é o que liga a mensagem ao controle — vale pro input nativo,
