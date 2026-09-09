@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useFinance } from "../store/FinanceContext.jsx";
-import { Modal, Field, TextInput, Textarea, MoneyInput, PercentInput, Button } from "./ui/primitives.jsx";
+import { Modal, Field, TextInput, Textarea, MoneyInput, PercentInput, Button, inputBase } from "./ui/primitives.jsx";
 import { Select, SelectItem, CheckboxField, NumberInput, DayInput, DateInput, MonthSelect, FormError } from "./ui/fields.jsx";
 import { useFormState } from "./ui/useFormState.js";
 import { dataValida, texto } from "../lib/formErrors.js";
@@ -138,8 +138,20 @@ function Acoes({ onCancel, submitting, variant = "primary", children }) {
   );
 }
 
+// Caixinha travada: o modal foi aberto a partir de um card, não há o que escolher.
+function CaixinhaFixa({ label, caixinha, sufixo }) {
+  return (
+    <Field label={label}>
+      <div className={`${inputBase} flex items-center gap-2 text-slate-300`}>
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: acento(caixinha.cor).dot }} />
+        <span className="truncate">{caixinha.nome}{sufixo}</span>
+      </div>
+    </Field>
+  );
+}
+
 // ── Aporte ──────────────────────────────────────────────────────────────────
-export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
+export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId, lockCaixinha }) {
   const { addAporte } = useFinance();
   const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
     () => ({ caixinhaId: defaultCaixinhaId || caixinhas[0]?.id || "", valor: 0, descricao: "", data: todayISO() }),
@@ -161,18 +173,22 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
     <Modal open={open} onClose={close} title="Registrar aporte">
       <form onSubmit={submit} className="space-y-4" noValidate>
         <FormError>{formError}</FormError>
-        <Field label="Caixinha" required error={errors.caixinhaId}>
-          <Select name="caixinhaId" value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
-            {caixinhas.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
-                  {c.nome}
-                </span>
-              </SelectItem>
-            ))}
-          </Select>
-        </Field>
+        {lockCaixinha && cx ? (
+          <CaixinhaFixa label="Caixinha" caixinha={cx} />
+        ) : (
+          <Field label="Caixinha" required error={errors.caixinhaId}>
+            <Select name="caixinhaId" value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
+              {caixinhas.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+                    {c.nome}
+                  </span>
+                </SelectItem>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="Valor" required error={errors.valor}
                hint={sugestao ? `Aporte mensal planejado: ${fmtMoney(sugestao)}` : ""}>
           <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)}
@@ -200,7 +216,7 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
 }
 
 // ── Despesa variável (deduz da caixinha) ─────────────────────────────────────
-export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinhaId }) {
+export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinhaId, lockCaixinha }) {
   const { addDespesaVariavel } = useFinance();
   const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
     () => ({ caixinhaId: defaultCaixinhaId || caixinhas[0]?.id || "", valor: 0, descricao: "", data: todayISO() }),
@@ -221,18 +237,22 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
     <Modal open={open} onClose={close} title="Registrar despesa">
       <form onSubmit={submit} className="space-y-4" noValidate>
         <FormError>{formError}</FormError>
-        <Field label="Debitar da caixinha" required error={errors.caixinhaId}>
-          <Select name="caixinhaId" value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
-            {caixinhas.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
-                  {c.nome} — saldo {fmtMoney(c.saldo)}
-                </span>
-              </SelectItem>
-            ))}
-          </Select>
-        </Field>
+        {lockCaixinha && cx ? (
+          <CaixinhaFixa label="Debitar da caixinha" caixinha={cx} sufixo={` — saldo ${fmtMoney(cx.saldo)}`} />
+        ) : (
+          <Field label="Debitar da caixinha" required error={errors.caixinhaId}>
+            <Select name="caixinhaId" value={f.caixinhaId} onValue={(v) => set("caixinhaId", v)} placeholder="Selecione…">
+              {caixinhas.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+                    {c.nome} — saldo {fmtMoney(c.saldo)}
+                  </span>
+                </SelectItem>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="Valor" required error={errors.valor}
                hint={cx ? `Saldo disponível: ${fmtMoney(cx.saldo)}` : ""}>
           <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)}

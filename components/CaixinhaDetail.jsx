@@ -162,8 +162,8 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
         )}
       </div>
 
-      <AporteModal open={aporteOpen} onClose={() => setAporteOpen(false)} caixinhas={[caixinha]} defaultCaixinhaId={caixinha.id} />
-      <DespesaVariavelModal open={despesaOpen} onClose={() => setDespesaOpen(false)} caixinhas={[caixinha]} defaultCaixinhaId={caixinha.id} />
+      <AporteModal open={aporteOpen} onClose={() => setAporteOpen(false)} caixinhas={[caixinha]} defaultCaixinhaId={caixinha.id} lockCaixinha />
+      <DespesaVariavelModal open={despesaOpen} onClose={() => setDespesaOpen(false)} caixinhas={[caixinha]} defaultCaixinhaId={caixinha.id} lockCaixinha />
       <CaixinhaModal open={editOpen} onClose={() => setEditOpen(false)} caixinha={caixinha} />
 
       <Modal open={confirmDel} onClose={() => !delBusy && setConfirmDel(false)} title="Excluir caixinha">
