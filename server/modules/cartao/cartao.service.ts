@@ -1,4 +1,4 @@
-import type { Cartao, DespesaFixa } from "@prisma/client";
+import { Prisma, type Cartao, type DespesaFixa } from "@prisma/client";
 import { cartaoRepository } from "./cartao.repository";
 import { NotFoundError } from "@/server/lib/errors";
 import { num, round, currentMonth, effectiveParcela, parcelaAtivaNoMes, parcelaView } from "@/server/lib/serialize";
@@ -32,40 +32,43 @@ export function cartaoView(c: Cartao) {
   };
 }
 
+// Agregados de um cartão num mês, a partir das linhas JÁ carregadas. Puro de
+// propósito: é o que deixa a lista somar N cartões com 3 queries fixas em vez
+// de 3 por cartão.
+type LinhaFixa = Pick<DespesaFixa, "valor" | "parcelado" | "parcelaAtual" | "totalParcelas" | "parcelaMesRef">;
+
+export function agregadosDoCartao(
+  c: Cartao,
+  fixas: LinhaFixa[],
+  avulsas: { valor: Prisma.Decimal | number }[],
+  mes: string
+) {
+  // fixas: parcelada conta só dentro da janela (quitadas saem sozinhas); fixa normal sempre.
+  const fixasNoMes = fixas.reduce((s, d) => (parcelaAtivaNoMes(d, mes) ? s + num(d.valor) : s), 0);
+  // avulsas do mês não parcelam — somam direto.
+  const avulsasTotal = avulsas.reduce((s, d) => s + num(d.valor), 0);
+  const faturaMes = round(fixasNoMes + avulsasTotal);
+
+  // comprometido futuro = parcelas de fixas que ainda vão cair depois do mês visto
+  const comprometido = round(
+    fixas.reduce((s, d) => s + parcelasRestantes(d as DespesaFixa, mes) * num(d.valor), 0)
+  );
+
+  const limite = num(c.limite);
+  return {
+    ...cartaoView(c),
+    faturaMes,
+    comprometido,
+    disponivel: round(limite - faturaMes - comprometido),
+  };
+}
+
 export const cartaoService = {
   // 404 (não 403) quando o cartão é de outro dono — não vaza existência.
   async getOrThrow(userId: string, id: string): Promise<Cartao> {
     const c = await cartaoRepository.findById(id, userId);
     if (!c) throw new NotFoundError(`Cartão não encontrado: ${id}`);
     return c;
-  },
-
-  // Agregados de um cartão num mês: fatura do mês, comprometido futuro, disponível.
-  async withAggregates(c: Cartao, mes: string) {
-    const [fixasAtivas, avulsasMes, fixasParc] = await Promise.all([
-      cartaoRepository.fixasAtivasDoCartao(c.id),
-      cartaoRepository.avulsasDoCartaoNoMes(c.id, mes),
-      cartaoRepository.fixasParceladas(c.id),
-    ]);
-
-    // fixas: parcelada conta só dentro da janela (quitadas saem sozinhas); fixa normal sempre.
-    const fixasNoMes = fixasAtivas.reduce((s, d) => (parcelaAtivaNoMes(d, mes) ? s + num(d.valor) : s), 0);
-    // avulsas do mês não parcelam — somam direto.
-    const avulsasTotal = avulsasMes.reduce((s, d) => s + num(d.valor), 0);
-    const faturaMes = round(fixasNoMes + avulsasTotal);
-
-    // comprometido futuro = parcelas de fixas que ainda vão cair depois do mês visto
-    const comprometido = round(
-      fixasParc.reduce((s, d) => s + parcelasRestantes(d, mes) * num(d.valor), 0)
-    );
-
-    const limite = num(c.limite);
-    return {
-      ...cartaoView(c),
-      faturaMes,
-      comprometido,
-      disponivel: round(limite - faturaMes - comprometido),
-    };
   },
 
   // Linhas da fatura de um cartão no mês: fixas ativas na janela + avulsas do mês.
@@ -187,9 +190,30 @@ export const cartaoService = {
   },
 
   // Lista com agregados de um mês (default: mês corrente).
+  // 3 queries fixas — antes era 1 + 3N, e como quase toda mutação de despesa
+  // recarregava os cartões, o N+1 vinha de brinde a cada ação do usuário.
   async listWithAggregates(userId: string, mes = currentMonth()) {
-    const cartoes = await cartaoRepository.list(userId);
-    return Promise.all(cartoes.map((c) => this.withAggregates(c, mes)));
+    const [cartoes, fixas, avulsas] = await Promise.all([
+      cartaoRepository.list(userId),
+      cartaoRepository.fixasComCartaoDoUsuario(userId),
+      cartaoRepository.avulsasComCartaoNoIntervalo(userId, mes, mes),
+    ]);
+
+    const porCartao = <T extends { cartaoId: string | null }>(linhas: T[]) => {
+      const mapa = new Map<string, T[]>();
+      for (const l of linhas) {
+        const atual = mapa.get(l.cartaoId as string);
+        if (atual) atual.push(l);
+        else mapa.set(l.cartaoId as string, [l]);
+      }
+      return mapa;
+    };
+    const fixasPor = porCartao(fixas);
+    const avulsasPor = porCartao(avulsas);
+
+    return cartoes.map((c) =>
+      agregadosDoCartao(c, fixasPor.get(c.id) ?? [], avulsasPor.get(c.id) ?? [], mes)
+    );
   },
 
   async create(userId: string, dto: CreateCartaoDTO) {

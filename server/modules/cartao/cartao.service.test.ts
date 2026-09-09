@@ -6,7 +6,6 @@ type Row = Record<string, unknown>;
 const state: {
   fixas: Row[];
   avulsas: Row[];
-  parceladas: Row[];
   fixasComCartao: Row[];
   avulsasIntervalo: Row[];
   created: Row | null;
@@ -15,7 +14,6 @@ const state: {
 } = {
   fixas: [],
   avulsas: [],
-  parceladas: [],
   fixasComCartao: [],
   avulsasIntervalo: [],
   created: null,
@@ -62,21 +60,19 @@ mock.module("@/server/modules/cartao/cartao.repository", () => ({
     },
     fixasAtivasDoCartao: async () => state.fixas,
     avulsasDoCartaoNoMes: async () => state.avulsas,
-    fixasParceladas: async () => state.parceladas,
     fixasComCartaoDoUsuario: async () => state.fixasComCartao,
     avulsasComCartaoNoIntervalo: async (_u: string, de: string, ate: string) =>
       state.avulsasIntervalo.filter((d) => (d.mes as string) >= de && (d.mes as string) <= ate),
   },
 }));
 
-const { cartaoService, cartaoView } = await import("./cartao.service");
+const { cartaoService, cartaoView, agregadosDoCartao } = await import("./cartao.service");
 
 const U = "u-1";
 
 beforeEach(() => {
   state.fixas = [];
   state.avulsas = [];
-  state.parceladas = [];
   state.fixasComCartao = [];
   state.avulsasIntervalo = [];
   state.created = null;
@@ -84,65 +80,57 @@ beforeEach(() => {
   state.deleted = null;
 });
 
-describe("cartaoService.withAggregates", () => {
-  it("fatura = fixas ativas + avulsas do mês", async () => {
-    state.fixas = [fixa({ valor: 200 }), fixa({ id: "df-2", valor: 40 })];
-    state.avulsas = [{ valor: 250 }];
-    const v = await cartaoService.withAggregates(cartao as never, "2026-06");
+// Puro: recebe as linhas já carregadas (é o que deixa a lista somar N cartões
+// com 3 queries fixas). Uma parcelada está na MESMA lista das fixas ativas —
+// ela conta na fatura enquanto está na janela e no comprometido pelo que resta.
+describe("agregadosDoCartao", () => {
+  const ag = (fixas: Row[], avulsas: Row[], mes: string) =>
+    agregadosDoCartao(cartao as never, fixas as never, avulsas as never, mes);
+
+  it("fatura = fixas ativas + avulsas do mês", () => {
+    const v = ag([fixa({ valor: 200 }), fixa({ id: "df-2", valor: 40 })], [{ valor: 250 }], "2026-06");
     expect(v.faturaMes).toBe(490);
     expect(v.comprometido).toBe(0);
     expect(v.disponivel).toBe(8000 - 490);
   });
 
-  it("fixa parcelada fora da janela não entra na fatura", async () => {
+  it("fixa parcelada fora da janela não entra na fatura", () => {
     // 12/12 em 2026-06 → em 2026-07 já quitou
-    state.fixas = [fixa({ parcelado: true, parcelaAtual: 12, totalParcelas: 12, parcelaMesRef: "2026-06", valor: 100 })];
-    const v = await cartaoService.withAggregates(cartao as never, "2026-07");
-    expect(v.faturaMes).toBe(0);
+    const parc = fixa({ parcelado: true, parcelaAtual: 12, totalParcelas: 12, parcelaMesRef: "2026-06", valor: 100 });
+    expect(ag([parc], [], "2026-07").faturaMes).toBe(0);
   });
 
-  it("comprometido = parcelas restantes × valor", async () => {
+  it("comprometido = parcelas restantes × valor", () => {
     // parcela 3/12 em 2026-06 → restam 9 × 200 = 1800
     const parc = fixa({ parcelado: true, parcelaAtual: 3, totalParcelas: 12, parcelaMesRef: "2026-06", valor: 200 });
-    state.fixas = [parc];
-    state.parceladas = [parc];
-    const v = await cartaoService.withAggregates(cartao as never, "2026-06");
+    const v = ag([parc], [], "2026-06");
     expect(v.faturaMes).toBe(200);
     expect(v.comprometido).toBe(1800);
     expect(v.disponivel).toBe(8000 - 200 - 1800);
   });
 
-  it("comprometido auto-avança com o mês visto", async () => {
+  it("comprometido auto-avança com o mês visto", () => {
     const parc = fixa({ parcelado: true, parcelaAtual: 3, totalParcelas: 12, parcelaMesRef: "2026-06", valor: 200 });
-    state.parceladas = [parc];
-    const v = await cartaoService.withAggregates(cartao as never, "2026-08"); // efetiva 5 → restam 7
-    expect(v.comprometido).toBe(1400);
+    expect(ag([parc], [], "2026-08").comprometido).toBe(1400); // efetiva 5 → restam 7
   });
 
-  it("cartão sem lançamento nenhum: fatura 0 e disponível = limite", async () => {
-    const v = await cartaoService.withAggregates(cartao as never, "2026-06");
-    expect(v).toMatchObject({ faturaMes: 0, comprometido: 0, disponivel: 8000 });
+  it("cartão sem lançamento nenhum: fatura 0 e disponível = limite", () => {
+    expect(ag([], [], "2026-06")).toMatchObject({ faturaMes: 0, comprometido: 0, disponivel: 8000 });
   });
 
-  it("parcelamento já quitado não gera comprometido", async () => {
-    // 12/12 em 2026-06 → em 2026-07 restantes = 0
-    state.parceladas = [
-      fixa({ parcelado: true, parcelaAtual: 12, totalParcelas: 12, parcelaMesRef: "2026-06", valor: 100 }),
-    ];
-    expect((await cartaoService.withAggregates(cartao as never, "2026-07")).comprometido).toBe(0);
+  it("parcelamento já quitado não gera comprometido", () => {
+    const parc = fixa({ parcelado: true, parcelaAtual: 12, totalParcelas: 12, parcelaMesRef: "2026-06", valor: 100 });
+    expect(ag([parc], [], "2026-07").comprometido).toBe(0);
   });
 
-  it("estouro de limite deixa o disponível negativo (não clampa em 0)", async () => {
-    state.fixas = [fixa({ valor: 9000 })];
-    expect((await cartaoService.withAggregates(cartao as never, "2026-06")).disponivel).toBe(-1000);
+  it("estouro de limite deixa o disponível negativo (não clampa em 0)", () => {
+    expect(ag([fixa({ valor: 9000 })], [], "2026-06").disponivel).toBe(-1000);
   });
 
-  it("soma de centavos fica arredondada em 2 casas", async () => {
-    state.fixas = [fixa({ valor: 0.1 }), fixa({ id: "df-2", valor: 0.2 })];
-    expect((await cartaoService.withAggregates(cartao as never, "2026-06")).faturaMes).toBe(0.3);
+  it("soma de centavos fica arredondada em 2 casas", () => {
+    expect(ag([fixa({ valor: 0.1 }), fixa({ id: "df-2", valor: 0.2 })], [], "2026-06").faturaMes).toBe(0.3);
   });
 });
-
 describe("cartaoView", () => {
   it("serializa o cadastro do cartão", () => {
     expect(cartaoView(cartao as never)).toEqual({
@@ -169,7 +157,7 @@ describe("cartaoService.getOrThrow", () => {
 
 describe("cartaoService.listWithAggregates", () => {
   it("agrega cada cartão da lista no mês pedido", async () => {
-    state.fixas = [fixa({ valor: 150 })];
+    state.fixasComCartao = [fixa({ valor: 150, cartaoId: "ct-1" })];
     const [v] = await cartaoService.listWithAggregates(U, "2026-06");
     expect(v).toMatchObject({ id: "ct-1", faturaMes: 150, disponivel: 7850 });
   });

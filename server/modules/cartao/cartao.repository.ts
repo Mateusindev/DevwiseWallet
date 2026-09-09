@@ -35,10 +35,6 @@ export const cartaoRepository = {
   avulsasDoCartaoNoMes(cartaoId: string, mes: string) {
     return prisma.despesaMes.findMany({ where: { cartaoId, mes } });
   },
-  // fixas parceladas em aberto (pra calcular comprometido futuro)
-  fixasParceladas(cartaoId: string) {
-    return prisma.despesaFixa.findMany({ where: { cartaoId, parcelado: true, ativa: true } });
-  },
 
   // ── Resumo por mês (uma query por faixa, não 24 × N) ─────────────────────
   // Fixas ativas com cartão: a janela de parcela é resolvida em memória (a
