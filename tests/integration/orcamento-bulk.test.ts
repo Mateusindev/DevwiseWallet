@@ -20,11 +20,11 @@ beforeEach(async () => {
 });
 
 const addFixa = async (body: Record<string, unknown> = {}, espaco = esp) =>
-  (await api.post(`/despesas/espacos/${espaco}/fixas`, { descricao: "Aluguel", valor: 900, ...body })).body;
+  (await api.post(`/despesas/espacos/${espaco}/fixas`, { descricao: "Aluguel", valor: 900, ...body })).body.despesa;
 
 const addMes = async (body: Record<string, unknown> = {}, espaco = esp) =>
   (await api.post(`/despesas/espacos/${espaco}/mes`, { mes: "2026-07", descricao: "Mercado", valor: 300, ...body }))
-    .body;
+    .body.despesa;
 
 const bulkMes = (body: Record<string, unknown>, espaco = esp) =>
   api.post(`/despesas/espacos/${espaco}/mes/bulk`, body);

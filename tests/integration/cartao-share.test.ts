@@ -39,7 +39,7 @@ const novaFixa = async (body: Record<string, unknown> = {}) =>
       cartaoId,
       ...body,
     })
-  ).body;
+  ).body.despesa;
 
 const novaAvulsa = async (body: Record<string, unknown> = {}) =>
   (
@@ -50,7 +50,7 @@ const novaAvulsa = async (body: Record<string, unknown> = {}) =>
       cartaoId,
       ...body,
     })
-  ).body;
+  ).body.despesa;
 
 // Contato só enxerga share depois de aceitar: o vínculo por email cria convite
 // pendente, não acesso liberado.
@@ -358,7 +358,7 @@ describe("POST /api/cartoes/:id/shares", () => {
     const espAlheio = (await outroDono.api.post("/despesas/espacos", { nome: "Alheio" })).body.id;
     const fixaAlheia = (
       await outroDono.api.post(`/despesas/espacos/${espAlheio}/fixas`, { descricao: "X", valor: 10 })
-    ).body.id;
+    ).body.despesa.id;
 
     // cartão de outro dono (só o tipo `valor` grava cartaoId — no modo linha
     // o cartão vem da despesa e o :id da URL é ignorado)

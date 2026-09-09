@@ -65,7 +65,7 @@ describe("DELETE /api/categorias/:id", () => {
         valor: 900,
         categoriaId: cat.id,
       })
-    ).body;
+    ).body.despesa;
     const avulsa = (
       await api.post(`/despesas/espacos/${esp}/mes`, {
         mes: "2026-07",
@@ -73,7 +73,7 @@ describe("DELETE /api/categorias/:id", () => {
         valor: 300,
         categoriaId: cat.id,
       })
-    ).body;
+    ).body.despesa;
 
     const res = await api.delete(`/categorias/${cat.id}`);
     expect(res.body).toEqual({ id: cat.id });

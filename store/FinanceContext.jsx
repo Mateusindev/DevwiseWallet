@@ -427,29 +427,31 @@ export function FinanceProvider({ children }) {
     },
 
     // ── Orçamento (espaço ativo) ─────────────────────────────────────────────
+    // As mutações de despesa já devolvem os agregados de fatura junto — não há
+    // mais um GET /cartoes atrás de cada uma.
     async addDespesaFixa(dto) {
-      const df = await api.addDespesaFixa(esp, dto);
-      dispatch({ type: "UPSERT_DF", df });
-      if (df.cartaoId) reloadCartoes();
-      return df;
+      const { despesa, cartoes } = await api.addDespesaFixa(esp, dto);
+      dispatch({ type: "UPSERT_DF", df: despesa });
+      dispatch({ type: "SET_CARTOES", cartoes });
+      return despesa;
     },
     async updateDespesaFixa(id, patch) {
-      const df = await api.updateDespesaFixa(esp, id, patch);
-      dispatch({ type: "UPSERT_DF", df });
-      reloadCartoes();
-      return df;
+      const { despesa, cartoes } = await api.updateDespesaFixa(esp, id, patch);
+      dispatch({ type: "UPSERT_DF", df: despesa });
+      dispatch({ type: "SET_CARTOES", cartoes });
+      return despesa;
     },
     async toggleDespesaFixa(id) {
-      const df = await api.toggleDespesaFixa(esp, id);
-      dispatch({ type: "UPSERT_DF", df });
-      if (df.cartaoId) reloadCartoes();
+      const { despesa, cartoes } = await api.toggleDespesaFixa(esp, id);
+      dispatch({ type: "UPSERT_DF", df: despesa });
+      dispatch({ type: "SET_CARTOES", cartoes });
     },
     async removeDespesaFixa(id) {
-      await api.removeDespesaFixa(esp, id);
+      const { cartoes } = await api.removeDespesaFixa(esp, id);
       dispatch({ type: "REMOVE_DF", id });
-      reloadCartoes();
+      dispatch({ type: "SET_CARTOES", cartoes });
     },
-    // Lote de fixas. Um reloadCartoes no fim (não um por linha).
+    // Lote de fixas — um dispatch por operação, não um por linha.
     async bulkFixas(dto) {
       const r = await api.bulkDespesasFixas(esp, dto);
       if (r.removidos.length > 0) dispatch({ type: "REMOVE_MANY_DF", ids: r.removidos });
@@ -457,21 +459,21 @@ export function FinanceProvider({ children }) {
       if (dto.op === "pagar" || dto.op === "despagar") {
         dispatch({ type: "SET_PAGAMENTOS_FIXAS", ids: dto.ids, ym: dto.ym, pagamentos: r.pagamentos });
       }
-      reloadCartoes();
+      dispatch({ type: "SET_CARTOES", cartoes: r.cartoes });
       return r;
     },
-    // Import de OFX — um dispatch em lote e um reloadCartoes no fim.
+    // Import de OFX — um dispatch em lote.
     async importDespesasMes(dto) {
       const r = await api.importDespesasMes(esp, dto);
       if (r.criadas.length > 0) dispatch({ type: "UPSERT_MANY_DM", dms: r.criadas });
-      reloadCartoes();
+      dispatch({ type: "SET_CARTOES", cartoes: r.cartoes });
       return r;
     },
     async bulkMes(dto) {
       const r = await api.bulkDespesasMes(esp, dto);
       if (r.removidos.length > 0) dispatch({ type: "REMOVE_MANY_DM", ids: r.removidos });
       if (r.aplicadas.length > 0) dispatch({ type: "UPSERT_MANY_DM", dms: r.aplicadas });
-      reloadCartoes();
+      dispatch({ type: "SET_CARTOES", cartoes: r.cartoes });
       return r;
     },
     async setPagamentoFixa(id, ym, valorPago) {
@@ -493,21 +495,21 @@ export function FinanceProvider({ children }) {
       dispatch({ type: "CLEAR_RENDA", ym });
     },
     async addDespesaMes(dto) {
-      const dm = await api.addDespesaMes(esp, dto);
-      dispatch({ type: "ADD_DM", dm });
-      if (dm.cartaoId) reloadCartoes();
-      return dm;
+      const { despesa, cartoes } = await api.addDespesaMes(esp, dto);
+      dispatch({ type: "ADD_DM", dm: despesa });
+      dispatch({ type: "SET_CARTOES", cartoes });
+      return despesa;
     },
     async updateDespesaMes(id, patch) {
-      const dm = await api.updateDespesaMes(esp, id, patch);
-      dispatch({ type: "UPSERT_DM", dm });
-      reloadCartoes();
-      return dm;
+      const { despesa, cartoes } = await api.updateDespesaMes(esp, id, patch);
+      dispatch({ type: "UPSERT_DM", dm: despesa });
+      dispatch({ type: "SET_CARTOES", cartoes });
+      return despesa;
     },
     async removeDespesaMes(id) {
-      await api.removeDespesaMes(esp, id);
+      const { cartoes } = await api.removeDespesaMes(esp, id);
       dispatch({ type: "REMOVE_DM", id });
-      reloadCartoes();
+      dispatch({ type: "SET_CARTOES", cartoes });
     },
     async setPagaMes(id, valorPago) {
       const dm = await api.setPagaMes(esp, id, valorPago);

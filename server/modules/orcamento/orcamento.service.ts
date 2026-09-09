@@ -117,6 +117,13 @@ function mesAnterior(ym: string) {
 }
 
 export const orcamentoService = {
+  // Agregados de fatura depois de uma mutação que pode ter mexido neles. Vão
+  // junto na resposta: antes, o front disparava um GET /cartoes logo depois de
+  // cada ação — dois round-trips sequenciais por clique.
+  cartoesAtualizados(userId: string) {
+    return cartaoService.listWithAggregates(userId);
+  },
+
   // ── Despesas fixas ─────────────────────────────────────────────────────────
   async addDespesaFixa(userId: string, espacoId: string, dto: AddDespesaFixaDTO) {
     await espacoService.getOrThrow(userId, espacoId);
@@ -132,7 +139,7 @@ export const orcamentoService = {
       abateShares: dto.abateShares ?? false,
       ...parcelaWrite(dto, currentMonth()),
     });
-    return fixaView(df);
+    return { despesa: fixaView(df), cartoes: await this.cartoesAtualizados(userId) };
   },
 
   async updateDespesaFixa(userId: string, espacoId: string, id: string, patch: UpdateDespesaFixaDTO) {
@@ -153,21 +160,21 @@ export const orcamentoService = {
       Object.assign(data, parcelaWrite({ ...found!, ...patch }, currentMonth()));
     }
     const df = await orcamentoRepository.updateDespesaFixa(id, data);
-    return fixaView(df);
+    return { despesa: fixaView(df), cartoes: await this.cartoesAtualizados(userId) };
   },
 
   async toggleDespesaFixa(userId: string, espacoId: string, id: string) {
     const found = await orcamentoRepository.findDespesaFixa(id, userId);
     assertPertence(found, espacoId, "Despesa fixa", id);
     const df = await orcamentoRepository.updateDespesaFixa(id, { ativa: !found!.ativa });
-    return fixaView(df);
+    return { despesa: fixaView(df), cartoes: await this.cartoesAtualizados(userId) };
   },
 
   async removeDespesaFixa(userId: string, espacoId: string, id: string) {
     const found = await orcamentoRepository.findDespesaFixa(id, userId);
     assertPertence(found, espacoId, "Despesa fixa", id);
     await orcamentoRepository.deleteDespesaFixa(id);
-    return { id };
+    return { id, cartoes: await this.cartoesAtualizados(userId) };
   },
 
   // Define quanto foi pago da fixa no mês `ym` (valor absoluto, não delta).
@@ -203,7 +210,7 @@ export const orcamentoService = {
       nota: dto.nota || null,
       abateShares: dto.abateShares ?? false,
     });
-    return mesView(dm);
+    return { despesa: mesView(dm), cartoes: await this.cartoesAtualizados(userId) };
   },
 
   async updateDespesaMes(userId: string, espacoId: string, id: string, patch: UpdateDespesaMesDTO) {
@@ -219,14 +226,14 @@ export const orcamentoService = {
     if ("categoriaId" in patch) data.categoriaId = patch.categoriaId ?? null;
     if ("nota" in patch) data.nota = patch.nota || null;
     const dm = await orcamentoRepository.updateDespesaMes(id, data);
-    return mesView(dm);
+    return { despesa: mesView(dm), cartoes: await this.cartoesAtualizados(userId) };
   },
 
   async removeDespesaMes(userId: string, espacoId: string, id: string) {
     const found = await orcamentoRepository.findDespesaMes(id, userId);
     assertPertence(found, espacoId, "Despesa do mês", id);
     await orcamentoRepository.deleteDespesaMes(id);
-    return { id };
+    return { id, cartoes: await this.cartoesAtualizados(userId) };
   },
 
   // Importa transações de um OFX como despesas do mês.
@@ -271,7 +278,11 @@ export const orcamentoService = {
     }
 
     const criadas = novas.length > 0 ? await orcamentoRepository.createDespesasMes(novas) : [];
-    return { criadas: criadas.map(mesView), ignoradas };
+    return {
+      criadas: criadas.map(mesView),
+      ignoradas,
+      cartoes: await this.cartoesAtualizados(userId),
+    };
   },
 
   // Aplica uma operação em várias despesas do mês numa só requisição.
@@ -286,7 +297,13 @@ export const orcamentoService = {
     const ids = linhas.map((l) => l.id);
     if (dto.op === "excluir") {
       await orcamentoRepository.deleteManyDespesaMes(ids);
-      return { op: dto.op, aplicadas: [], removidos: ids, ignoradas: 0 };
+      return {
+        op: dto.op,
+        aplicadas: [],
+        removidos: ids,
+        ignoradas: 0,
+        cartoes: await this.cartoesAtualizados(userId),
+      };
     }
     if (dto.op === "pagar") {
       await orcamentoRepository.pagarDespesasMes(linhas.map((l) => ({ id: l.id, valor: num(l.valor) })));
@@ -298,7 +315,13 @@ export const orcamentoService = {
       await orcamentoRepository.updateManyDespesaMes(ids, { cartaoId: dto.cartaoId ?? null });
     }
     const atualizadas = await orcamentoRepository.findDespesasMesByIds(ids, userId, espacoId);
-    return { op: dto.op, aplicadas: atualizadas.map(mesView), removidos: [], ignoradas: 0 };
+    return {
+      op: dto.op,
+      aplicadas: atualizadas.map(mesView),
+      removidos: [],
+      ignoradas: 0,
+      cartoes: await this.cartoesAtualizados(userId),
+    };
   },
 
   // Idem para as fixas. `ym` importa: pagar/despagar mexem no PagamentoFixa do
@@ -312,7 +335,14 @@ export const orcamentoService = {
     const ids = linhas.map((l) => l.id);
     if (dto.op === "excluir") {
       await orcamentoRepository.deleteManyDespesaFixa(ids);
-      return { op: dto.op, aplicadas: [], removidos: ids, ignoradas: 0, pagamentos: [] };
+      return {
+        op: dto.op,
+        aplicadas: [],
+        removidos: ids,
+        ignoradas: 0,
+        pagamentos: [],
+        cartoes: await this.cartoesAtualizados(userId),
+      };
     }
 
     let ignoradas = 0;
@@ -337,6 +367,7 @@ export const orcamentoService = {
         ignoradas,
         // o front precisa do estado final do mês: quem saiu da lista foi desquitado
         pagamentos: pagos.map((p) => ({ despesaFixaId: p.despesaFixaId, ym: p.ym, valorPago: num(p.valorPago) })),
+        cartoes: await this.cartoesAtualizados(userId),
       };
     }
 
@@ -352,7 +383,14 @@ export const orcamentoService = {
       await orcamentoRepository.updateManyDespesaFixa(ids, { ativa: dto.op === "ativar" });
     }
     const atualizadas = await orcamentoRepository.findDespesasFixasByIds(ids, userId, espacoId);
-    return { op: dto.op, aplicadas: atualizadas.map(fixaView), removidos: [], ignoradas: 0, pagamentos: [] };
+    return {
+      op: dto.op,
+      aplicadas: atualizadas.map(fixaView),
+      removidos: [],
+      ignoradas: 0,
+      pagamentos: [],
+      cartoes: await this.cartoesAtualizados(userId),
+    };
   },
 
   // Define quanto foi pago de uma despesa do mês (valor absoluto). paga = pago >= valor.

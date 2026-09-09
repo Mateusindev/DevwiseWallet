@@ -34,7 +34,7 @@ const fixaNoCartao = async (cartaoId: string, body: Record<string, unknown> = {}
       cartaoId,
       ...body,
     })
-  ).body;
+  ).body.despesa;
 
 const avulsaNoCartao = async (cartaoId: string, body: Record<string, unknown> = {}, espaco = esp) =>
   (
@@ -45,7 +45,7 @@ const avulsaNoCartao = async (cartaoId: string, body: Record<string, unknown> = 
       cartaoId,
       ...body,
     })
-  ).body;
+  ).body.despesa;
 
 describe("POST /api/cartoes", () => {
   it("cria com defaults e ordem 1", async () => {

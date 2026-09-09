@@ -21,7 +21,7 @@ beforeEach(async () => {
 
 const addFixa = async (body: Record<string, unknown> = {}, espaco = esp) =>
   (await api.post(`/despesas/espacos/${espaco}/fixas`, { descricao: "Aluguel", valor: 900, ...body }))
-    .body;
+    .body.despesa;
 
 const addMes = async (body: Record<string, unknown> = {}, espaco = esp) =>
   (
@@ -31,7 +31,7 @@ const addMes = async (body: Record<string, unknown> = {}, espaco = esp) =>
       valor: 300,
       ...body,
     })
-  ).body;
+  ).body.despesa;
 
 // ── Despesas fixas ───────────────────────────────────────────────────────────
 
@@ -39,8 +39,8 @@ describe("POST /fixas", () => {
   it("cria com defaults do DTO", async () => {
     const res = await api.post(`/despesas/espacos/${esp}/fixas`, { valor: 120.456 });
     expect(res.status).toBe(201);
-    expect(res.body).toEqual({
-      id: res.body.id,
+    expect(res.body.despesa).toEqual({
+      id: res.body.despesa.id,
       descricao: "Despesa fixa",
       valor: 120.46,
       diaVencimento: 1,
@@ -120,7 +120,7 @@ describe("PATCH /fixas/:id", () => {
     const fixa = await addFixa({ diaVencimento: 8 });
     const res = await api.patch(`/despesas/espacos/${esp}/fixas/${fixa.id}`, { valor: 1000.999 });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ descricao: "Aluguel", valor: 1001, diaVencimento: 8, ativa: true });
+    expect(res.body.despesa).toMatchObject({ descricao: "Aluguel", valor: 1001, diaVencimento: 8, ativa: true });
   });
 
   it("categoriaId/nota podem ser limpos com null", async () => {
@@ -131,14 +131,14 @@ describe("PATCH /fixas/:id", () => {
       categoriaId: null,
       nota: null,
     });
-    expect(res.body).toMatchObject({ categoriaId: null, nota: null });
+    expect(res.body.despesa).toMatchObject({ categoriaId: null, nota: null });
   });
 
   it("editar parcela reancora no mês corrente", async () => {
     const fixa = await addFixa({ parcelado: true, parcelaAtual: 2, totalParcelas: 10 });
     // volta a âncora pro passado direto no banco pra provar a reancoragem
     const res = await api.patch(`/despesas/espacos/${esp}/fixas/${fixa.id}`, { parcelaAtual: 7 });
-    expect(res.body).toMatchObject({
+    expect(res.body.despesa).toMatchObject({
       parcelado: true,
       parcelaAtual: 7,
       totalParcelas: 10,
@@ -149,7 +149,7 @@ describe("PATCH /fixas/:id", () => {
   it("parcelado: false zera os campos de parcela", async () => {
     const fixa = await addFixa({ parcelado: true, parcelaAtual: 2, totalParcelas: 10 });
     const res = await api.patch(`/despesas/espacos/${esp}/fixas/${fixa.id}`, { parcelado: false });
-    expect(res.body).toMatchObject({
+    expect(res.body.despesa).toMatchObject({
       parcelado: false,
       parcelaAtual: null,
       totalParcelas: null,
@@ -160,7 +160,7 @@ describe("PATCH /fixas/:id", () => {
   it("patch sem campo de parcela preserva a parcela", async () => {
     const fixa = await addFixa({ parcelado: true, parcelaAtual: 4, totalParcelas: 8 });
     const res = await api.patch(`/despesas/espacos/${esp}/fixas/${fixa.id}`, { descricao: "Outro nome" });
-    expect(res.body).toMatchObject({ descricao: "Outro nome", parcelado: true, parcelaAtual: 4 });
+    expect(res.body.despesa).toMatchObject({ descricao: "Outro nome", parcelado: true, parcelaAtual: 4 });
   });
 
   it("fixa de outro espaço do mesmo dono → 404", async () => {
@@ -175,7 +175,7 @@ describe("PATCH /fixas/:id", () => {
     const alheioEsp = (await outro.api.post("/despesas/espacos", { nome: "Alheio" })).body.id;
     const alheia = (
       await outro.api.post(`/despesas/espacos/${alheioEsp}/fixas`, { descricao: "X", valor: 5 })
-    ).body;
+    ).body.despesa;
 
     expect((await api.patch(`/despesas/espacos/${esp}/fixas/${alheia.id}`, { valor: 1 })).status).toBe(404);
   });
@@ -184,8 +184,8 @@ describe("PATCH /fixas/:id", () => {
 describe("PATCH /fixas/:id/toggle", () => {
   it("alterna ativa", async () => {
     const fixa = await addFixa();
-    expect((await api.patch(`/despesas/espacos/${esp}/fixas/${fixa.id}/toggle`)).body.ativa).toBe(false);
-    expect((await api.patch(`/despesas/espacos/${esp}/fixas/${fixa.id}/toggle`)).body.ativa).toBe(true);
+    expect((await api.patch(`/despesas/espacos/${esp}/fixas/${fixa.id}/toggle`)).body.despesa.ativa).toBe(false);
+    expect((await api.patch(`/despesas/espacos/${esp}/fixas/${fixa.id}/toggle`)).body.despesa.ativa).toBe(true);
   });
 
   it("fixa de outro espaço → 404", async () => {
@@ -282,7 +282,7 @@ describe("DELETE /fixas/:id", () => {
     await api.put(`/despesas/espacos/${esp}/fixas/${fixa.id}/pago/2026-07`, { valorPago: 100 });
 
     const res = await api.delete(`/despesas/espacos/${esp}/fixas/${fixa.id}`);
-    expect(res.body).toEqual({ id: fixa.id });
+    expect(res.body).toMatchObject({ id: fixa.id });
 
     const orc = await api.get(`/despesas/espacos/${esp}`);
     expect(orc.body.despesasFixas).toEqual([]);
@@ -301,8 +301,8 @@ describe("POST /mes", () => {
   it("sem data usa o dia 01 do mês", async () => {
     const res = await api.post(`/despesas/espacos/${esp}/mes`, { mes: "2026-07", valor: 99.999 });
     expect(res.status).toBe(201);
-    expect(res.body).toEqual({
-      id: res.body.id,
+    expect(res.body.despesa).toEqual({
+      id: res.body.despesa.id,
       mes: "2026-07",
       descricao: "Despesa",
       valor: 100,
@@ -366,7 +366,7 @@ describe("PATCH /mes/:id", () => {
       valor: 355.559,
       data: "2026-07-20",
     });
-    expect(res.body).toMatchObject({ descricao: "Mercado grande", valor: 355.56, data: "2026-07-20" });
+    expect(res.body.despesa).toMatchObject({ descricao: "Mercado grande", valor: 355.56, data: "2026-07-20" });
   });
 
   it("desvincula cartão e categoria com null", async () => {
@@ -376,7 +376,7 @@ describe("PATCH /mes/:id", () => {
       cartaoId: null,
       categoriaId: null,
     });
-    expect(res.body).toMatchObject({ cartaoId: null, categoriaId: null });
+    expect(res.body.despesa).toMatchObject({ cartaoId: null, categoriaId: null });
   });
 
   it("data fora do mês do registro → 422", async () => {
@@ -431,7 +431,7 @@ describe("PUT /mes/:id/pago", () => {
 describe("DELETE /mes/:id", () => {
   it("remove", async () => {
     const dm = await addMes();
-    expect((await api.delete(`/despesas/espacos/${esp}/mes/${dm.id}`)).body).toEqual({ id: dm.id });
+    expect((await api.delete(`/despesas/espacos/${esp}/mes/${dm.id}`)).body).toMatchObject({ id: dm.id });
     expect((await api.get(`/despesas/espacos/${esp}`)).body.despesasMes).toEqual([]);
   });
 
@@ -612,7 +612,7 @@ describe("cartaoId / categoriaId só aceitam recurso do próprio dono", () => {
       cartaoId: null,
       categoriaId: null,
     });
-    expect(limpa.body).toMatchObject({ cartaoId: null, categoriaId: null });
+    expect(limpa.body.despesa).toMatchObject({ cartaoId: null, categoriaId: null });
   });
 });
 

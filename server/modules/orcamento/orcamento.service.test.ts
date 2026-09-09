@@ -60,6 +60,7 @@ const state: {
   createdReceita: Row | null;
   deleted: string[];
   rendaRemovida: { espacoId: string; ym: string } | null;
+  cartoes: Row[];
 } = {
   fixa: null,
   despesa: null,
@@ -75,6 +76,7 @@ const state: {
   createdReceita: null,
   deleted: [],
   rendaRemovida: null,
+  cartoes: [{ id: "ct-1", nome: "Nubank", bandeira: null, limite: 1000, diaFechamento: null, diaVencimento: 10, cor: "violet", ordem: 1 }],
 };
 
 mock.module("@/server/modules/orcamento/orcamento.repository", () => ({
@@ -142,6 +144,10 @@ mock.module("@/server/modules/cartao/cartao.repository", () => ({
   cartaoRepository: {
     findById: async (id: string, userId: string) =>
       id === "ct-1" && userId === "u-1" ? { id: "ct-1", userId, limite: 0 } : null,
+    // toda mutação devolve os agregados de fatura junto (ver cartoesAtualizados)
+    list: async () => state.cartoes,
+    fixasComCartaoDoUsuario: async () => [],
+    avulsasComCartaoNoIntervalo: async () => [],
   },
 }));
 
@@ -249,7 +255,16 @@ describe("orcamentoService.addDespesaFixa", () => {
       nota: "",
     });
     expect(state.createdFixa).toMatchObject({ espacoId: "e1", ativa: true, valor: 100, nota: null });
-    expect(v.descricao).toBe("Internet");
+    expect(v.despesa.descricao).toBe("Internet");
+  });
+
+  it("devolve os agregados de fatura junto (sem um GET /cartoes atrás)", async () => {
+    const v = await orcamentoService.addDespesaFixa(U, "e1", {
+      descricao: "Internet",
+      valor: 100,
+      diaVencimento: 10,
+    });
+    expect(v.cartoes).toEqual([expect.objectContaining({ id: "ct-1", faturaMes: 0 })]);
   });
 
   it("parcelamento ancora no mês corrente", async () => {
@@ -348,8 +363,8 @@ describe("orcamentoService.toggleDespesaFixa", () => {
 
 describe("orcamentoService.removeDespesaFixa / removeDespesaMes", () => {
   it("apagam e devolvem o id", async () => {
-    expect(await orcamentoService.removeDespesaFixa(U, "e1", "df-1")).toEqual({ id: "df-1" });
-    expect(await orcamentoService.removeDespesaMes(U, "e1", "dm-1")).toEqual({ id: "dm-1" });
+    expect(await orcamentoService.removeDespesaFixa(U, "e1", "df-1")).toMatchObject({ id: "df-1" });
+    expect(await orcamentoService.removeDespesaMes(U, "e1", "dm-1")).toMatchObject({ id: "dm-1" });
     expect(state.deleted).toEqual(["df-1", "dm-1"]);
   });
 

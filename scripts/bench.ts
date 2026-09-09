@@ -201,16 +201,15 @@ await cenario("trocar de espaço em Despesas", async () => {
 const fixaId = (await prisma.despesaFixa.findFirstOrThrow({ where: { espacoId: espacoIds[0] } })).id;
 await cenario("marcar uma fixa como paga", async () => {
   await req("PUT", `/despesas/espacos/${espacoIds[0]}/fixas/${fixaId}/pago/${hoje}`, { valorPago: 120 });
-  await req("GET", "/cartoes");
 });
 
 await cenario("adicionar uma despesa do mês", async () => {
+  // a resposta já traz os agregados de fatura — sem GET /cartoes atrás
   await req("POST", `/despesas/espacos/${espacoIds[0]}/mes`, {
     mes: hoje,
     descricao: "Bench",
     valor: 42,
   });
-  await req("GET", "/cartoes");
 });
 
 await cenario("importar um OFX de 60 transações", async () => {
@@ -223,7 +222,6 @@ await cenario("importar um OFX de 60 transações", async () => {
       data: `${hoje}-05`,
     })),
   });
-  await req("GET", "/cartoes");
 });
 
 // ── Saída ───────────────────────────────────────────────────────────────────

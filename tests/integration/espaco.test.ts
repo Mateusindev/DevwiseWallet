@@ -200,7 +200,7 @@ describe("GET /api/despesas/espacos/:esp (orçamento)", () => {
     const esp = await criar("Meu", { rendaMensal: 3000 });
     const fixa = (
       await api.post(`/despesas/espacos/${esp.id}/fixas`, { descricao: "Internet", valor: 100 })
-    ).body;
+    ).body.despesa;
     await api.put(`/despesas/espacos/${esp.id}/fixas/${fixa.id}/pago/2026-07`, { valorPago: 100 });
     await api.post(`/despesas/espacos/${esp.id}/mes`, {
       mes: "2026-07",
@@ -297,7 +297,7 @@ describe("GET /api/despesas/resumo", () => {
 
   it("fixa pausada e parcelada já quitada não entram", async () => {
     const esp = await criar("Casa");
-    const pausada = (await api.post(`/despesas/espacos/${esp.id}/fixas`, { descricao: "Pausada", valor: 100 })).body;
+    const pausada = (await api.post(`/despesas/espacos/${esp.id}/fixas`, { descricao: "Pausada", valor: 100 })).body.despesa;
     await api.patch(`/despesas/espacos/${esp.id}/fixas/${pausada.id}/toggle`);
     // âncora em 2026-09 parcela 12/12 → em 2026-10 já quitou
     await api.post(`/despesas/espacos/${esp.id}/fixas`, {
@@ -322,7 +322,7 @@ describe("GET /api/despesas/resumo", () => {
         valor: 1000,
         abateShares: true,
       })
-    ).body;
+    ).body.despesa;
     await api.post("/shares", {
       contatoId: contato.id,
       tipo: "linha",
