@@ -17,6 +17,17 @@ import type {
   createCategoriaSchema,
   updateCategoriaSchema,
 } from "@/server/modules/categoria/categoria.dto";
+import {
+  criarCaixinha,
+  atualizarCaixinha,
+  removerCaixinha,
+} from "@/server/modules/caixinha/caixinha.actions";
+import type {
+  createCaixinhaSchema,
+  updateCaixinhaSchema,
+} from "@/server/modules/caixinha/caixinha.dto";
+import { criarMovimentacao, removerMovimentacao } from "@/server/modules/movimentacao/movimentacao.actions";
+import { resetarDados } from "@/server/modules/dev/dev.actions";
 
 const client = hc<AppType>("/");
 
@@ -140,8 +151,8 @@ export async function addAporte({
   descricao?: string;
   data?: string;
 }) {
-  return unwrap(
-    client.api.movimentacoes.$post({ json: { caixinhaId, tipo: "aporte", valor, descricao, data } })
+  return unwrapAction(
+    await criarMovimentacao({ caixinhaId, tipo: "aporte", valor, descricao, data })
   );
 }
 
@@ -156,25 +167,25 @@ export async function addDespesaVariavel({
   descricao?: string;
   data?: string;
 }) {
-  return unwrap(
-    client.api.movimentacoes.$post({ json: { caixinhaId, tipo: "despesa", valor, descricao, data } })
+  return unwrapAction(
+    await criarMovimentacao({ caixinhaId, tipo: "despesa", valor, descricao, data })
   );
 }
 
 export async function removeMovimentacao(id: string) {
-  return unwrap(client.api.movimentacoes[":id"].$delete({ param: { id } }));
+  return unwrapAction(await removerMovimentacao(id));
 }
 
-export async function addCaixinha(dto: Body<typeof client.api.caixinhas.$post>) {
-  return unwrap(client.api.caixinhas.$post({ json: dto }));
+export async function addCaixinha(dto: z.input<typeof createCaixinhaSchema>) {
+  return unwrapAction(await criarCaixinha(dto));
 }
 
-export async function updateCaixinha(id: string, patch: Body<(typeof client.api.caixinhas)[":id"]["$patch"]>) {
-  return unwrap(client.api.caixinhas[":id"].$patch({ param: { id }, json: patch }));
+export async function updateCaixinha(id: string, patch: z.input<typeof updateCaixinhaSchema>) {
+  return unwrapAction(await atualizarCaixinha(id, patch));
 }
 
 export async function removeCaixinha(id: string) {
-  return unwrap(client.api.caixinhas[":id"].$delete({ param: { id } }));
+  return unwrapAction(await removerCaixinha(id));
 }
 
 // ── Espaços de despesa ────────────────────────────────────────────────────────
@@ -558,5 +569,5 @@ export async function removeCategoria(id: string) {
 
 // ── Dev helper ─────────────────────────────────────────────────────────────
 export async function resetState() {
-  return unwrap(client.api.dev.reset.$post());
+  return unwrapAction(await resetarDados());
 }
