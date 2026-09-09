@@ -47,6 +47,7 @@ describe("POST /fixas", () => {
       ativa: true,
       categoriaId: null,
       nota: null,
+      abateShares: false,
       cartaoId: null,
       parcelado: false,
       parcelaAtual: null,
@@ -311,6 +312,8 @@ describe("POST /mes", () => {
       cartaoId: null,
       categoriaId: null,
       nota: null,
+      abateShares: false,
+      fitid: null,
     });
   });
 
@@ -453,6 +456,8 @@ describe("receitas do mês", () => {
       descricao: "Receita extra",
       valor: 600.56,
       data: "2026-07-01",
+      recorrente: false,
+      mesFim: null,
     });
 
     const patch = await api.patch(`/despesas/espacos/${esp}/receitas/${criada.body.id}`, {

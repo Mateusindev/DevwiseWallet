@@ -25,8 +25,9 @@ describe("POST /api/dev/reset", () => {
     expect(state.body.espacos.map((e: { nome: string }) => e.nome)).toEqual(["Nosso", "Meu"]);
     expect(state.body.cartoes.map((c: { nome: string }) => c.nome)).toEqual(["Nubank", "Inter"]);
     expect(state.body.movimentacoes).toHaveLength(9);
-    expect(await prisma.contato.count({ where: { ownerId: user.id } })).toBe(1);
-    expect(await prisma.cartaoShare.count({ where: { cartao: { userId: user.id } } })).toBe(2);
+    expect(await prisma.contato.count({ where: { ownerId: user.id } })).toBe(2);
+    // 4 no modo linha (cartão vem da despesa, cartaoId null) + 1 avulso na fatura
+    expect(await prisma.cartaoShare.count({ where: { contato: { ownerId: user.id } } })).toBe(5);
   });
 
   it("é idempotente (roda duas vezes sem duplicar)", async () => {
@@ -36,7 +37,7 @@ describe("POST /api/dev/reset", () => {
 
     expect(await prisma.caixinha.count({ where: { userId: user.id } })).toBe(2);
     expect(await prisma.espaco.count({ where: { userId: user.id } })).toBe(2);
-    expect(await prisma.contato.count({ where: { ownerId: user.id } })).toBe(1);
+    expect(await prisma.contato.count({ where: { ownerId: user.id } })).toBe(2);
   });
 
   it("não toca nos dados de outra conta", async () => {

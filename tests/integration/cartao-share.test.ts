@@ -52,6 +52,14 @@ const novaAvulsa = async (body: Record<string, unknown> = {}) =>
     })
   ).body;
 
+// Contato só enxerga share depois de aceitar: o vínculo por email cria convite
+// pendente, não acesso liberado.
+const aceitaConvites = async (pessoa: { api: Client }) => {
+  for (const cv of (await pessoa.api.get("/me/convites")).body) {
+    await pessoa.api.post(`/me/convites/${cv.id}/aceitar`);
+  }
+};
+
 // ── Contatos ────────────────────────────────────────────────────────────────
 
 describe("contatos", () => {
@@ -64,6 +72,10 @@ describe("contatos", () => {
       email: null,
       userId: null,
       vinculado: false,
+      status: "local",
+      reciproco: false,
+      convidadoEm: null,
+      respondidoEm: null,
     });
   });
 
@@ -169,7 +181,8 @@ describe("POST /api/cartoes/:id/shares", () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
-      cartaoId,
+      // modo linha não grava cartão: ele é derivado da despesa apontada
+      cartaoId: null,
       contatoId: c.id,
       tipo: "linha",
       descricao: "Metade do streaming",
@@ -196,7 +209,7 @@ describe("POST /api/cartoes/:id/shares", () => {
     expect(res.body).toMatchObject({ percentual: null, valor: null, valorMes: 99.9 });
   });
 
-  it("linha com valor fixo nunca passa da base", async () => {
+  it("valor fixo acima da base é recusado (a soma não pode passar da linha)", async () => {
     const c = await novoContato();
     const fixa = await novaFixa({ valor: 40 });
     const res = await api.post(`/cartoes/${cartaoId}/shares`, {
@@ -205,7 +218,8 @@ describe("POST /api/cartoes/:id/shares", () => {
       despesaFixaId: fixa.id,
       valor: 100,
     });
-    expect(res.body).toMatchObject({ valor: 100, valorMes: 40 });
+    expect(res.status).toBe(422);
+    expect(res.body.error).toContain("passa do valor da linha");
   });
 
   it("linha apontando despesa do mês só vale naquele mês", async () => {
@@ -346,12 +360,13 @@ describe("POST /api/cartoes/:id/shares", () => {
       await outroDono.api.post(`/despesas/espacos/${espAlheio}/fixas`, { descricao: "X", valor: 10 })
     ).body.id;
 
-    // cartão de outro dono
+    // cartão de outro dono (só o tipo `valor` grava cartaoId — no modo linha
+    // o cartão vem da despesa e o :id da URL é ignorado)
     expect(
       (await api.post(`/cartoes/${cartaoAlheio}/shares`, {
         contatoId: c.id,
-        tipo: "linha",
-        despesaFixaId: fixa.id,
+        tipo: "valor",
+        valor: 10,
       })).status
     ).toBe(404);
 
@@ -493,10 +508,28 @@ describe("GET /api/me/compartilhamentos", () => {
     const pessoa = await account({ roles: ["leitor"] });
     const res = await pessoa.api.get("/me/compartilhamentos");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
+    expect(res.body).toEqual({ donos: [], orfas: [] });
   });
 
-  it("vincula o contato lazy no primeiro acesso e agrupa por cartão", async () => {
+  it("só enxerga o que devo depois de aceitar o convite", async () => {
+    const contato = await novoContato({ nome: "Parceira", email: "parceira@teste.local" });
+    const fixa = await novaFixa({ valor: 40 });
+    await api.post(`/cartoes/${cartaoId}/shares`, {
+      contatoId: contato.id,
+      tipo: "linha",
+      despesaFixaId: fixa.id,
+      percentual: 50,
+    });
+
+    const pessoa = await account({ email: "parceira@teste.local", roles: ["leitor"] });
+    // antes do aceite: contato pendente não vê nada
+    expect((await pessoa.api.get("/me/compartilhamentos")).body.donos).toEqual([]);
+
+    await aceitaConvites(pessoa);
+    expect((await pessoa.api.get("/me/compartilhamentos")).body.donos).toHaveLength(1);
+  });
+
+  it("vincula o contato lazy no aceite e agrupa por cartão", async () => {
     // dono cadastra o contato ANTES da pessoa ter conta
     const contato = await novoContato({ nome: "Parceira", email: "parceira@teste.local" });
     expect(contato.vinculado).toBe(false);
@@ -517,23 +550,30 @@ describe("GET /api/me/compartilhamentos", () => {
     });
 
     const pessoa = await account({ email: "parceira@teste.local", roles: ["leitor"] });
+    await aceitaConvites(pessoa);
     const res = await pessoa.api.get("/me/compartilhamentos");
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0]).toMatchObject({
-      cartao: { id: cartaoId, nome: "Nubank" },
+    expect(res.body.donos).toHaveLength(1);
+    expect(res.body.donos[0]).toMatchObject({
       dono: { id: dono.user.id },
       devidoMes: 100, // 20 + 80
       comprometido: 0,
     });
-    expect(res.body[0].linhas).toHaveLength(2);
+    expect(res.body.donos[0].grupos).toHaveLength(1);
+    expect(res.body.donos[0].grupos[0]).toMatchObject({
+      tipo: "cartao",
+      cartao: { id: cartaoId, nome: "Nubank" },
+      devidoMes: 100,
+    });
+    expect(res.body.donos[0].grupos[0].linhas).toHaveLength(2);
 
     // o vínculo ficou persistido na agenda do dono
     expect((await api.get("/contatos")).body[0]).toMatchObject({
       id: contato.id,
       userId: pessoa.user.id,
       vinculado: true,
+      status: "ativo",
     });
   });
 
@@ -561,11 +601,14 @@ describe("GET /api/me/compartilhamentos", () => {
     });
 
     const pessoa = await account({ email: "parceira@teste.local", roles: ["leitor"] });
+    await aceitaConvites(pessoa);
     const res = await pessoa.api.get("/me/compartilhamentos");
 
-    expect(res.body).toHaveLength(2);
-    const nubank = res.body.find((g: { cartao: { nome: string } }) => g.cartao.nome === "Nubank");
-    const inter = res.body.find((g: { cartao: { nome: string } }) => g.cartao.nome === "Inter");
+    expect(res.body.donos).toHaveLength(1);
+    const grupos = res.body.donos[0].grupos;
+    expect(grupos).toHaveLength(2);
+    const nubank = grupos.find((g: { cartao: { nome: string } }) => g.cartao?.nome === "Nubank");
+    const inter = grupos.find((g: { cartao: { nome: string } }) => g.cartao?.nome === "Inter");
     expect(nubank).toMatchObject({ devidoMes: 100, comprometido: 400 }); // (6-2) × 100
     expect(inter).toMatchObject({ devidoMes: 25, comprometido: 0 });
   });
@@ -584,11 +627,12 @@ describe("GET /api/me/compartilhamentos", () => {
     });
 
     const pessoa = await account({ email: "parceira@teste.local", roles: ["leitor"] });
+    await aceitaConvites(pessoa);
     const res = await pessoa.api.get("/me/compartilhamentos");
 
-    expect(res.body).toHaveLength(2);
-    expect(res.body.map((g: { devidoMes: number }) => g.devidoMes).sort()).toEqual([15, 40]);
-    expect(new Set(res.body.map((g: { dono: { id: string } }) => g.dono.id)).size).toBe(2);
+    expect(res.body.donos).toHaveLength(2);
+    expect(res.body.donos.map((d: { devidoMes: number }) => d.devidoMes).sort()).toEqual([15, 40]);
+    expect(new Set(res.body.donos.map((d: { dono: { id: string } }) => d.dono.id)).size).toBe(2);
   });
 
   it("respeita o ym pedido", async () => {
@@ -601,30 +645,33 @@ describe("GET /api/me/compartilhamentos", () => {
     });
 
     const pessoa = await account({ email: "parceira@teste.local", roles: ["leitor"] });
-    expect((await pessoa.api.get(`/me/compartilhamentos?ym=${currentMonth()}`)).body[0].devidoMes).toBe(
-      60
-    );
+    await aceitaConvites(pessoa);
     expect(
-      (await pessoa.api.get(`/me/compartilhamentos?ym=${addMonths(currentMonth(), 1)}`)).body[0]
+      (await pessoa.api.get(`/me/compartilhamentos?ym=${currentMonth()}`)).body.donos[0].devidoMes
+    ).toBe(60);
+    expect(
+      (await pessoa.api.get(`/me/compartilhamentos?ym=${addMonths(currentMonth(), 1)}`)).body.donos[0]
         .devidoMes
     ).toBe(0);
   });
 
-  it("exige cartao:view_shared", async () => {
+  it("exige share:view_shared (ou o alias cartao:view_shared)", async () => {
     const sem = await account({ permissions: ["state:view", "cartao:view"] });
     const res = await sem.api.get("/me/compartilhamentos");
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: "Sem permissão: cartao:view_shared" });
+    expect(res.body).toEqual({ error: "Sem permissão: share:view_shared | cartao:view_shared" });
   });
 });
 
 describe("permissions da gestão de shares", () => {
-  it("exige cartao:share", async () => {
+  it("exige contato:manage / share:manage (ou o alias cartao:share)", async () => {
     const leitor = await account({ roles: ["leitor"] });
     expect((await leitor.api.get("/contatos")).status).toBe(403);
     const res = await leitor.api.post("/contatos", { nome: "X" });
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: "Sem permissão: cartao:share" });
+    expect(res.body).toEqual({
+      error: "Sem permissão: contato:manage | share:manage | cartao:share",
+    });
     expect((await leitor.api.get(`/cartoes/${cartaoId}/shares`)).status).toBe(403);
   });
 });
