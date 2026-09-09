@@ -190,6 +190,11 @@ export async function getOrcamento(espacoId: string, ym?: string) {
   );
 }
 
+// Gasto do mês por espaço — base do gráfico "por página" do Início.
+export async function getResumoEspacos(ym?: string) {
+  return unwrap(client.api.despesas.resumo.$get({ query: ym ? { ym } : {} }));
+}
+
 // Oculta / restaura o espaço só no mês ym (exclusão reversível daquele mês).
 export async function ocultarEspacoMes(id: string, ym: string) {
   return unwrap(client.api.despesas.espacos[":id"].ocultar[":ym"].$post({ param: { id, ym } }));

@@ -55,6 +55,20 @@ export const espacoRepository = {
     return prisma.espaco.count({ where: { userId } });
   },
 
+  // Tudo que compõe o "saiu" de UM mês, para TODOS os espaços do dono, de uma
+  // vez. Substitui o fan-out de um getOrcamento por espaço no Início.
+  async resumoDoMes(userId: string, ym: string) {
+    const [espacos, fixas, avulsas] = await Promise.all([
+      prisma.espaco.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+      prisma.despesaFixa.findMany({
+        where: { ativa: true, espaco: { userId } },
+        include: withRateio,
+      }),
+      prisma.despesaMes.findMany({ where: { mes: ym, espaco: { userId } }, include: withRateio }),
+    ]);
+    return { espacos, fixas, avulsas };
+  },
+
   create(data: Prisma.EspacoUncheckedCreateInput) {
     return prisma.espaco.create({ data });
   },

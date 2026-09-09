@@ -16,6 +16,10 @@ export const espacoRoutes = new Hono<AuthEnv>()
   .get("/despesas/espacos", view, async (c) =>
     c.json(await espacoService.listWithActive(c.get("user").id))
   )
+  // gasto do mês por espaço (gráfico do Início) — um endpoint, não N leituras
+  .get("/despesas/resumo", view, zValidator("query", orcamentoQuerySchema), async (c) =>
+    c.json(await espacoService.resumoPorEspaco(c.get("user").id, c.req.valid("query").ym))
+  )
   .put("/despesas/espacos/active", manage, zValidator("json", setActiveSchema), async (c) =>
     c.json(await espacoService.setActive(c.get("user").id, c.req.valid("json").id))
   )

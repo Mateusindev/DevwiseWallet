@@ -235,6 +235,119 @@ describe("GET /api/despesas/espacos/:esp (orçamento)", () => {
   });
 });
 
+describe("GET /api/despesas/espacos/:esp — janela de meses", () => {
+  it("traz só o histórico da janela e lista os meses que ficaram de fora", async () => {
+    const esp = await criar("Casa");
+    const add = (mes: string, descricao: string, extra: Record<string, unknown> = {}) =>
+      api.post(`/despesas/espacos/${esp.id}/mes`, { mes, descricao, valor: 10, ...extra });
+    await add("2020-01", "Antiga");
+    await add("2026-09", "Atual");
+    await add("2030-01", "Futura");
+
+    const res = await api.get(`/despesas/espacos/${esp.id}?ym=2026-09`);
+    expect(res.status).toBe(200);
+    expect(res.body.janela).toEqual({ de: "2025-09", ate: "2027-09" });
+    expect(res.body.despesasMes.map((d: { descricao: string }) => d.descricao)).toEqual(["Atual"]);
+    // o seletor de mês precisa do que está fora da janela — daí a lista à parte
+    expect(res.body.mesesComDespesa).toEqual(["2020-01", "2026-09", "2030-01"]);
+  });
+
+  it("mesesComFatura lista só os meses com avulsa no cartão", async () => {
+    const esp = await criar("Casa");
+    const cartao = (await api.post("/cartoes", { nome: "Nubank" })).body;
+    await api.post(`/despesas/espacos/${esp.id}/mes`, { mes: "2020-01", descricao: "Sem cartão", valor: 10 });
+    await api.post(`/despesas/espacos/${esp.id}/mes`, { mes: "2021-03", descricao: "No cartão", valor: 10, cartaoId: cartao.id });
+
+    const res = await api.get(`/despesas/espacos/${esp.id}?ym=2026-09`);
+    expect(res.body.mesesComFatura).toEqual(["2021-03"]);
+  });
+
+  it("a janela centra no mês pedido", async () => {
+    const esp = await criar("Casa");
+    await api.post(`/despesas/espacos/${esp.id}/mes`, { mes: "2020-01", descricao: "Antiga", valor: 10 });
+
+    const res = await api.get(`/despesas/espacos/${esp.id}?ym=2020-01`);
+    expect(res.body.janela).toEqual({ de: "2019-01", ate: "2021-01" });
+    expect(res.body.despesasMes).toHaveLength(1);
+  });
+
+  it("ym inválido → 422", async () => {
+    const esp = await criar("Casa");
+    expect((await api.get(`/despesas/espacos/${esp.id}?ym=2026-9`)).status).toBe(422);
+  });
+});
+
+describe("GET /api/despesas/resumo", () => {
+  it("soma o mês por espaço: fixa que cai + avulsa daquele mês", async () => {
+    const casa = await criar("Casa");
+    const lazer = await criar("Lazer");
+    await api.post(`/despesas/espacos/${casa.id}/fixas`, { descricao: "Aluguel", valor: 1000 });
+    await api.post(`/despesas/espacos/${casa.id}/mes`, { mes: "2026-09", descricao: "Mercado", valor: 250 });
+    await api.post(`/despesas/espacos/${casa.id}/mes`, { mes: "2026-08", descricao: "Outro mês", valor: 999 });
+    await api.post(`/despesas/espacos/${lazer.id}/mes`, { mes: "2026-09", descricao: "Cinema", valor: 60 });
+
+    const res = await api.get("/despesas/resumo?ym=2026-09");
+    expect(res.status).toBe(200);
+    expect(res.body.ym).toBe("2026-09");
+    expect(res.body.espacos).toEqual([
+      { espacoId: casa.id, nome: "Casa", emoji: "📁", saiu: 1250 },
+      { espacoId: lazer.id, nome: "Lazer", emoji: "📁", saiu: 60 },
+    ]);
+  });
+
+  it("fixa pausada e parcelada já quitada não entram", async () => {
+    const esp = await criar("Casa");
+    const pausada = (await api.post(`/despesas/espacos/${esp.id}/fixas`, { descricao: "Pausada", valor: 100 })).body;
+    await api.patch(`/despesas/espacos/${esp.id}/fixas/${pausada.id}/toggle`);
+    // âncora em 2026-09 parcela 12/12 → em 2026-10 já quitou
+    await api.post(`/despesas/espacos/${esp.id}/fixas`, {
+      descricao: "Quitada",
+      valor: 300,
+      parcelado: true,
+      parcelaAtual: 12,
+      totalParcelas: 12,
+    });
+
+    expect((await api.get("/despesas/resumo?ym=2026-09")).body.espacos[0].saiu).toBe(300);
+    const proximo = (await api.get("/despesas/resumo?ym=2026-10")).body.espacos[0];
+    expect(proximo.saiu).toBe(0);
+  });
+
+  it("com abateShares a parte do outro sai do total do dono", async () => {
+    const esp = await criar("Casa");
+    const contato = (await api.post("/contatos", { nome: "Maria" })).body;
+    const fixa = (
+      await api.post(`/despesas/espacos/${esp.id}/fixas`, {
+        descricao: "Aluguel",
+        valor: 1000,
+        abateShares: true,
+      })
+    ).body;
+    await api.post("/shares", {
+      contatoId: contato.id,
+      tipo: "linha",
+      despesaFixaId: fixa.id,
+      percentual: 40,
+    });
+
+    expect((await api.get("/despesas/resumo?ym=2026-09")).body.espacos[0].saiu).toBe(600);
+  });
+
+  it("só enxerga os espaços do dono", async () => {
+    await criar("Meu");
+    const outro = await account({ roles: ["membro"] });
+    await outro.api.post("/despesas/espacos", { nome: "Alheio" });
+
+    const res = await api.get("/despesas/resumo?ym=2026-09");
+    expect(res.body.espacos.map((e: { nome: string }) => e.nome)).toEqual(["Meu"]);
+  });
+
+  it("exige espaco:view", async () => {
+    const sem = await account({ permissions: ["state:view"] });
+    expect((await sem.api.get("/despesas/resumo")).status).toBe(403);
+  });
+});
+
 describe("permissions", () => {
   it("leitor lê, não muta", async () => {
     const esp = await criar("Meu");

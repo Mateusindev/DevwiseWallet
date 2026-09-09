@@ -1,8 +1,16 @@
 import type { Espaco } from "@prisma/client";
 import { espacoRepository, type EspacoComOrcamento } from "./espaco.repository";
 import { AppError, NotFoundError } from "@/server/lib/errors";
-import { num, isoDate, round, parcelaView, addMonths, currentMonth } from "@/server/lib/serialize";
-import { aplicaDivisao, type ShareLike } from "../cartao-share/rateio";
+import {
+  num,
+  isoDate,
+  round,
+  parcelaView,
+  addMonths,
+  currentMonth,
+  parcelaAtivaNoMes,
+} from "@/server/lib/serialize";
+import { aplicaDivisao, CONTATO_INATIVO, type ShareLike } from "../cartao-share/rateio";
 import type { CreateEspacoDTO, UpdateEspacoDTO } from "./espaco.dto";
 
 // Janela de histórico carregada por leitura de orçamento. 12/12 cobre com folga
@@ -32,6 +40,18 @@ function rateioView(shares: ShareComContato[], base: number) {
     percentual: s.percentual != null ? num(s.percentual) : null,
     valor: aplicaDivisao(base, s),
   }));
+}
+
+// Quanto a linha pesa no orçamento do dono (espelha lib/calc.js#valorEfetivoLinha).
+// Contato `recusado` fica fora da soma: a recusa de um não faz o dono pagar menos.
+function valorEfetivo(valor: number, abateShares: boolean, shares: ShareComContato[]) {
+  if (!abateShares) return valor;
+  const soma = round(
+    shares
+      .filter((s) => (s.contato?.status ?? "local") !== CONTATO_INATIVO)
+      .reduce((t, s) => t + aplicaDivisao(valor, s), 0)
+  );
+  return round(Math.max(valor - soma, 0));
 }
 
 // Monta o blob de orçamento no formato que o front espera.
@@ -162,6 +182,33 @@ export const espacoService = {
     if (!esp) throw new NotFoundError(`Espaço de despesa não encontrado: ${espacoId}`);
     const meses = await espacoRepository.mesesComLancamento(espacoId);
     return { ...orcamentoView(esp), janela: { de, ate }, ...meses };
+  },
+
+  // Gasto do mês por espaço — o gráfico "por página" do Início. Uma request e
+  // três queries no lugar de um getOrcamento por espaço (que ainda traria o
+  // histórico inteiro só pra somar um mês).
+  async resumoPorEspaco(userId: string, ym = currentMonth()) {
+    const { espacos, fixas, avulsas } = await espacoRepository.resumoDoMes(userId, ym);
+    const saiu = new Map<string, number>();
+    const soma = (espacoId: string, v: number) => saiu.set(espacoId, (saiu.get(espacoId) ?? 0) + v);
+
+    for (const d of fixas) {
+      if (!parcelaAtivaNoMes(d, ym)) continue; // parcelada quitada sai sozinha
+      soma(d.espacoId, valorEfetivo(num(d.valor), d.abateShares, d.shares as ShareComContato[]));
+    }
+    for (const d of avulsas) {
+      soma(d.espacoId, valorEfetivo(num(d.valor), d.abateShares, d.shares as ShareComContato[]));
+    }
+
+    return {
+      ym,
+      espacos: espacos.map((e) => ({
+        espacoId: e.id,
+        nome: e.nome,
+        emoji: e.emoji,
+        saiu: round(saiu.get(e.id) ?? 0),
+      })),
+    };
   },
 
   async setActive(userId: string, id: string) {

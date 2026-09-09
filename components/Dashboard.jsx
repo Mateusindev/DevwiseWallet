@@ -144,27 +144,23 @@ export default function Dashboard({ onOpenCaixinha }) {
     return { series, data };
   }, [serie, dFixas, dMes, catMap]);
 
-  // Gasto por espaço no mês. Busca o orçamento de cada página em paralelo (o
-  // contexto só tem o do espaço ativo). Deps só de espacos/ym pra não refazer a
-  // busca a cada mutação local.
+  // Gasto por espaço no mês — uma request agregada. Deps só de espacos/ym pra
+  // não refazer a busca a cada mutação local.
   const [porEspaco, setPorEspaco] = useState([]);
   useEffect(() => {
     if (espacos.length === 0) { setPorEspaco([]); return; }
     let cancel = false;
-    Promise.all(
-      espacos.map(async (e) => {
-        const o = await api.getOrcamento(e.id).catch(() => null);
-        if (!o) return null;
-        const m = orcamentoMes(
-          { rendasMensais: o.rendasMensais, despesasMes: o.despesasMes, receitasMes: o.receitasMes, receitasSkips: o.receitasSkips, despesasFixas: o.despesasFixas, config: o.config },
-          ym
+    api.getResumoEspacos(ym)
+      .then((r) => {
+        if (cancel) return;
+        setPorEspaco(
+          r.espacos
+            .filter((e) => e.saiu > 0)
+            .map((e) => ({ label: `${e.emoji ? `${e.emoji} ` : ""}${e.nome}`, value: e.saiu }))
+            .sort((a, b) => b.value - a.value)
         );
-        return { label: `${e.emoji ? `${e.emoji} ` : ""}${e.nome}`, value: m.saiu, cor: e.cor };
       })
-    ).then((linhas) => {
-      if (cancel) return;
-      setPorEspaco(linhas.filter(Boolean).filter((l) => l.value > 0).sort((a, b) => b.value - a.value));
-    });
+      .catch(() => { if (!cancel) setPorEspaco([]); });
     return () => { cancel = true; };
   }, [espacos, ym]);
 

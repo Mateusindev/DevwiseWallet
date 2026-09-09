@@ -189,8 +189,8 @@ await cenario("boot (AuthGate.me + FinanceProvider.getBootstrap)", async () => {
 
 await cenario("troca de mês no Início (reloadCartoes + gráfico por espaço)", async () => {
   await req("GET", `/cartoes?ym=${mesAnterior}`);
-  // Dashboard.jsx:150 — um getOrcamento por espaço, em paralelo
-  await Promise.all(espacoIds.map((id) => req("GET", `/despesas/espacos/${id}`)));
+  // gráfico por espaço: uma request agregada (antes, um getOrcamento por espaço)
+  await req("GET", `/despesas/resumo?ym=${mesAnterior}`);
 });
 
 await cenario("trocar de espaço em Despesas", async () => {
