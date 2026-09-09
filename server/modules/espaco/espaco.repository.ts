@@ -2,9 +2,15 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 
 // Espaço com tudo que compõe o orçamento (fixas, mês, receitas, rendas).
+// O rateio vem junto do orçamento: sem isso a lista de despesas precisaria de
+// uma request por linha compartilhada só pra desenhar as iniciais dos contatos.
+const withRateio = {
+  shares: { include: { contato: { select: { id: true, nome: true, status: true } } } },
+} satisfies Prisma.DespesaFixaInclude & Prisma.DespesaMesInclude;
+
 const withOrcamento = {
-  despesasFixas: { orderBy: { createdAt: "asc" } },
-  despesasMes: { orderBy: { data: "desc" } },
+  despesasFixas: { orderBy: { createdAt: "asc" }, include: withRateio },
+  despesasMes: { orderBy: { data: "desc" }, include: withRateio },
   receitasMes: { orderBy: { data: "desc" }, include: { skips: true } },
   rendasMensais: { orderBy: { ym: "asc" } },
   pagamentosFixas: true,

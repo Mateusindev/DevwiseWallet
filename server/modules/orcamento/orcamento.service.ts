@@ -62,6 +62,7 @@ function fixaView(d: DespesaFixa) {
     ativa: d.ativa,
     categoriaId: d.categoriaId,
     nota: d.nota,
+    abateShares: d.abateShares,
     ...parcelaView(d),
   };
 }
@@ -78,6 +79,7 @@ function mesView(d: DespesaMes) {
     cartaoId: d.cartaoId,
     categoriaId: d.categoriaId,
     nota: d.nota,
+    abateShares: d.abateShares,
     fitid: d.fitid,
   };
 }
@@ -127,6 +129,7 @@ export const orcamentoService = {
       ativa: true,
       categoriaId: dto.categoriaId ?? null,
       nota: dto.nota || null,
+      abateShares: dto.abateShares ?? false,
       ...parcelaWrite(dto, currentMonth()),
     });
     return fixaView(df);
@@ -143,6 +146,7 @@ export const orcamentoService = {
     if (patch.ativa !== undefined) data.ativa = patch.ativa;
     if ("categoriaId" in patch) data.categoriaId = patch.categoriaId ?? null;
     if ("nota" in patch) data.nota = patch.nota || null;
+    if (patch.abateShares !== undefined) data.abateShares = patch.abateShares;
     // parcela/cartão: só toca se algum campo veio no patch
     if ("cartaoId" in patch || "parcelado" in patch || "parcelaAtual" in patch || "totalParcelas" in patch) {
       // editar parcela = restabelecer a âncora pro mês corrente ("agora estou na parcela X")
@@ -197,6 +201,7 @@ export const orcamentoService = {
       cartaoId: dto.cartaoId ?? null,
       categoriaId: dto.categoriaId ?? null,
       nota: dto.nota || null,
+      abateShares: dto.abateShares ?? false,
     });
     return mesView(dm);
   },

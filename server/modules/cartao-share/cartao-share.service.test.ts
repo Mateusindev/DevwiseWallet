@@ -7,29 +7,79 @@ const db: {
   contatos: Row[];
   shares: Row[];
   users: Row[];
-  updated: { id: string; data: Row } | null;
-  contatoDeletado: string | null;
-  shareCriado: Row | null;
-  shareAtualizado: { id: string; data: Row } | null;
-  shareDeletado: string | null;
-  linhaExiste: boolean;
+  convites: Row[];
+  adocoes: Row[];
+  adiantamentos: Row[];
+  fixas: Row[];
+  mensais: Row[];
+  pagamentos: Row[];
+  rateioSalvo: { campo: string; linhaId: string; shares: Row[]; abateShares?: boolean } | null;
 } = {
   contatos: [],
   shares: [],
   users: [],
-  updated: null,
-  contatoDeletado: null,
-  shareCriado: null,
-  shareAtualizado: null,
-  shareDeletado: null,
-  linhaExiste: true,
+  convites: [],
+  adocoes: [],
+  adiantamentos: [],
+  fixas: [],
+  mensais: [],
+  pagamentos: [],
+  rateioSalvo: null,
 };
+
+let seqId = 0;
+const novoId = (p: string) => `${p}-${++seqId}`;
 
 mock.module("@/server/modules/cartao/cartao.service", () => ({
   cartaoService: {
     getOrThrow: async (_userId: string, id: string) => {
       if (id === "alheio") throw new NotFoundError(`Cartão não encontrado: ${id}`);
+      return { id, nome: "Nubank", diaVencimento: 10 };
+    },
+  },
+}));
+
+mock.module("@/server/modules/espaco/espaco.service", () => ({
+  espacoService: {
+    getOrThrow: async (_userId: string, id: string) => {
+      if (id === "espaco-alheio") throw new NotFoundError(`Espaço de despesa não encontrado: ${id}`);
       return { id };
+    },
+  },
+}));
+
+mock.module("@/server/modules/orcamento/orcamento.repository", () => ({
+  orcamentoRepository: {
+    createDespesaFixa: async (data: Row) => {
+      const d = { id: novoId("df"), ...data };
+      db.fixas.push(d);
+      return d;
+    },
+    createDespesaMes: async (data: Row) => {
+      const d = { id: novoId("dm"), ...data };
+      db.mensais.push(d);
+      return d;
+    },
+    findDespesaFixa: async (id: string) => db.fixas.find((d) => d.id === id) ?? null,
+    findDespesaMes: async (id: string) => db.mensais.find((d) => d.id === id) ?? null,
+    updateDespesaFixa: async (id: string, data: Row) => {
+      const d = db.fixas.find((r) => r.id === id)!;
+      Object.assign(d, data);
+      return d;
+    },
+    updateDespesaMes: async (id: string, data: Row) => {
+      const d = db.mensais.find((r) => r.id === id)!;
+      Object.assign(d, data);
+      return d;
+    },
+    deleteDespesaFixa: async (id: string) => {
+      db.fixas = db.fixas.filter((d) => d.id !== id);
+    },
+    deleteDespesaMes: async (id: string) => {
+      db.mensais = db.mensais.filter((d) => d.id !== id);
+    },
+    upsertPagamentoFixa: async (espacoId: string, despesaFixaId: string, ym: string, valorPago: number) => {
+      db.pagamentos.push({ espacoId, despesaFixaId, ym, valorPago });
     },
   },
 }));
@@ -40,418 +90,516 @@ mock.module("@/server/modules/cartao-share/cartao-share.repository", () => ({
     contatoFindById: async (id: string, ownerId: string) =>
       db.contatos.find((c) => c.id === id && c.ownerId === ownerId) ?? null,
     contatoCreate: async (data: Row) => {
-      const c = { id: "c-new", ...data };
+      const c = { id: novoId("ct"), status: "local", convidadoEm: null, respondidoEm: null, espelhoDeId: null, ...data };
       db.contatos.push(c);
       return c;
+    },
+    contatoUpdate: async (id: string, data: Row) => {
+      const c = db.contatos.find((r) => r.id === id)!;
+      Object.assign(c, data);
+      return c;
+    },
+    contatoDelete: async (id: string) => {
+      db.contatos = db.contatos.filter((c) => c.id !== id);
     },
     contatosByUserId: async (userId: string) => db.contatos.filter((c) => c.userId === userId),
     contatosUnlinkedByEmail: async (email: string) =>
       db.contatos.filter((c) => c.email === email && c.userId == null),
-    contatoUpdate: async (id: string, data: Row) => {
-      const c = db.contatos.find((r) => r.id === id)!;
-      Object.assign(c, data);
-      db.updated = { id, data };
-      return c;
-    },
-    contatoDelete: async (id: string) => {
-      db.contatoDeletado = id;
-      db.contatos = db.contatos.filter((c) => c.id !== id);
-    },
     userByEmail: async (email: string) => db.users.find((u) => u.email === email) ?? null,
-    sharesByContatoIds: async (ids: string[]) =>
-      db.shares.filter((s) => ids.includes(s.contatoId as string)),
+    userById: async (id: string) => db.users.find((u) => u.id === id) ?? null,
+
+    despesaFixaDoDono: async (id: string) => db.fixas.find((d) => d.id === id) ?? null,
+    despesaMesDoDono: async (id: string) => db.mensais.find((d) => d.id === id) ?? null,
+    despesasCategorizadas: async () => [],
+
     sharesByCartao: async (cartaoId: string) => db.shares.filter((s) => s.cartaoId === cartaoId),
+    sharesByLinha: async (campo: string, id: string) => db.shares.filter((s) => s[campo] === id),
+    sharesByContatoIds: async (ids: string[]) => db.shares.filter((s) => ids.includes(s.contatoId as string)),
     shareFindById: async (id: string) => db.shares.find((s) => s.id === id) ?? null,
+    shareFindByIdParaDevedor: async (id: string, userId: string) => {
+      const s = db.shares.find((r) => r.id === id);
+      if (!s) return null;
+      const c = db.contatos.find((r) => r.id === s.contatoId);
+      return c?.userId === userId && c?.status === "ativo" ? s : null;
+    },
     shareCreate: async (data: Row) => {
-      db.shareCriado = data;
-      return { id: "s-new", despesaFixa: null, despesaMes: null, ...data };
+      const s = { id: novoId("sh"), despesaFixa: null, despesaMes: null, contato: null, ...data };
+      db.shares.push(s);
+      return s;
     },
     shareUpdate: async (id: string, data: Row) => {
-      db.shareAtualizado = { id, data };
-      const atual = db.shares.find((s) => s.id === id) ?? {};
-      return { despesaFixa: null, despesaMes: null, ...atual, ...data };
+      const s = db.shares.find((r) => r.id === id)!;
+      Object.assign(s, data);
+      return s;
     },
     shareDelete: async (id: string) => {
-      db.shareDeletado = id;
+      db.shares = db.shares.filter((s) => s.id !== id);
     },
-    despesaFixaExists: async () => (db.linhaExiste ? { id: "ok" } : null),
-    despesaMesExists: async () => (db.linhaExiste ? { id: "ok" } : null),
+    replaceRateio: async (campo: string, linhaId: string, shares: Row[], abateShares?: boolean) => {
+      db.rateioSalvo = { campo, linhaId, shares, abateShares };
+      db.shares = db.shares.filter((s) => s[campo] !== linhaId);
+      for (const s of shares) db.shares.push({ id: novoId("sh"), despesaFixa: null, despesaMes: null, ...s });
+    },
+
+    conviteCreate: async (data: Row) => {
+      const cv = { id: novoId("cv"), status: "convidado", createdAt: new Date(), ...data };
+      db.convites.push(cv);
+      return cv;
+    },
+    convitesPendentesPorEmail: async (email: string) =>
+      db.convites
+        .filter((cv) => cv.email === email && cv.status === "convidado")
+        .map((cv) => ({
+          ...cv,
+          owner: db.users.find((u) => u.id === cv.ownerId) ?? { id: cv.ownerId, nome: "?" },
+          contato: db.contatos.find((c) => c.id === cv.contatoId) ?? { id: cv.contatoId, nome: "?" },
+        })),
+    conviteFindById: async (id: string) => db.convites.find((cv) => cv.id === id) ?? null,
+    conviteFindByToken: async (token: string) => db.convites.find((cv) => cv.token === token) ?? null,
+    convitesPendentesDoContato: async (contatoId: string) =>
+      db.convites.filter((cv) => cv.contatoId === contatoId && cv.status === "convidado"),
+    conviteUpdate: async (id: string, data: Row) => {
+      const cv = db.convites.find((r) => r.id === id)!;
+      Object.assign(cv, data);
+      return cv;
+    },
+    aceitarConvite: async (args: Row) => {
+      const contato = db.contatos.find((c) => c.id === args.contatoId)!;
+      Object.assign(contato, { userId: args.aceitanteId, status: "ativo", respondidoEm: new Date() });
+      const espelho = {
+        id: novoId("ct"),
+        ownerId: args.aceitanteId,
+        nome: args.ownerNome,
+        userId: args.ownerId,
+        status: "ativo",
+        espelhoDeId: contato.id,
+      };
+      db.contatos.push(espelho);
+      contato.espelhoDeId = espelho.id;
+      const cv = db.convites.find((c) => c.id === args.conviteId)!;
+      cv.status = "ativo";
+      return { contato, espelho };
+    },
+
+    adocoesByUser: async (userId: string) => db.adocoes.filter((a) => a.userId === userId),
+    adocaoFind: async (shareId: string, userId: string) =>
+      db.adocoes.find((a) => a.shareId === shareId && a.userId === userId) ?? null,
+    adocaoUpsert: async (shareId: string, _userId: string, data: Row) => {
+      const i = db.adocoes.findIndex((a) => a.shareId === shareId);
+      if (i >= 0) db.adocoes[i] = { ...db.adocoes[i], ...data };
+      else db.adocoes.push({ ...data });
+      return db.adocoes.find((a) => a.shareId === shareId)!;
+    },
+    adocaoUpdate: async (shareId: string, data: Row) => {
+      const a = db.adocoes.find((r) => r.shareId === shareId)!;
+      Object.assign(a, data);
+      return a;
+    },
+    adocaoDelete: async (shareId: string) => {
+      db.adocoes = db.adocoes.filter((a) => a.shareId !== shareId);
+    },
+    adiantamentoCreate: async (data: Row) => {
+      const ad = { id: novoId("ad"), createdAt: new Date(), ...data };
+      db.adiantamentos.push(ad);
+      return ad;
+    },
+    adiantamentosByUser: async (userId: string) => db.adiantamentos.filter((a) => a.userId === userId),
   },
 }));
 
-const { shareValorNoMes, shareParcela, shareComprometido, cartaoShareService } = await import(
-  "./cartao-share.service"
-);
+const { cartaoShareService } = await import("./cartao-share.service");
 
-const OWNER = "dono-1"; // dono do cartão/agenda
+const OWNER = "dono-1";
+const DEVEDOR = { id: "user-2", email: "maria@exemplo.com", nome: "Maria", roles: [], permissions: [] };
 
-const parcelada = (over: Row = {}) => ({
+const aluguel = () => ({
+  id: "df-aluguel",
+  espacoId: "esp-dono",
+  descricao: "Aluguel",
+  valor: 1800,
+  diaVencimento: 5,
+  cartaoId: null,
+  parcelado: false,
+  parcelaAtual: null,
+  totalParcelas: null,
+  parcelaMesRef: null,
+  abateShares: false,
+});
+
+const jiujitsu = () => ({
+  id: "df-jj",
+  espacoId: "esp-dono",
+  descricao: "Jiu-jitsu",
+  valor: 200,
+  diaVencimento: 10,
+  cartaoId: "ct-1",
   parcelado: true,
   parcelaAtual: 1,
-  totalParcelas: 10,
-  parcelaMesRef: "2026-01",
-  valor: 200,
-  descricao: "Notebook",
-  ...over,
+  totalParcelas: 12,
+  parcelaMesRef: "2026-06",
+  abateShares: false,
 });
+
+// Share já aceito pela Maria, apontando a fixa parcelada — base dos testes de adoção.
+function cenarioAceito() {
+  db.contatos.push({
+    id: "ct-maria",
+    ownerId: OWNER,
+    nome: "Maria",
+    email: DEVEDOR.email,
+    userId: DEVEDOR.id,
+    status: "ativo",
+    espelhoDeId: null,
+  });
+  db.users.push({ id: OWNER, nome: "João", email: "joao@wallet.local" });
+  db.fixas.push(jiujitsu());
+  db.shares.push({
+    id: "sh-jj",
+    cartaoId: null,
+    contatoId: "ct-maria",
+    tipo: "linha",
+    descricao: "",
+    despesaFixaId: "df-jj",
+    despesaMesId: null,
+    percentual: 50,
+    valor: null,
+    mesRef: null,
+    despesaFixa: jiujitsu(),
+    despesaMes: null,
+    contato: {
+      id: "ct-maria",
+      nome: "Maria",
+      status: "ativo",
+      userId: DEVEDOR.id,
+      ownerId: OWNER,
+      owner: { id: OWNER, nome: "João" },
+    },
+  });
+}
 
 beforeEach(() => {
   db.contatos = [];
   db.shares = [];
   db.users = [];
-  db.updated = null;
-  db.contatoDeletado = null;
-  db.shareCriado = null;
-  db.shareAtualizado = null;
-  db.shareDeletado = null;
-  db.linhaExiste = true;
+  db.convites = [];
+  db.adocoes = [];
+  db.adiantamentos = [];
+  db.fixas = [];
+  db.mensais = [];
+  db.pagamentos = [];
+  db.rateioSalvo = null;
+  seqId = 0;
 });
 
-const MES_CORRENTE = new Date().toISOString().slice(0, 7);
-
-describe("shareValorNoMes — tipo valor", () => {
-  it("recorrente (mesRef null) vale todo mês", () => {
-    const s = { tipo: "valor", valor: 150, mesRef: null } as never;
-    expect(shareValorNoMes(s, "2026-07")).toBe(150);
-    expect(shareValorNoMes(s, "2026-12")).toBe(150);
+describe("contatos", () => {
+  it("contato nasce local — ter email não dá acesso a nada", async () => {
+    db.users.push({ id: DEVEDOR.id, email: DEVEDOR.email, nome: "Maria" });
+    const c = await cartaoShareService.createContato(OWNER, { nome: "Maria", email: DEVEDOR.email });
+    expect(c.status).toBe("local");
+    expect(c.userId).toBe(DEVEDOR.id); // vínculo existe, acesso não
+    expect(c.reciproco).toBe(false);
   });
 
-  it("pontual vale só no mesRef", () => {
-    const s = { tipo: "valor", valor: 150, mesRef: "2026-07" } as never;
-    expect(shareValorNoMes(s, "2026-07")).toBe(150);
-    expect(shareValorNoMes(s, "2026-08")).toBe(0);
-  });
-});
-
-describe("shareValorNoMes — tipo linha", () => {
-  it("linha inteira = valor da despesa", () => {
-    const s = { tipo: "linha", despesaFixa: parcelada(), despesaMes: null } as never;
-    expect(shareValorNoMes(s, "2026-03")).toBe(200);
-  });
-
-  it("percentual aplica sobre a base", () => {
-    const s = { tipo: "linha", percentual: 30, despesaFixa: parcelada(), despesaMes: null } as never;
-    expect(shareValorNoMes(s, "2026-03")).toBe(60);
-  });
-
-  it("valor fixo limita à base", () => {
-    const s = { tipo: "linha", valor: 500, despesaFixa: parcelada(), despesaMes: null } as never;
-    expect(shareValorNoMes(s, "2026-03")).toBe(200); // min(500, 200)
-  });
-
-  it("fora da janela de parcelas = 0", () => {
-    const s = { tipo: "linha", despesaFixa: parcelada(), despesaMes: null } as never;
-    // âncora parcela 1 em 2026-01, total 10 → parcela 11 em 2026-11 (fora)
-    expect(shareValorNoMes(s, "2026-11")).toBe(0);
-  });
-
-  it("despesa avulsa só conta no próprio mês", () => {
-    const s = { tipo: "linha", despesaMes: { valor: 80, mes: "2026-07", descricao: "X" }, despesaFixa: null } as never;
-    expect(shareValorNoMes(s, "2026-07")).toBe(80);
-    expect(shareValorNoMes(s, "2026-08")).toBe(0);
+  it("contato de outro dono é 404, não 403", async () => {
+    db.contatos.push({ id: "ct-x", ownerId: "outro", nome: "X" });
+    expect(cartaoShareService.getContatoOrThrow(OWNER, "ct-x")).rejects.toThrow(NotFoundError);
   });
 });
 
-describe("shareParcela / shareComprometido", () => {
-  it("reporta parcela atual, total e restantes", () => {
-    const s = { tipo: "linha", despesaFixa: parcelada(), despesaMes: null } as never;
-    // 2026-03 → parcela efetiva 3 de 10
-    expect(shareParcela(s, "2026-03")).toEqual({ parcelaAtual: 3, totalParcelas: 10, restantes: 7 });
+describe("share de linha sem cartão (aluguel)", () => {
+  beforeEach(() => {
+    db.contatos.push({ id: "ct-maria", ownerId: OWNER, nome: "Maria", status: "local" });
+    db.contatos.push({ id: "ct-carlos", ownerId: OWNER, nome: "Carlos", status: "local" });
+    db.fixas.push(aluguel());
   });
 
-  it("comprometido = restantes × parte por mês", () => {
-    const s = { tipo: "linha", percentual: 50, despesaFixa: parcelada(), despesaMes: null } as never;
-    // 2026-03 → 7 restantes × (200×50%) = 7 × 100
-    expect(shareComprometido(s, "2026-03")).toBe(700);
-  });
-
-  it("linha não parcelada não tem parcela", () => {
-    const s = { tipo: "linha", despesaFixa: { valor: 50, parcelado: false, descricao: "Y" }, despesaMes: null } as never;
-    expect(shareParcela(s, "2026-03")).toBeNull();
-    expect(shareComprometido(s, "2026-03")).toBe(0);
-  });
-});
-
-describe("createContato — vínculo lazy por email", () => {
-  it("associa userId se já existe usuário com o email", async () => {
-    db.users = [{ id: "u-9", email: "ana@x.com" }];
-    const v = await cartaoShareService.createContato(OWNER, { nome: "Ana", email: "ana@x.com" });
-    expect(v.userId).toBe("u-9");
-    expect(v.vinculado).toBe(true);
-  });
-
-  it("sem usuário correspondente fica sem vínculo", async () => {
-    const v = await cartaoShareService.createContato(OWNER, { nome: "Bia", email: "bia@x.com" });
-    expect(v.userId).toBeNull();
-    expect(v.vinculado).toBe(false);
-  });
-
-  it("usuário já vinculado nesta agenda não vira 2º contato vinculado", async () => {
-    db.users = [{ id: "u-9", email: "ana@x.com" }];
-    db.contatos = [{ id: "c-1", ownerId: OWNER, nome: "Ana", email: "ana@x.com", userId: "u-9" }];
-    const v = await cartaoShareService.createContato(OWNER, { nome: "Ana 2", email: "ana@x.com" });
-    expect(v.userId).toBeNull();
-  });
-});
-
-describe("contatos — leitura e escrita na agenda do dono", () => {
-  it("listContatos só devolve a agenda do dono, com a flag vinculado", async () => {
-    db.contatos = [
-      { id: "c-1", ownerId: OWNER, nome: "Ana", email: "ana@x.com", userId: "u-9" },
-      { id: "c-2", ownerId: OWNER, nome: "Bia", email: null, userId: null },
-      { id: "c-3", ownerId: "outro-dono", nome: "Caio", email: null, userId: null },
-    ];
-    const vs = await cartaoShareService.listContatos(OWNER);
-    expect(vs).toEqual([
-      { id: "c-1", nome: "Ana", email: "ana@x.com", userId: "u-9", vinculado: true },
-      { id: "c-2", nome: "Bia", email: null, userId: null, vinculado: false },
-    ]);
-  });
-
-  it("contato de outra agenda → 404", async () => {
-    db.contatos = [{ id: "c-3", ownerId: "outro-dono", nome: "Caio", email: null, userId: null }];
-    expect(cartaoShareService.getContatoOrThrow(OWNER, "c-3")).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it("createContato sem email não tenta vincular", async () => {
-    const v = await cartaoShareService.createContato(OWNER, { nome: "Bia" });
-    expect(v).toMatchObject({ nome: "Bia", email: null, userId: null, vinculado: false });
-  });
-
-  it("updateContato só do nome não mexe no vínculo", async () => {
-    db.contatos = [{ id: "c-1", ownerId: OWNER, nome: "Ana", email: "ana@x.com", userId: "u-9" }];
-    await cartaoShareService.updateContato(OWNER, "c-1", { nome: "Ana Maria" });
-    expect(db.updated).toEqual({ id: "c-1", data: { nome: "Ana Maria" } });
-  });
-
-  it("trocar o email reavalia o vínculo", async () => {
-    db.users = [{ id: "u-7", email: "novo@x.com" }];
-    db.contatos = [{ id: "c-1", ownerId: OWNER, nome: "Ana", email: "ana@x.com", userId: null }];
-    const v = await cartaoShareService.updateContato(OWNER, "c-1", { email: "novo@x.com" });
-    expect(v.userId).toBe("u-7");
-  });
-
-  it("limpar o email desfaz o vínculo", async () => {
-    db.contatos = [{ id: "c-1", ownerId: OWNER, nome: "Ana", email: "ana@x.com", userId: "u-9" }];
-    const v = await cartaoShareService.updateContato(OWNER, "c-1", { email: null });
-    expect(v.userId).toBeNull();
-    expect(v.vinculado).toBe(false);
-  });
-
-  it("editar o próprio contato não conflita consigo mesmo (exceptContatoId)", async () => {
-    db.users = [{ id: "u-9", email: "ana@x.com" }];
-    db.contatos = [{ id: "c-1", ownerId: OWNER, nome: "Ana", email: "ana@x.com", userId: "u-9" }];
-    const v = await cartaoShareService.updateContato(OWNER, "c-1", { email: "ana@x.com" });
-    expect(v.userId).toBe("u-9");
-  });
-
-  it("removeContato apaga (shares caem em cascata)", async () => {
-    db.contatos = [{ id: "c-1", ownerId: OWNER, nome: "Ana", email: null, userId: null }];
-    expect(await cartaoShareService.removeContato(OWNER, "c-1")).toEqual({ id: "c-1" });
-    expect(db.contatoDeletado).toBe("c-1");
-  });
-
-  it("removeContato de outra agenda → 404 e nada é apagado", async () => {
-    db.contatos = [{ id: "c-1", ownerId: "outro-dono", nome: "Ana", email: null, userId: null }];
-    expect(cartaoShareService.removeContato(OWNER, "c-1")).rejects.toBeInstanceOf(NotFoundError);
-    expect(db.contatoDeletado).toBeNull();
-  });
-});
-
-describe("shares — gestão pelo dono", () => {
-  const contatoNaAgenda = () => {
-    db.contatos = [{ id: "c-1", ownerId: OWNER, nome: "Ana", email: null, userId: null }];
-  };
-
-  it("listByCartao devolve as linhas do cartão já calculadas no mês", async () => {
-    db.shares = [
-      {
-        id: "s-1",
-        cartaoId: "cart-1",
-        contatoId: "c-1",
-        tipo: "linha",
-        percentual: 50,
-        valor: null,
-        mesRef: null,
-        descricao: "",
-        despesaFixa: parcelada(),
-        despesaMes: null,
-      },
-    ];
-    const [v] = await cartaoShareService.listByCartao(OWNER, "cart-1", "2026-03");
-    expect(v).toMatchObject({ id: "s-1", linhaDescricao: "Notebook", valorMes: 100, comprometido: 700 });
-  });
-
-  it("listByCartao de cartão alheio → 404", async () => {
-    expect(cartaoShareService.listByCartao(OWNER, "alheio", "2026-03")).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it("createShare tipo linha guarda o percentual e não usa mesRef", async () => {
-    contatoNaAgenda();
-    await cartaoShareService.createShare(OWNER, "cart-1", {
-      contatoId: "c-1",
+  it("aceita fixa sem cartão e não grava cartaoId (é derivado da linha)", async () => {
+    const s = await cartaoShareService.createShare(OWNER, {
+      contatoId: "ct-maria",
       tipo: "linha",
-      despesaFixaId: "df-1",
-      percentual: 33.335,
-      mesRef: "2026-03",
+      despesaFixaId: "df-aluguel",
+      percentual: 33,
     });
-    expect(db.shareCriado).toMatchObject({
-      cartaoId: "cart-1",
-      contatoId: "c-1",
+    expect(s.despesaFixaId).toBe("df-aluguel");
+    expect(db.shares[0].cartaoId).toBeNull();
+  });
+
+  it("barra a soma acima de 100% considerando quem já está na linha", async () => {
+    await cartaoShareService.createShare(OWNER, {
+      contatoId: "ct-maria",
       tipo: "linha",
-      despesaFixaId: "df-1",
-      despesaMesId: null,
-      percentual: 33.34,
-      mesRef: null, // mesRef só vale pro tipo valor
-      descricao: "",
+      despesaFixaId: "df-aluguel",
+      percentual: 60,
     });
-  });
-
-  it("createShare tipo valor guarda mesRef e ignora percentual", async () => {
-    contatoNaAgenda();
-    await cartaoShareService.createShare(OWNER, "cart-1", {
-      contatoId: "c-1",
-      tipo: "valor",
-      valor: 150.005,
-      percentual: 50,
-      mesRef: "2026-03",
-      descricao: "Combustível",
-    });
-    expect(db.shareCriado).toMatchObject({
-      tipo: "valor",
-      valor: 150.01,
-      percentual: null,
-      mesRef: "2026-03",
-      descricao: "Combustível",
-    });
-  });
-
-  it("createShare tipo valor sem mesRef vira recorrente", async () => {
-    contatoNaAgenda();
-    await cartaoShareService.createShare(OWNER, "cart-1", { contatoId: "c-1", tipo: "valor", valor: 100 });
-    expect(db.shareCriado!.mesRef).toBeNull();
-  });
-
-  it("createShare em cartão alheio → 404", async () => {
-    contatoNaAgenda();
     expect(
-      cartaoShareService.createShare(OWNER, "alheio", { contatoId: "c-1", tipo: "valor", valor: 10 })
-    ).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it("createShare com contato fora da agenda → 404", async () => {
-    expect(
-      cartaoShareService.createShare(OWNER, "cart-1", { contatoId: "fantasma", tipo: "valor", valor: 10 })
-    ).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it("createShare apontando linha que não é do dono → 404", async () => {
-    contatoNaAgenda();
-    db.linhaExiste = false;
-    expect(
-      cartaoShareService.createShare(OWNER, "cart-1", { contatoId: "c-1", tipo: "linha", despesaFixaId: "alheia" })
-    ).rejects.toBeInstanceOf(NotFoundError);
-    expect(
-      cartaoShareService.createShare(OWNER, "cart-1", { contatoId: "c-1", tipo: "linha", despesaMesId: "alheia" })
-    ).rejects.toBeInstanceOf(NotFoundError);
-    expect(db.shareCriado).toBeNull();
-  });
-
-  it("createShare devolve a view já calculada no mês corrente", async () => {
-    contatoNaAgenda();
-    const v = await cartaoShareService.createShare(OWNER, "cart-1", {
-      contatoId: "c-1",
-      tipo: "valor",
-      valor: 80,
-      mesRef: MES_CORRENTE,
-    });
-    expect(v.valorMes).toBe(80);
-  });
-
-  it("updateShare arredonda percentual/valor e aceita limpá-los", async () => {
-    db.shares = [{ id: "s-1", cartaoId: "cart-1", tipo: "linha", despesaFixa: null, despesaMes: null }];
-    await cartaoShareService.updateShare(OWNER, "s-1", { percentual: 12.345, valor: null });
-    expect(db.shareAtualizado).toEqual({ id: "s-1", data: { percentual: 12.35, valor: null } });
-  });
-
-  it("updateShare recusa mesRef em share que não é do tipo valor", async () => {
-    db.shares = [{ id: "s-1", cartaoId: "cart-1", tipo: "linha", despesaFixa: null, despesaMes: null }];
-    expect(cartaoShareService.updateShare(OWNER, "s-1", { mesRef: "2026-03" })).rejects.toBeInstanceOf(AppError);
-    expect(db.shareAtualizado).toBeNull();
-  });
-
-  it("updateShare aceita mesRef em share do tipo valor", async () => {
-    db.shares = [{ id: "s-1", cartaoId: "cart-1", tipo: "valor", despesaFixa: null, despesaMes: null }];
-    await cartaoShareService.updateShare(OWNER, "s-1", { mesRef: "2026-03" });
-    expect(db.shareAtualizado!.data).toEqual({ mesRef: "2026-03" });
-  });
-
-  it("updateShare / removeShare de share alheio → 404", async () => {
-    expect(cartaoShareService.updateShare(OWNER, "fantasma", { descricao: "x" })).rejects.toBeInstanceOf(NotFoundError);
-    expect(cartaoShareService.removeShare(OWNER, "fantasma")).rejects.toBeInstanceOf(NotFoundError);
-    expect(db.shareDeletado).toBeNull();
-  });
-
-  it("removeShare apaga e devolve o id", async () => {
-    db.shares = [{ id: "s-1", cartaoId: "cart-1", tipo: "valor", despesaFixa: null, despesaMes: null }];
-    expect(await cartaoShareService.removeShare(OWNER, "s-1")).toEqual({ id: "s-1" });
-    expect(db.shareDeletado).toBe("s-1");
-  });
-});
-
-describe("resolveContatos — claim lazy por email", () => {
-  it("casa por email e persiste o vínculo", async () => {
-    db.contatos = [{ id: "c-1", ownerId: "dono-1", nome: "Ana", email: "ana@x.com", userId: null }];
-    const cs = await cartaoShareService.resolveContatos({ id: "u-9", email: "ana@x.com" } as never);
-    expect(cs.map((c) => c.id)).toEqual(["c-1"]);
-    expect(db.updated).toEqual({ id: "c-1", data: { userId: "u-9" } });
-  });
-
-  it("reivindica um contato por dono (vários donos = vários contatos)", async () => {
-    db.contatos = [
-      { id: "c-1", ownerId: "dono-1", nome: "Ana", email: "ana@x.com", userId: null },
-      { id: "c-2", ownerId: "dono-2", nome: "Ana", email: "ana@x.com", userId: null },
-      { id: "c-3", ownerId: "dono-2", nome: "Ana dup", email: "ana@x.com", userId: null },
-    ];
-    const cs = await cartaoShareService.resolveContatos({ id: "u-9", email: "ana@x.com" } as never);
-    expect(cs.map((c) => c.id)).toEqual(["c-1", "c-2"]); // c-3 fica de fora (mesmo dono)
-  });
-
-  it("sem contato correspondente retorna vazio", async () => {
-    const cs = await cartaoShareService.resolveContatos({ id: "u-9", email: "z@x.com" } as never);
-    expect(cs).toEqual([]);
-  });
-});
-
-describe("meusCompartilhamentos", () => {
-  it("agrupa por cartão, soma devido/comprometido e expõe o dono", async () => {
-    db.contatos = [{ id: "c-1", ownerId: OWNER, nome: "Ana", email: "ana@x.com", userId: "u-9" }];
-    db.shares = [
-      {
-        id: "s-1",
-        cartaoId: "cart-1",
-        contatoId: "c-1",
+      cartaoShareService.createShare(OWNER, {
+        contatoId: "ct-carlos",
         tipo: "linha",
+        despesaFixaId: "df-aluguel",
         percentual: 50,
-        valor: null,
-        mesRef: null,
-        descricao: "",
-        despesaFixa: parcelada(),
-        despesaMes: null,
-        cartao: {
-          id: "cart-1",
-          nome: "Nubank",
-          bandeira: "master",
-          cor: "violet",
-          user: { id: OWNER, nome: "João" },
-        },
+      })
+    ).rejects.toThrow(AppError);
+  });
+
+  it("share avulso sem cartão é 422 — não existe fatura pra pendurar", async () => {
+    expect(
+      cartaoShareService.createShare(OWNER, { contatoId: "ct-maria", tipo: "valor", valor: 50 })
+    ).rejects.toThrow(AppError);
+  });
+});
+
+describe("rateio N-a-N", () => {
+  beforeEach(() => {
+    db.contatos.push({ id: "ct-maria", ownerId: OWNER, nome: "Maria", status: "local" });
+    db.contatos.push({ id: "ct-carlos", ownerId: OWNER, nome: "Carlos", status: "local" });
+    db.fixas.push(aluguel());
+  });
+
+  it("substitui o conjunto inteiro e grava o abateShares", async () => {
+    await cartaoShareService.salvarRateio(
+      OWNER,
+      {
+        despesaFixaId: "df-aluguel",
+        abateShares: true,
+        itens: [
+          { contatoId: "ct-maria", percentual: 33 },
+          { contatoId: "ct-carlos", percentual: 33 },
+        ],
       },
-    ];
-    const [g] = await cartaoShareService.meusCompartilhamentos({ id: "u-9", email: "ana@x.com" } as never, "2026-03");
-    expect(g.cartao.nome).toBe("Nubank");
-    expect(g.dono).toEqual({ id: OWNER, nome: "João" });
-    expect(g.devidoMes).toBe(100); // 200 × 50%
-    expect(g.comprometido).toBe(700); // 7 restantes × 100
-    expect(g.linhas[0].parcela).toEqual({ parcelaAtual: 3, totalParcelas: 10, restantes: 7 });
+      "2026-06"
+    );
+    expect(db.rateioSalvo?.abateShares).toBe(true);
+    expect(db.rateioSalvo?.shares).toHaveLength(2);
+    expect(db.rateioSalvo?.shares.every((s) => s.cartaoId === null)).toBe(true);
+  });
+
+  it("não escreve nada quando a soma estoura", async () => {
+    expect(
+      cartaoShareService.salvarRateio(OWNER, {
+        despesaFixaId: "df-aluguel",
+        itens: [
+          { contatoId: "ct-maria", percentual: 60 },
+          { contatoId: "ct-carlos", percentual: 50 },
+        ],
+      })
+    ).rejects.toThrow(AppError);
+    expect(db.rateioSalvo).toBeNull();
+  });
+
+  it("contato de outro dono no payload derruba antes de escrever", async () => {
+    db.contatos.push({ id: "ct-alheio", ownerId: "outro", nome: "Alheio", status: "local" });
+    expect(
+      cartaoShareService.salvarRateio(OWNER, {
+        despesaFixaId: "df-aluguel",
+        itens: [{ contatoId: "ct-alheio", percentual: 10 }],
+      })
+    ).rejects.toThrow(NotFoundError);
+    expect(db.rateioSalvo).toBeNull();
+  });
+});
+
+describe("convite e aceite", () => {
+  beforeEach(() => {
+    db.users.push({ id: OWNER, nome: "João", email: "joao@wallet.local" });
+    db.users.push({ id: DEVEDOR.id, nome: "Maria", email: DEVEDOR.email });
+    db.contatos.push({ id: "ct-maria", ownerId: OWNER, nome: "Maria", email: null, userId: null, status: "local" });
+  });
+
+  it("convidar marca o contato como convidado e devolve o link com token", async () => {
+    const cv = await cartaoShareService.criarConvite(OWNER, "ct-maria", { email: DEVEDOR.email });
+    expect(cv.token).toBeTruthy();
+    expect(cv.link).toBe(`/?convite=${cv.token}`);
+    expect(db.contatos[0].status).toBe("convidado");
+  });
+
+  it("antes do aceite a pessoa não vê nada", async () => {
+    await cartaoShareService.criarConvite(OWNER, "ct-maria", { email: DEVEDOR.email });
+    db.shares.push({ id: "sh-1", contatoId: "ct-maria", tipo: "valor", valor: 40, mesRef: null });
+    const r = await cartaoShareService.meusCompartilhamentos(DEVEDOR, "2026-06");
+    expect(r.donos).toEqual([]);
+  });
+
+  it("aceitar vincula os dois lados (espelho na agenda de quem aceitou)", async () => {
+    const cv = await cartaoShareService.criarConvite(OWNER, "ct-maria", { email: DEVEDOR.email });
+    const r = await cartaoShareService.aceitarConvite(DEVEDOR, cv.id);
+    expect(r.status).toBe("ativo");
+    const doDono = db.contatos.find((c) => c.id === "ct-maria")!;
+    const espelho = db.contatos.find((c) => c.ownerId === DEVEDOR.id)!;
+    expect(doDono.status).toBe("ativo");
+    expect(espelho.userId).toBe(OWNER);
+    expect(espelho.espelhoDeId).toBe("ct-maria");
+    expect(doDono.espelhoDeId).toBe(espelho.id);
+  });
+
+  it("convite de outro email é 404 — não vaza existência", async () => {
+    const cv = await cartaoShareService.criarConvite(OWNER, "ct-maria", { email: DEVEDOR.email });
+    expect(
+      cartaoShareService.aceitarConvite({ ...DEVEDOR, email: "carlos@exemplo.com" }, cv.id)
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it("recusar esconde os shares sem apagar nada do dono", async () => {
+    const cv = await cartaoShareService.criarConvite(OWNER, "ct-maria", { email: DEVEDOR.email });
+    await cartaoShareService.recusarConvite(DEVEDOR, cv.id);
+    expect(db.contatos[0].status).toBe("recusado");
+    expect(await cartaoShareService.meusCompartilhamentos(DEVEDOR, "2026-06")).toEqual({
+      donos: [],
+      orfas: [],
+    });
+  });
+
+  it("contato só com email vira convite pendente, não acesso liberado", async () => {
+    db.contatos.push({
+      id: "ct-legado",
+      ownerId: "dono-2",
+      nome: "Maria",
+      email: DEVEDOR.email,
+      userId: null,
+      status: "local",
+    });
+    const convites = await cartaoShareService.meusConvites(DEVEDOR);
+    expect(convites.some((c) => c.dono.id === "dono-2")).toBe(true);
+    expect(db.contatos.find((c) => c.id === "ct-legado")!.status).toBe("convidado");
+  });
+});
+
+describe("adoção", () => {
+  beforeEach(cenarioAceito);
+
+  it("vira fixa no espaço do devedor espelhando as parcelas", async () => {
+    const r = await cartaoShareService.adotar(DEVEDOR, "sh-jj", {
+      modo: "fixa",
+      espacoId: "esp-maria",
+      ym: "2026-06",
+    });
+    expect(r.valor).toBe(100); // 50% de 200
+    const nova = db.fixas.find((d) => d.id === r.despesaFixaId)!;
+    expect(nova.espacoId).toBe("esp-maria");
+    expect(nova.valor).toBe(100);
+    expect(nova.parcelado).toBe(true);
+    expect(nova.parcelaAtual).toBe(1);
+    expect(nova.totalParcelas).toBe(12);
+    expect(nova.parcelaMesRef).toBe("2026-06");
+    // o cartão é do dono — a despesa de quem deve não entra na fatura dele
+    expect(nova.cartaoId).toBeNull();
+    expect(nova.descricao).toBe("Jiu-jitsu (João)");
+  });
+
+  it("espaço de outro dono é 404", async () => {
+    expect(
+      cartaoShareService.adotar(DEVEDOR, "sh-jj", { modo: "fixa", espacoId: "espaco-alheio" })
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it("share de quem não aceitou é 404", async () => {
+    db.contatos[0].status = "convidado";
+    expect(
+      cartaoShareService.adotar(DEVEDOR, "sh-jj", { modo: "fixa", espacoId: "esp-maria" })
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it("adotar duas vezes é 422 — desfaça antes", async () => {
+    await cartaoShareService.adotar(DEVEDOR, "sh-jj", { modo: "fixa", espacoId: "esp-maria", ym: "2026-06" });
+    expect(
+      cartaoShareService.adotar(DEVEDOR, "sh-jj", { modo: "fixa", espacoId: "esp-maria", ym: "2026-06" })
+    ).rejects.toThrow(AppError);
+  });
+
+  it("desfazer mantém a despesa por padrão — ela é do devedor", async () => {
+    const r = await cartaoShareService.adotar(DEVEDOR, "sh-jj", {
+      modo: "fixa",
+      espacoId: "esp-maria",
+      ym: "2026-06",
+    });
+    await cartaoShareService.desfazerAdocao(DEVEDOR, "sh-jj");
+    expect(db.adocoes).toHaveLength(0);
+    expect(db.fixas.some((d) => d.id === r.despesaFixaId)).toBe(true);
+
+    db.adocoes.push({ shareId: "sh-jj", userId: DEVEDOR.id, modo: "fixa", despesaFixaId: r.despesaFixaId });
+    await cartaoShareService.desfazerAdocao(DEVEDOR, "sh-jj", true);
+    expect(db.fixas.some((d) => d.id === r.despesaFixaId)).toBe(false);
+  });
+
+  it("ignorar sai do devido e não some da lista", async () => {
+    await cartaoShareService.ignorar(DEVEDOR, "sh-jj", "2026-06");
+    const r = await cartaoShareService.meusCompartilhamentos(DEVEDOR, "2026-06");
+    const linha = r.donos[0].grupos[0].linhas[0];
+    expect(linha.ignorado).toBe(true);
+    expect(r.donos[0].devidoMes).toBe(0);
+  });
+
+  it("dono muda o valor depois da adoção → divergente, e sincronizar reescreve", async () => {
+    const r = await cartaoShareService.adotar(DEVEDOR, "sh-jj", {
+      modo: "fixa",
+      espacoId: "esp-maria",
+      ym: "2026-06",
+    });
+    // o dono dobrou a parte da Maria
+    db.shares[0].percentual = 100;
+    (db.shares[0].despesaFixa as Row).valor = 200;
+
+    const antes = await cartaoShareService.meusCompartilhamentos(DEVEDOR, "2026-06");
+    expect(antes.donos[0].grupos[0].linhas[0].divergente).toBe(true);
+
+    await cartaoShareService.sincronizar(DEVEDOR, "sh-jj", "2026-06");
+    expect(db.fixas.find((d) => d.id === r.despesaFixaId)!.valor).toBe(200);
+    const depois = await cartaoShareService.meusCompartilhamentos(DEVEDOR, "2026-06");
+    expect(depois.donos[0].grupos[0].linhas[0].divergente).toBe(false);
+  });
+
+  it("share apagado pelo dono vira órfã com aviso — a despesa fica", async () => {
+    const r = await cartaoShareService.adotar(DEVEDOR, "sh-jj", {
+      modo: "fixa",
+      espacoId: "esp-maria",
+      ym: "2026-06",
+    });
+    db.shares = [];
+    const v = await cartaoShareService.meusCompartilhamentos(DEVEDOR, "2026-06");
+    expect(v.orfas).toHaveLength(1);
+    expect(v.orfas[0].aviso).toContain("removido pelo dono");
+    expect(db.fixas.some((d) => d.id === r.despesaFixaId)).toBe(true);
+  });
+});
+
+describe("adiantamento", () => {
+  beforeEach(cenarioAceito);
+
+  it("adiantar 3 parcelas zera o devido nos 3 meses e derruba o comprometido", async () => {
+    const r = await cartaoShareService.adiantar(DEVEDOR, "sh-jj", { parcelas: 3, ym: "2026-06" });
+    expect(r.cobreAte).toBe("2026-08");
+    expect(r.valor).toBe(300); // 3 × 100
+
+    for (const m of ["2026-06", "2026-07", "2026-08"]) {
+      const v = await cartaoShareService.meusCompartilhamentos(DEVEDOR, m);
+      expect(v.donos[0].grupos[0].linhas[0].valorMes).toBe(0);
+    }
+    const set = await cartaoShareService.meusCompartilhamentos(DEVEDOR, "2026-09");
+    expect(set.donos[0].grupos[0].linhas[0].valorMes).toBe(100);
+    // em 2026-06 restavam 11 parcelas; 2 delas (jul/ago) saíram do comprometido
+    expect((await cartaoShareService.meusCompartilhamentos(DEVEDOR, "2026-06")).donos[0].comprometido).toBe(900);
+  });
+
+  it("adiantar de novo continua de onde parou", async () => {
+    await cartaoShareService.adiantar(DEVEDOR, "sh-jj", { parcelas: 2, ym: "2026-06" }); // cobre 06,07
+    const r = await cartaoShareService.adiantar(DEVEDOR, "sh-jj", { parcelas: 2, ym: "2026-06" });
+    expect(r.cobreAte).toBe("2026-09"); // 08,09
+    expect(r.valor).toBe(200);
+  });
+
+  it("fixa adotada ganha pagamento nos meses cobertos", async () => {
+    const a = await cartaoShareService.adotar(DEVEDOR, "sh-jj", {
+      modo: "fixa",
+      espacoId: "esp-maria",
+      ym: "2026-06",
+    });
+    await cartaoShareService.adiantar(DEVEDOR, "sh-jj", { parcelas: 3, ym: "2026-06" });
+    expect(db.pagamentos.map((p) => p.ym)).toEqual(["2026-06", "2026-07", "2026-08"]);
+    expect(db.pagamentos.every((p) => p.despesaFixaId === a.despesaFixaId)).toBe(true);
+  });
+
+  it("adiantar além do fim das parcelas é 422", async () => {
+    expect(cartaoShareService.adiantar(DEVEDOR, "sh-jj", { parcelas: 3, ym: "2028-01" })).rejects.toThrow(
+      AppError
+    );
   });
 });

@@ -17,8 +17,12 @@ export const PERMISSIONS = [
   "movimentacao:manage",
   "cartao:view",
   "cartao:manage",
-  "cartao:share",
-  "cartao:view_shared",
+  "cartao:share", // alias histórico de share:manage/contato:manage
+  "cartao:view_shared", // alias histórico de share:view_shared
+  "share:manage",
+  "share:view_shared",
+  "share:adotar",
+  "contato:manage",
   "categoria:view",
   "categoria:manage",
   "espaco:view",

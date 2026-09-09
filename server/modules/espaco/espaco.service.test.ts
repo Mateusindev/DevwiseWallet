@@ -276,6 +276,20 @@ describe("orcamentoView", () => {
         parcelaAtual: 2,
         totalParcelas: 10,
         parcelaMesRef: "2026-06",
+        abateShares: true,
+        shares: [
+          {
+            id: "sh-1",
+            contatoId: "ct-a",
+            tipo: "linha",
+            percentual: 30,
+            valor: null,
+            mesRef: null,
+            despesaFixa: { valor: 1200, parcelado: true, parcelaAtual: 2, totalParcelas: 10, parcelaMesRef: "2026-06" },
+            despesaMes: null,
+            contato: { id: "ct-a", nome: "Maria", status: "ativo" },
+          },
+        ],
       },
     ],
     despesasMes: [
@@ -291,6 +305,8 @@ describe("orcamentoView", () => {
         categoriaId: null,
         nota: "feira",
         fitid: null,
+        abateShares: false,
+        shares: [],
       },
     ],
     receitasMes: [
@@ -328,6 +344,11 @@ describe("orcamentoView", () => {
       parcelaAtual: 2,
       totalParcelas: 10,
       parcelaMesRef: "2026-06",
+      abateShares: true,
+      // 30% de 1200 — o front usa isso pra desenhar as iniciais e o valor efetivo
+      rateio: [
+        { shareId: "sh-1", contatoId: "ct-a", nome: "Maria", status: "ativo", percentual: 30, valor: 360 },
+      ],
     });
     expect(v.despesasMes[0]).toEqual({
       id: "dm-1",
@@ -340,6 +361,8 @@ describe("orcamentoView", () => {
       cartaoId: null,
       categoriaId: null,
       nota: "feira",
+      abateShares: false,
+      rateio: [],
       fitid: null,
     });
     expect(v.receitasMes[0]).toEqual({

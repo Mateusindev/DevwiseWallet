@@ -17,6 +17,8 @@ export const DEFAULT_ROLES: { nome: string; descricao: string; permissions: stri
       "caixinha:*",
       "movimentacao:*",
       "cartao:*",
+      "share:*",
+      "contato:*",
       "categoria:*",
       "espaco:*",
       "orcamento:*",
@@ -31,6 +33,8 @@ export const DEFAULT_ROLES: { nome: string; descricao: string; permissions: stri
       "movimentacao:view",
       "cartao:view",
       "cartao:view_shared", // ver o que devo nas faturas de outras pessoas
+      "share:view_shared",
+      "share:adotar", // adotar é escrita no orçamento DELE, não no de quem compartilhou
       "categoria:view",
       "espaco:view",
       "orcamento:view",

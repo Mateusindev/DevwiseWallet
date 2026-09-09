@@ -4,7 +4,7 @@ import { Card, Donut, Button, ProgressBar, Modal } from "./ui/primitives.jsx";
 import { MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
 import { GroupedBars, HBars, LineTrend, StackedBars } from "./ui/charts.jsx";
 import CaixinhaCard from "./CaixinhaCard.jsx";
-import { MeusCompartilhamentos } from "./Compartilhamento.jsx";
+import { ConvitesBanner, MeusCompartilhamentos } from "./Compartilhamento.jsx";
 import { AporteModal, DespesaVariavelModal, CaixinhaModal, ReservaEmergenciaModal } from "./forms.jsx";
 import { fmtMoney, fmtMoneyCompact, currentMonthKey, fmtMonthLabel, fmtMonthShort, lastMonths } from "../lib/format.js";
 import { totalSaldo, totalAporteMensal, acento, orcamentoMes, fixaContaNoMes, janelaMeses, mesesComDados } from "../lib/calc.js";
@@ -195,6 +195,9 @@ export default function Dashboard({ onOpenCaixinha }) {
 
   return (
     <section className="space-y-6">
+      {/* convite pendente bloqueia tudo que vem depois — fica antes do resto */}
+      {can("cartao:view_shared") && <ConvitesBanner onRespondido={fin.refresh} />}
+
       {/* greeting + quick actions */}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comDados} />

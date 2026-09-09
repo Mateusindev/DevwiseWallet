@@ -68,11 +68,22 @@ Receita extra pode ser **recorrente** (`recorrente` + `mesFim` opcional). Nesse 
 - **Id de outro agregado que vem no payload é validado como do dono**: `assertVinculos` no `orcamento.service` (`cartaoId`, `categoriaId`), `caixinhaService.getOrThrow` na movimentação, `despesaFixaExists`/`despesaMesExists` no share. Aceitar id alheio contaminaria agregados do outro dono (uma fixa injetada entra na fatura do cartão dele, que é calculada por `cartaoId`).
 - `AppSettings` tem PK `user_id` (uma linha por usuário, não é mais singleton). `dev/reset` reseta só os dados do usuário logado.
 
-### Cartão compartilhado — `server/modules/cartao-share/`
+### Compartilhamento — `server/modules/cartao-share/`
 
-- `Contato` é a agenda do dono (`ownerId`); `userId` vincula lazy a quem tem conta (casado por email no 1º `GET /me/compartilhamentos`). Unique `(ownerId, userId)` → um contato vinculado por agenda, mas a mesma pessoa pode ser contato de vários donos.
-- `CartaoShare` divide uma linha da fatura (`despesaFixaId` XOR `despesaMesId`, percentual ou valor) ou um valor avulso (`mesRef` null = recorrente). É informativo: não altera a fatura do dono.
-- Permissions: `cartao:share` (gestão pelo dono) e `cartao:view_shared` (`/me/compartilhamentos`, visão "o que devo").
+O nome do módulo (e da tabela `cartao_shares`) ficou: renomear custa migration destrutiva e não paga — mesma decisão de não renomear `ReceitaMes.mes` quando virou âncora. Mas **share não é mais "do cartão"**.
+
+- **`rateio.ts` é o cálculo puro** (sem Prisma, sem repository): `shareValorNoMes`, `shareComprometido`, `devidoNoMes`, `rateioDaLinha`, `valorEfetivoDono`, `validaRateio`. Mora fora do service porque o orçamento também precisa dele — service importando service fecharia ciclo.
+- **`CartaoShare.cartaoId` é nullable**: no modo `linha` o cartão é **derivado da despesa apontada** e o campo fica null (trocar a linha de cartão não deixa o share apontando o cartão velho). Só o modo `valor` (avulso na fatura) grava `cartaoId`. É isso que deixa uma fixa **sem cartão** (aluguel) ser compartilhada.
+- **N-a-N**: N linhas de `cartao_shares` na mesma despesa, uma por contato. Uniques `(despesa_fixa_id, contato_id)` e `(despesa_mes_id, contato_id)` impedem a mesma pessoa entrar duas vezes na linha. `POST /shares/rateio` **substitui** o conjunto inteiro numa transação (salvar duas vezes não colide com o unique) e valida a soma uma vez só: percentuais ≤ 100 **e** soma das partes ≤ valor da linha. Contato `recusado` continua listado mas fora da soma — a recusa de um não pode fazer o dono achar que paga menos.
+- **`abateShares` (por linha, em `DespesaFixa` e `DespesaMes`)**: `false` mantém o histórico (share é informativo, fatura do cartão cheia); `true` faz o orçamento do dono contar só a parte dele. O `/state` já traz `rateio` embutido em cada linha (evita 1 request por linha só pra desenhar as iniciais) e `lib/calc.js#valorEfetivoLinha` é o que os totais do front usam.
+- **Posse do share é pelo contato** (`contato.ownerId`), não mais pelo cartão — todo find do repositório cruza por aí.
+- **Agenda com aceite**: `Contato.status` (`local` → `convidado` → `ativo`/`recusado`). O dono cria o convite (`POST /contatos/:id/convite`, token + link, **não há infra de email** — a UI copia o link); quem recebe vê em `GET /me/convites` e aceita. O aceite roda numa transação: vincula o contato, cria o **espelho** na agenda de quem aceitou e amarra os dois por `espelhoDeId`. **Só contato `ativo` enxerga qualquer share** — o vínculo lazy por email virou fallback que cria convite pendente (`sincronizaConvites`), não acesso liberado.
+- **Adoção (`ShareAdocao`, PK = `share_id`)**: quem deve puxa a linha pro próprio orçamento como `fixa` (parcelas espelhadas da original — morre sozinha na última, `parcelaAtivaNoMes` já faz isso), `mes` (pontual) ou `ignorado`. `share_id` **não tem FK de propósito**: se o dono apagar o share, a adoção sobrevive pra virar o aviso "compartilhamento removido pelo dono" — a despesa criada é do devedor e não some por decisão de terceiro. `valorAdotado` congela o valor; divergência vira aviso + `POST .../sincronizar`.
+- **Adiantamento (`ShareAdiantamento`)**: a **fonte da verdade do `quitadoAte` são os adiantamentos** (`quitadoPorShare` = maior `cobreAte`); `ShareAdocao.quitadoAte` é cache. Por isso dá pra adiantar sem ter adotado. Zera o devido nos meses cobertos, desconta do comprometido e, se a linha virou fixa aqui, gera `PagamentoFixa` nesses meses.
+- **Espaço da adoção é do DEVEDOR** — validado com `espacoService.getOrThrow(user.id, ...)`, mesma regra do `assertVinculos`. Recurso de outro dono → 404.
+- Permissions: `share:manage`, `share:view_shared`, `share:adotar`, `contato:manage`. As antigas `cartao:share`/`cartao:view_shared` seguem valendo como alias via `requireAnyPermission` (roles existentes não quebram).
+- Front: aba **Pessoas** (`components/Pessoas.jsx`) junta convites + "o que devo" + agenda; `RatearModal` divide uma linha entre N pessoas com barra de soma/sobra; `RateioChips` mostra as iniciais na própria linha de despesa.
+- Migração aditiva revisada em `prisma/manual/20260909-compartilhamento.sql` (aplicar com `prisma db execute`; **nunca** `db push --accept-data-loss` no Supabase).
 
 ### Auth (JWT + PBAC/RBAC) — `server/auth/`
 

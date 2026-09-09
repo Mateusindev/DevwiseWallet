@@ -22,6 +22,26 @@ enum TipoMovimentacao {
   @@map("tipo_movimentacao")
 }
 
+// Ciclo de vida do contato na agenda: nasce "local" (so um nome), vira
+// "convidado" quando o dono dispara o convite e "ativo" quando a pessoa aceita
+// (o vinculo passa a ser mutuo - ver Contato.espelhoDeId).
+enum ContatoStatus {
+  local
+  convidado
+  ativo
+  recusado
+
+  @@map("contato_status")
+}
+
+enum ShareAdocaoModo {
+  fixa
+  mes
+  ignorado
+
+  @@map("share_adocao_modo")
+}
+
 enum CartaoShareTipo {
   linha
   valor
@@ -54,6 +74,10 @@ model User {
   contatos    Contato[]    @relation("ContatosDoDono")
   contatoDe   Contato[]    @relation("ContatoVinculado")
 
+  convites      CartaoShareConvite[]
+  adocoes       ShareAdocao[]
+  adiantamentos ShareAdiantamento[]
+
   @@map("users")
 }
 
@@ -85,17 +109,25 @@ model UserRole {
 // login; quando ela vira usuária do app, `userId` vincula (por email, lazy) e
 // ela passa a ver "o que devo". Ver server/modules/cartao-share.
 model Contato {
-  id        String   @id @default(uuid()) @db.Uuid
-  ownerId   String   @map("owner_id") @db.Uuid
-  nome      String
-  email     String?
-  userId    String?  @map("user_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id           String        @id @default(uuid()) @db.Uuid
+  ownerId      String        @map("owner_id") @db.Uuid
+  nome         String
+  email        String?
+  userId       String?       @map("user_id") @db.Uuid
+  status       ContatoStatus @default(local)
+  convidadoEm  DateTime?     @map("convidado_em") @db.Timestamptz(6)
+  respondidoEm DateTime?     @map("respondido_em") @db.Timestamptz(6)
+  // contato reciproco criado na agenda de quem aceitou (vinculo mutuo)
+  espelhoDeId  String?       @map("espelho_de_id") @db.Uuid
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  owner  User          @relation("ContatosDoDono", fields: [ownerId], references: [id], onDelete: Cascade)
-  user   User?         @relation("ContatoVinculado", fields: [userId], references: [id], onDelete: SetNull)
-  shares CartaoShare[]
+  owner     User                 @relation("ContatosDoDono", fields: [ownerId], references: [id], onDelete: Cascade)
+  user      User?                @relation("ContatoVinculado", fields: [userId], references: [id], onDelete: SetNull)
+  espelhoDe Contato?             @relation("ContatoEspelho", fields: [espelhoDeId], references: [id], onDelete: SetNull)
+  espelhos  Contato[]            @relation("ContatoEspelho")
+  convites  CartaoShareConvite[]
+  shares    CartaoShare[]
 
   // a mesma pessoa entra uma vez por agenda (mas pode ser contato de vários donos)
   @@unique([ownerId, userId])
@@ -110,7 +142,7 @@ model Contato {
 //   valor: valor avulso na fatura; mesRef null = recorrente todo mês, YYYY-MM = pontual.
 model CartaoShare {
   id            String          @id @default(uuid()) @db.Uuid
-  cartaoId      String          @map("cartao_id") @db.Uuid
+  cartaoId      String?         @map("cartao_id") @db.Uuid
   contatoId     String          @map("contato_id") @db.Uuid
   tipo          CartaoShareTipo
   descricao     String          @default("")
@@ -122,11 +154,16 @@ model CartaoShare {
   createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  cartao      Cartao       @relation(fields: [cartaoId], references: [id], onDelete: Cascade)
+  cartao      Cartao?      @relation(fields: [cartaoId], references: [id], onDelete: Cascade)
   contato     Contato      @relation(fields: [contatoId], references: [id], onDelete: Cascade)
   despesaFixa DespesaFixa? @relation(fields: [despesaFixaId], references: [id], onDelete: Cascade)
   despesaMes  DespesaMes?  @relation(fields: [despesaMesId], references: [id], onDelete: Cascade)
 
+  // o mesmo contato nao entra duas vezes na mesma linha (o rateio ficaria errado
+  // sem ninguem perceber). NULL e distinto no Postgres, entao share tipo "valor"
+  // segue livre pra repetir contato.
+  @@unique([despesaFixaId, contatoId], map: "share_fixa_contato_key")
+  @@unique([despesaMesId, contatoId], map: "share_mes_contato_key")
   @@index([cartaoId])
   @@index([contatoId])
   @@map("cartao_shares")
@@ -228,6 +265,7 @@ model Espaco {
   appSettings     AppSettings[]
   pagamentosFixas PagamentoFixa[]
   mesesOcultos    EspacoMesOculto[]
+  adocoes         ShareAdocao[]
 
   @@index([userId])
   @@map("espacos")
@@ -271,6 +309,9 @@ model DespesaFixa {
   parcelaMesRef String?  @map("parcela_mes_ref") @db.Char(7)
   categoriaId   String?  @map("categoria_id") @db.Uuid
   nota          String?
+  // true = o orcamento do dono conta so a parte dele (valor - soma dos shares).
+  // false = share puramente informativo (comportamento historico).
+  abateShares   Boolean  @default(false) @map("abate_shares")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   espaco     Espaco          @relation(fields: [espacoId], references: [id], onDelete: Cascade)
@@ -278,6 +319,7 @@ model DespesaFixa {
   categoria  Categoria?      @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
   pagamentos PagamentoFixa[]
   shares     CartaoShare[]
+  adocoes    ShareAdocao[]
 
   @@index([espacoId])
   @@index([cartaoId])
@@ -315,6 +357,7 @@ model DespesaMes {
   cartaoId    String?  @map("cartao_id") @db.Uuid
   categoriaId String?  @map("categoria_id") @db.Uuid
   nota        String?
+  abateShares Boolean  @default(false) @map("abate_shares")
   // Id da transação no arquivo OFX importado — chave de dedup. Null repetido é
   // aceito pelo Postgres num unique composto, então lançamento manual segue livre.
   fitid       String?
@@ -324,6 +367,7 @@ model DespesaMes {
   cartao    Cartao?       @relation(fields: [cartaoId], references: [id], onDelete: SetNull)
   categoria Categoria?    @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
   shares    CartaoShare[]
+  adocoes   ShareAdocao[]
 
   @@unique([espacoId, fitid], map: "despesa_mes_espaco_fitid_key")
   @@index([espacoId, mes])
@@ -377,4 +421,69 @@ model RendaMensal {
 
   @@unique([espacoId, ym])
   @@map("rendas_mensais")
+}
+
+// Convite de compartilhamento: o dono manda, a pessoa aceita ou recusa. Substitui
+// o vinculo lazy silencioso (antes a pessoa via a divida sem ter consentido).
+// Sem infra de email no projeto: o token vira link copiavel na UI.
+model CartaoShareConvite {
+  id        String        @id @default(uuid()) @db.Uuid
+  ownerId   String        @map("owner_id") @db.Uuid
+  contatoId String        @map("contato_id") @db.Uuid
+  email     String
+  token     String        @unique
+  status    ContatoStatus @default(convidado)
+  expiraEm  DateTime      @map("expira_em") @db.Timestamptz(6)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  contato Contato @relation(fields: [contatoId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([contatoId])
+  @@map("convites")
+}
+
+// Adocao: o devedor puxa o share pro proprio orcamento (fixa/mes) ou ignora.
+// `shareId` e PK e NAO tem FK de proposito: se o dono apagar o share, a adocao
+// sobrevive pra avisar "compartilhamento removido pelo dono" - a despesa criada
+// e do devedor e nao pode sumir por decisao de terceiro.
+// `valorAdotado` congela o valor no momento da adocao; divergencia vira aviso.
+model ShareAdocao {
+  shareId       String          @id @map("share_id") @db.Uuid
+  userId        String          @map("user_id") @db.Uuid
+  modo          ShareAdocaoModo
+  espacoId      String?         @map("espaco_id") @db.Uuid
+  despesaFixaId String?         @map("despesa_fixa_id") @db.Uuid
+  despesaMesId  String?         @map("despesa_mes_id") @db.Uuid
+  valorAdotado  Decimal?        @map("valor_adotado") @db.Decimal(12, 2)
+  quitadoAte    String?         @map("quitado_ate") @db.Char(7) // adiantamento cobre ate este mes
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  espaco      Espaco?      @relation(fields: [espacoId], references: [id], onDelete: Cascade)
+  despesaFixa DespesaFixa? @relation(fields: [despesaFixaId], references: [id], onDelete: SetNull)
+  despesaMes  DespesaMes?  @relation(fields: [despesaMesId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("share_adocoes")
+}
+
+// Adiantamento de N parcelas de um share: move ShareAdocao.quitadoAte e zera o
+// devido nos meses cobertos. Nao mexe na fatura do dono (share e informativo).
+model ShareAdiantamento {
+  id        String   @id @default(uuid()) @db.Uuid
+  shareId   String   @map("share_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  valor     Decimal  @db.Decimal(12, 2)
+  ym        String   @db.Char(7) // mes em que o adiantamento foi feito
+  cobreAte  String   @map("cobre_ate") @db.Char(7)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([shareId])
+  @@index([userId])
+  @@map("share_adiantamentos")
 }

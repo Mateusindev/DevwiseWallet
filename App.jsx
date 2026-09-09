@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { LayoutGrid, Receipt, PiggyBank, CreditCard, ShieldCheck } from "lucide-react";
+import { LayoutGrid, Receipt, PiggyBank, CreditCard, ShieldCheck, Users } from "lucide-react";
 import { useFinance } from "./store/FinanceContext.jsx";
 import { useAuth } from "./components/AuthGate";
 import { Spinner, Button } from "./components/ui/primitives.jsx";
 import Dashboard from "./components/Dashboard.jsx";
 import DespesasFixas from "./components/DespesasFixas.jsx";
 import Cartoes from "./components/Cartoes.jsx";
+import Pessoas from "./components/Pessoas.jsx";
 import CaixinhaDetail from "./components/CaixinhaDetail.jsx";
 import Admin from "./components/Admin";
 
@@ -14,6 +15,7 @@ const NAV = [
   { id: "dashboard", label: "Início", icon: LayoutGrid, perms: ["caixinha:view"] },
   { id: "fixas", label: "Despesas", icon: Receipt, perms: ["orcamento:view"] },
   { id: "cartoes", label: "Cartões", icon: CreditCard, perms: ["cartao:view"] },
+  { id: "pessoas", label: "Pessoas", icon: Users, perms: ["cartao:share", "cartao:view_shared", "share:manage", "share:view_shared"] },
   { id: "admin", label: "Admin", icon: ShieldCheck, perms: ["user:view", "role:view"] },
 ];
 
@@ -89,6 +91,7 @@ export default function App() {
           {view === "dashboard" && <Dashboard onOpenCaixinha={openCaixinha} />}
           {view === "fixas" && <DespesasFixas />}
           {view === "cartoes" && <Cartoes />}
+          {view === "pessoas" && <Pessoas />}
           {view === "admin" && <Admin />}
           {view === "caixinha" && caixinha && (
             <CaixinhaDetail caixinha={caixinha} onBack={() => go("dashboard")} />

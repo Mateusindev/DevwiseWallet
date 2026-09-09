@@ -40,6 +40,13 @@ export function monthsBetween(a: string, b: string): number {
   return (by - ay) * 12 + (bm - am);
 }
 
+// 'YYYY-MM' + n meses.
+export function addMonths(ym: string, n: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 type ParcelaShape = {
   parcelado: boolean;
   parcelaAtual: number | null;

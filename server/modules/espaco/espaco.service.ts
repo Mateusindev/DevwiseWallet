@@ -2,10 +2,30 @@ import type { Espaco } from "@prisma/client";
 import { espacoRepository, type EspacoComOrcamento } from "./espaco.repository";
 import { AppError, NotFoundError } from "@/server/lib/errors";
 import { num, isoDate, round, parcelaView } from "@/server/lib/serialize";
+import { aplicaDivisao, type ShareLike } from "../cartao-share/rateio";
 import type { CreateEspacoDTO, UpdateEspacoDTO } from "./espaco.dto";
 
 export function espacoView(esp: Espaco) {
   return { id: esp.id, nome: esp.nome, tipo: esp.tipo, emoji: esp.emoji };
+}
+
+// Rateio da linha no formato que o front desenha (iniciais + valor efetivo).
+// Independe do mês de propósito: a parte de cada contato é sempre a mesma fatia
+// da linha; quem some no mês é a linha inteira (parcela encerrada), e disso o
+// front já cuida com `parcelaAtivaNoMes`.
+type ShareComContato = ShareLike & { contato: { id: string; nome: string; status: string } | null };
+
+// A base vem por parâmetro: aqui o share está aninhado DENTRO da despesa, então
+// ele não carrega `despesaFixa`/`despesaMes` pra `linhaBase` derivar sozinha.
+function rateioView(shares: ShareComContato[], base: number) {
+  return shares.map((s) => ({
+    shareId: s.id,
+    contatoId: s.contatoId,
+    nome: s.contato?.nome ?? "",
+    status: s.contato?.status ?? "local",
+    percentual: s.percentual != null ? num(s.percentual) : null,
+    valor: aplicaDivisao(base, s),
+  }));
 }
 
 // Monta o blob de orçamento no formato que o front espera.
@@ -22,6 +42,8 @@ export function orcamentoView(esp: EspacoComOrcamento) {
       ativa: d.ativa,
       categoriaId: d.categoriaId,
       nota: d.nota,
+      abateShares: d.abateShares,
+      rateio: rateioView(d.shares as ShareComContato[], num(d.valor)),
       ...parcelaView(d),
     })),
     despesasMes: esp.despesasMes.map((d) => ({
@@ -35,6 +57,8 @@ export function orcamentoView(esp: EspacoComOrcamento) {
       cartaoId: d.cartaoId,
       categoriaId: d.categoriaId,
       nota: d.nota,
+      abateShares: d.abateShares,
+      rateio: rateioView(d.shares as ShareComContato[], num(d.valor)),
       fitid: d.fitid, // o front usa pra marcar o que já veio de um OFX
     })),
     receitasMes: esp.receitasMes.map((r) => ({

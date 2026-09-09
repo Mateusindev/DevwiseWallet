@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2, Repeat, Upload,
+  Plus, Trash2, CalendarClock, Wallet, ArrowDownLeft, ArrowUpRight, Pencil, Check, CreditCard, CheckCircle2, X, Undo2, Repeat, Upload, Split,
 } from "lucide-react";
 import { Card, Button, Field, MoneyInput, Spinner, Modal } from "./ui/primitives.jsx";
 import { Checkbox, CheckboxField, FormError, MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
 import BulkBar, { BulkAcao } from "./BulkBar.jsx";
 import ImportOfxModal from "./ImportOfx.jsx";
-import { MeusCompartilhamentos } from "./Compartilhamento.jsx";
+import { MeusCompartilhamentos, RateioChips, RatearModal } from "./Compartilhamento.jsx";
 import { useSelecao } from "./ui/useSelecao.js";
 import { mensagemDeErro } from "../lib/formErrors.js";
 import { DespesaFixaModal, DespesaMesModal, ReceitaMesModal, EspacoModal } from "./forms.jsx";
 import { fmtMoney, fmtMonthLabel } from "../lib/format.js";
-import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, janelaMeses, mesesComDados, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes } from "../lib/calc.js";
+import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, janelaMeses, mesesComDados, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes, valorEfetivoLinha } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 
@@ -97,6 +97,8 @@ export default function DespesasFixas() {
   const [escopoReceita, setEscopoReceita] = useState(null); // { r, acao: "editar" | "excluir" }
   const [escopoEdicao, setEscopoEdicao] = useState("todas");
   const [delBusy, setDelBusy] = useState(false);
+  // { linha, campo: "fixa" | "mes" } — divisão da linha entre N pessoas
+  const [ratear, setRatear] = useState(null);
 
   async function excluirFixa() {
     setDelBusy(true);
@@ -401,12 +403,23 @@ export default function DespesasFixas() {
                       <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                         <CategoriaBadge d={d} categoriasMap={categoriasMap} />
                         <CartaoBadge d={d} cartoesMap={cartoesMap} ym={ym} inline />
+                        <RateioChips d={d} />
                       </div>
                     </div>
                     <div className="flex w-full items-center justify-end gap-1 sm:w-auto sm:gap-2">
-                      <span className={`tnum font-semibold ${pago ? "text-emerald-400" : "text-slate-200"}`}>{fmtMoney(d.valor)}</span>
+                      <span className={`tnum font-semibold ${pago ? "text-emerald-400" : "text-slate-200"}`}>
+                        {fmtMoney(valorEfetivoLinha(d))}
+                        {/* abateShares: o total conta só a parte do dono; o cheio fica de referência */}
+                        {d.abateShares && d.rateio?.length > 0 && (
+                          <span className="ml-1 text-[11px] font-normal text-slate-500 line-through">{fmtMoney(d.valor)}</span>
+                        )}
+                      </span>
                       {canOrc && (
                         <>
+                          <button onClick={() => setRatear({ linha: d, campo: "mes" })} aria-label={`Dividir ${d.descricao}`}
+                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                            <Split size={15} />
+                          </button>
                           <PagarControl valor={d.valor} valorPago={d.valorPago || 0} onSet={(v) => setPagaMes(d.id, v)} />
                           <button onClick={() => setEditMes(d)} aria-label={`Editar ${d.descricao}`}
                             className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
@@ -515,12 +528,22 @@ export default function DespesasFixas() {
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                           <CategoriaBadge d={d} categoriasMap={categoriasMap} />
                           <CartaoBadge d={d} cartoesMap={cartoesMap} ym={ym} inline />
+                          <RateioChips d={d} />
                         </div>
                       </div>
                       <div className="flex w-full items-center justify-end gap-1 sm:w-auto sm:gap-2">
-                        <span className={`tnum font-semibold ${paga ? "text-emerald-400" : "text-slate-200"}`}>{fmtMoney(d.valor)}</span>
+                        <span className={`tnum font-semibold ${paga ? "text-emerald-400" : "text-slate-200"}`}>
+                          {fmtMoney(valorEfetivoLinha(d))}
+                          {d.abateShares && d.rateio?.length > 0 && (
+                            <span className="ml-1 text-[11px] font-normal text-slate-500 line-through">{fmtMoney(d.valor)}</span>
+                          )}
+                        </span>
                         {canOrc && (
                           <>
+                            <button onClick={() => setRatear({ linha: d, campo: "fixa" })} aria-label={`Dividir ${d.descricao}`}
+                              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                              <Split size={15} />
+                            </button>
                             {conta && <PagarControl valor={d.valor} valorPago={valorPago} onSet={(v) => setPagamentoFixa(d.id, ym, v)} />}
                             <span className="flex items-center" title={d.ativa ? "Ativa" : "Pausada"}>
                               <Checkbox checked={d.ativa} onChecked={() => toggleDespesaFixa(d.id)}
@@ -549,6 +572,14 @@ export default function DespesasFixas() {
       </div>{/* /conteúdo do orçamento */}
 
       {can("cartao:view_shared") && <MeusCompartilhamentos ym={ym} />}
+
+      <RatearModal
+        open={!!ratear}
+        onClose={() => setRatear(null)}
+        linha={ratear?.linha}
+        campo={ratear?.campo}
+        onSaved={fin.refresh}
+      />
 
       {canOrc && (
         <BulkBar

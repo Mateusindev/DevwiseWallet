@@ -36,6 +36,10 @@ const parcelaCoerenteOpts = {
 
 const categoriaId = z.string().uuid().nullable().optional();
 
+// true = o orçamento conta só a parte do dono (valor menos a soma dos shares).
+// Decisão por linha: a fatura do cartão continua cheia, o aluguel não.
+const abateShares = z.boolean().optional();
+
 // Observação livre (opcional). String vazia vira null no service.
 const nota = z.string().trim().max(1000, "A nota passa de 1000 caracteres").nullable().optional();
 
@@ -51,6 +55,7 @@ export const addDespesaFixaSchema = z
     diaVencimento: diaVencimento.default(1),
     categoriaId,
     nota,
+    abateShares,
     ...parcelaShape,
   })
   .refine(parcelaCoerente, parcelaCoerenteOpts);
@@ -63,6 +68,7 @@ export const updateDespesaFixaSchema = z
     ativa: z.boolean().optional(),
     categoriaId,
     nota,
+    abateShares,
     ...parcelaShape,
   })
   .refine(parcelaCoerente, parcelaCoerenteOpts);
@@ -77,6 +83,7 @@ export const addDespesaMesSchema = z
     cartaoId: z.string().uuid().nullable().optional(),
     categoriaId,
     nota,
+    abateShares,
   })
   .refine(dataNoMes, dataNoMesOpts);
 
@@ -87,6 +94,7 @@ export const updateDespesaMesSchema = z.object({
   cartaoId: z.string().uuid().nullable().optional(),
   categoriaId,
   nota,
+  abateShares,
 });
 
 // Receita recorrente: `mes` passa a ser a âncora e `mesFim` fecha a janela

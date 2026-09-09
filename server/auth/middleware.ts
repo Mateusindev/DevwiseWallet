@@ -30,3 +30,15 @@ export const requirePermission = (permission: string) =>
     }
     await next();
   });
+
+// Basta UMA das permissions. Existe pro rename de catálogo do compartilhamento:
+// as rotas exigem a permission nova, mas o alias antigo (`cartao:share`,
+// `cartao:view_shared`) continua abrindo a porta enquanto as roles migram.
+export const requireAnyPermission = (...permissions: string[]) =>
+  createMiddleware<AuthEnv>(async (c, next) => {
+    const user = c.get("user");
+    for (const p of permissions) {
+      if (await authService.can(user, p)) return next();
+    }
+    throw new AppError(`Sem permissão: ${permissions.join(" | ")}`, 403);
+  });
