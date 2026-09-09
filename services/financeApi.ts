@@ -4,7 +4,19 @@
 // pelo TypeScript contra o AppType exportado pela rota catch-all.
 import { hc } from "hono/client";
 import type { InferRequestType } from "hono/client";
+import type { z } from "zod";
 import type { AppType } from "@/app/api/[[...route]]/route";
+import type { ActionResult } from "@/server/next/action";
+import {
+  listarCategorias,
+  criarCategoria,
+  atualizarCategoria,
+  removerCategoria,
+} from "@/server/modules/categoria/categoria.actions";
+import type {
+  createCategoriaSchema,
+  updateCategoriaSchema,
+} from "@/server/modules/categoria/categoria.dto";
 
 const client = hc<AppType>("/");
 
@@ -24,6 +36,13 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+// Server Function: o resultado é discriminado (não há status HTTP), então o
+// ApiError é reconstruído aqui — `useFormState` continua vendo `issues` no 422.
+function unwrapAction<T>(r: ActionResult<T>): T {
+  if (r.ok) return r.data;
+  throw new ApiError(r.error, r.status, r.issues);
 }
 
 // Resposta do hc: propaga mensagem de erro do back-end, devolve JSON tipado.
@@ -519,20 +538,22 @@ export async function sincronizarShare(shareId: string, ym?: string) {
 }
 
 // ── Categorias de despesa (da conta, não por espaço) ─────────────────────────
+// Primeiro módulo em Server Functions: mesma assinatura, mesmo shape de retorno
+// — só a implementação por baixo mudou. As rotas Hono continuam de pé.
 export async function getCategorias() {
-  return unwrap(client.api.categorias.$get());
+  return unwrapAction(await listarCategorias());
 }
 
-export async function addCategoria(dto: Body<typeof client.api.categorias.$post>) {
-  return unwrap(client.api.categorias.$post({ json: dto }));
+export async function addCategoria(dto: z.input<typeof createCategoriaSchema>) {
+  return unwrapAction(await criarCategoria(dto));
 }
 
-export async function updateCategoria(id: string, patch: Body<(typeof client.api.categorias)[":id"]["$patch"]>) {
-  return unwrap(client.api.categorias[":id"].$patch({ param: { id }, json: patch }));
+export async function updateCategoria(id: string, patch: z.input<typeof updateCategoriaSchema>) {
+  return unwrapAction(await atualizarCategoria(id, patch));
 }
 
 export async function removeCategoria(id: string) {
-  return unwrap(client.api.categorias[":id"].$delete({ param: { id } }));
+  return unwrapAction(await removerCategoria(id));
 }
 
 // ── Dev helper ─────────────────────────────────────────────────────────────
