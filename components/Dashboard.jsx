@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, PiggyBank, Target, LifeBuoy, ChevronRight } from "lucide-react";
 import { Card, Donut, Button, ProgressBar, Modal } from "./ui/primitives.jsx";
-import { Select, SelectItem } from "./ui/fields.jsx";
+import { MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
 import { GroupedBars, HBars, LineTrend, StackedBars } from "./ui/charts.jsx";
 import CaixinhaCard from "./CaixinhaCard.jsx";
+import { MeusCompartilhamentos } from "./Compartilhamento.jsx";
 import { AporteModal, DespesaVariavelModal, CaixinhaModal, ReservaEmergenciaModal } from "./forms.jsx";
 import { fmtMoney, fmtMoneyCompact, currentMonthKey, fmtMonthLabel, fmtMonthShort, lastMonths } from "../lib/format.js";
-import { totalSaldo, totalAporteMensal, acento, orcamentoMes, fixaContaNoMes } from "../lib/calc.js";
+import { totalSaldo, totalAporteMensal, acento, orcamentoMes, fixaContaNoMes, janelaMeses, mesesComDados } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 import * as api from "../services/financeApi";
@@ -18,12 +19,14 @@ export default function Dashboard({ onOpenCaixinha }) {
   const { can } = useAuth();
   const {
     caixinhas, cartoes, categorias, despesasFixas, despesasMes, receitasMes, receitasSkips,
-    rendasMensais, config, reloadCartoes, espacos, activeEspacoId,
+    rendasMensais, config, reloadCartoes, espacos, activeEspacoId, ym, setYm,
   } = fin;
 
-  const ym = currentMonthKey();
-  // agregados de fatura do mês (caso o usuário caia aqui primeiro)
-  useEffect(() => { reloadCartoes(); }, [reloadCartoes]);
+  // agregados de fatura do mês visto (caso o usuário caia aqui primeiro)
+  useEffect(() => {
+    if (ym !== currentMonthKey()) reloadCartoes(ym);
+    else reloadCartoes();
+  }, [ym, reloadCartoes]);
 
   // Espaço visualizado nos gráficos — independente da página ativa em Despesas.
   // Default = espaço ativo; trocar busca o orçamento do escolhido sem mexer no global.
@@ -54,6 +57,12 @@ export default function Dashboard({ onOpenCaixinha }) {
   const cfg = usaAtivo ? config : (vizOrc?.config || { rendaMensal: 0 });
 
   const catMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
+  // janela do seletor de mês — mesma regra de Despesas (mês global no contexto)
+  const comDados = useMemo(
+    () => mesesComDados({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes }),
+    [rendas, dMes, rMes]
+  );
+  const janela = useMemo(() => janelaMeses({ dados: comDados }), [comDados]);
   const orc = useMemo(
     () => orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, receitasSkips: rSkips, despesasFixas: dFixas, config: cfg }, ym),
     [rendas, dMes, rMes, rSkips, dFixas, cfg, ym]
@@ -158,8 +167,9 @@ export default function Dashboard({ onOpenCaixinha }) {
     return () => { cancel = true; };
   }, [espacos, ym]);
 
-  const [aporte, setAporte] = useState(false);
-  const [despesa, setDespesa] = useState(false);
+  // null | { caixinhaId? } — com id, o modal abre travado naquela caixinha.
+  const [aporte, setAporte] = useState(null);
+  const [despesa, setDespesa] = useState(null);
   const [novaMode, setNovaMode] = useState(null); // "choose" | "normal" | "reserva"
   const temReserva = caixinhas.some((c) => c.tipo === "emergencia");
 
@@ -187,13 +197,11 @@ export default function Dashboard({ onOpenCaixinha }) {
     <section className="space-y-6">
       {/* greeting + quick actions */}
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-400">{fmtMonthLabel(currentMonthKey())}</p>
-        </div>
+        <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comDados} />
         {can("movimentacao:manage") && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="growth" onClick={() => setAporte(true)}><Plus size={16} /> Aporte</Button>
-            <Button variant="outline" onClick={() => setDespesa(true)}>Registrar despesa</Button>
+            <Button variant="growth" onClick={() => setAporte({})}><Plus size={16} /> Aporte</Button>
+            <Button variant="outline" onClick={() => setDespesa({})}>Registrar despesa</Button>
           </div>
         )}
       </header>
@@ -266,8 +274,8 @@ export default function Dashboard({ onOpenCaixinha }) {
               key={c.id}
               caixinha={c}
               onOpen={() => onOpenCaixinha(c.id)}
-              onAporte={() => setAporte(true)}
-              onDespesa={() => setDespesa(true)}
+              onAporte={() => setAporte({ caixinhaId: c.id })}
+              onDespesa={() => setDespesa({ caixinhaId: c.id })}
             />
           ))}
         </div>
@@ -400,8 +408,12 @@ export default function Dashboard({ onOpenCaixinha }) {
         </div>
       )}
 
-      <AporteModal open={aporte} onClose={() => setAporte(false)} caixinhas={ordered} />
-      <DespesaVariavelModal open={despesa} onClose={() => setDespesa(false)} caixinhas={ordered} />
+      {can("cartao:view_shared") && <MeusCompartilhamentos ym={ym} />}
+
+      <AporteModal open={!!aporte} onClose={() => setAporte(null)} caixinhas={ordered}
+                   defaultCaixinhaId={aporte?.caixinhaId} lockCaixinha={!!aporte?.caixinhaId} />
+      <DespesaVariavelModal open={!!despesa} onClose={() => setDespesa(null)} caixinhas={ordered}
+                            defaultCaixinhaId={despesa?.caixinhaId} lockCaixinha={!!despesa?.caixinhaId} />
 
       {/* Passo 1: escolher o tipo de caixinha a criar */}
       <Modal open={novaMode === "choose"} onClose={() => setNovaMode(null)} title="Nova caixinha">

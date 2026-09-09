@@ -13,12 +13,11 @@ import * as api from "../services/financeApi";
 import { useAuth } from "./AuthGate";
 
 export default function Cartoes() {
-  const { cartoes, reloadCartoes, removeCartao, despesasFixas, despesasMes } = useFinance();
+  const { cartoes, reloadCartoes, removeCartao, despesasFixas, despesasMes, ym, setYm } = useFinance();
   const { can } = useAuth();
   const canManage = can("cartao:manage");
   const canShare = can("cartao:share");
   const canViewShared = can("cartao:view_shared");
-  const [ym, setYm] = useState(currentMonthKey());
   const [novoOpen, setNovoOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [sharing, setSharing] = useState(null);

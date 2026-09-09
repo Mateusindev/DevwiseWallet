@@ -7,10 +7,11 @@ import { Card, Button, Field, MoneyInput, Spinner, Modal } from "./ui/primitives
 import { Checkbox, CheckboxField, FormError, MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
 import BulkBar, { BulkAcao } from "./BulkBar.jsx";
 import ImportOfxModal from "./ImportOfx.jsx";
+import { MeusCompartilhamentos } from "./Compartilhamento.jsx";
 import { useSelecao } from "./ui/useSelecao.js";
 import { mensagemDeErro } from "../lib/formErrors.js";
 import { DespesaFixaModal, DespesaMesModal, ReceitaMesModal, EspacoModal } from "./forms.jsx";
-import { fmtMoney, fmtMonthLabel, currentMonthKey } from "../lib/format.js";
+import { fmtMoney, fmtMonthLabel } from "../lib/format.js";
 import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, janelaMeses, mesesComDados, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
@@ -75,14 +76,13 @@ export default function DespesasFixas() {
     despesasFixas, despesasMes, receitasMes, receitasSkips, rendasMensais, config,
     espacos, espacosOcultos, activeEspacoId, orcamentoStatus, cartoes, categorias, pagamentosFixas,
     setActiveEspaco, toggleDespesaFixa, removeDespesaFixa, removeDespesaMes, removeReceitaMes, setPagamentoFixa, setPagaMes,
-    bulkMes, bulkFixas, skipReceitaMes, encerrarReceitaMes,
+    bulkMes, bulkFixas, skipReceitaMes, encerrarReceitaMes, ym, setYm,
   } = fin;
   const cartoesMap = useMemo(() => Object.fromEntries(cartoes.map((c) => [c.id, c])), [cartoes]);
   const categoriasMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
   const { can } = useAuth();
   const canOrc = can("orcamento:manage");
 
-  const [ym, setYm] = useState(currentMonthKey());
   const [fixaOpen, setFixaOpen] = useState(false);
   const [mesOpen, setMesOpen] = useState(false);
   const [receitaOpen, setReceitaOpen] = useState(false);
@@ -547,6 +547,8 @@ export default function DespesasFixas() {
         {/* espaço pra última linha não ficar debaixo da BulkBar */}
         {alvoLote && <div className="h-20" aria-hidden />}
       </div>{/* /conteúdo do orçamento */}
+
+      {can("cartao:view_shared") && <MeusCompartilhamentos ym={ym} />}
 
       {canOrc && (
         <BulkBar

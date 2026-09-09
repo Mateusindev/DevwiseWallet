@@ -1,5 +1,6 @@
-import { createContext, useContext, useCallback, useEffect, useReducer } from "react";
+import { createContext, useContext, useCallback, useEffect, useReducer, useState } from "react";
 import * as api from "../services/financeApi";
+import { currentMonthKey } from "../lib/format.js";
 
 // ── State shape ────────────────────────────────────────────────────────────
 // GLOBAL: caixinhas, movimentacoes (economias compartilhadas).
@@ -260,6 +261,8 @@ const Ctx = createContext(null);
 export function FinanceProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initial);
   const esp = state.activeEspacoId;
+  // Mês visto — global: Início, Despesas e Cartões olham sempre o mesmo mês.
+  const [ym, setYm] = useState(currentMonthKey());
 
   const bootstrap = useCallback(async () => {
     dispatch({ type: "BOOT_START" });
@@ -524,7 +527,7 @@ export function FinanceProvider({ children }) {
     },
   };
 
-  return <Ctx.Provider value={{ ...state, ...actions }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ ...state, ...actions, ym, setYm }}>{children}</Ctx.Provider>;
 }
 
 export function useFinance() {
