@@ -50,6 +50,24 @@ import {
   removerCartao,
 } from "@/server/modules/cartao/cartao.actions";
 import type { createCartaoSchema, updateCartaoSchema } from "@/server/modules/cartao/cartao.dto";
+import {
+  bootstrapAdmin,
+  listarUsuarios,
+  criarUsuario,
+  atualizarUsuario,
+  removerUsuario,
+  listarRoles,
+  criarRole,
+  atualizarRole,
+  removerRole,
+  listarPermissions,
+} from "@/server/modules/admin/admin.actions";
+import type {
+  createUserSchema,
+  updateUserSchema,
+  createRoleSchema,
+  updateRoleSchema,
+} from "@/server/modules/admin/admin.dto";
 
 const client = hc<AppType>("/");
 
@@ -119,40 +137,46 @@ export async function me() {
 export type AdminUserView = Awaited<ReturnType<typeof listUsers>>[number];
 export type AdminRoleView = Awaited<ReturnType<typeof listRoles>>[number];
 
+// Tela inteira numa chamada: users + roles + catálogo de permissions, com o
+// Promise.all rodando no servidor (o dispatcher do cliente é sequencial).
+export async function getAdminBootstrap() {
+  return unwrapAction(await bootstrapAdmin());
+}
+
 export async function listUsers() {
-  return unwrap(client.api.admin.users.$get());
+  return unwrapAction(await listarUsuarios());
 }
 
-export async function createUser(dto: Body<typeof client.api.admin.users.$post>) {
-  return unwrap(client.api.admin.users.$post({ json: dto }));
+export async function createUser(dto: z.input<typeof createUserSchema>) {
+  return unwrapAction(await criarUsuario(dto));
 }
 
-export async function updateUser(id: string, patch: Body<(typeof client.api.admin.users)[":id"]["$patch"]>) {
-  return unwrap(client.api.admin.users[":id"].$patch({ param: { id }, json: patch }));
+export async function updateUser(id: string, patch: z.input<typeof updateUserSchema>) {
+  return unwrapAction(await atualizarUsuario(id, patch));
 }
 
 export async function deleteUser(id: string) {
-  return unwrap(client.api.admin.users[":id"].$delete({ param: { id } }));
+  return unwrapAction(await removerUsuario(id));
 }
 
 export async function listRoles() {
-  return unwrap(client.api.admin.roles.$get());
+  return unwrapAction(await listarRoles());
 }
 
-export async function createRole(dto: Body<typeof client.api.admin.roles.$post>) {
-  return unwrap(client.api.admin.roles.$post({ json: dto }));
+export async function createRole(dto: z.input<typeof createRoleSchema>) {
+  return unwrapAction(await criarRole(dto));
 }
 
-export async function updateRole(id: string, patch: Body<(typeof client.api.admin.roles)[":id"]["$patch"]>) {
-  return unwrap(client.api.admin.roles[":id"].$patch({ param: { id }, json: patch }));
+export async function updateRole(id: string, patch: z.input<typeof updateRoleSchema>) {
+  return unwrapAction(await atualizarRole(id, patch));
 }
 
 export async function deleteRole(id: string) {
-  return unwrap(client.api.admin.roles[":id"].$delete({ param: { id } }));
+  return unwrapAction(await removerRole(id));
 }
 
 export async function listPermissions() {
-  return unwrap(client.api.admin.permissions.$get());
+  return unwrapAction(await listarPermissions());
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────

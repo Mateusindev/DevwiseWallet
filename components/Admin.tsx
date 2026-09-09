@@ -11,9 +11,8 @@ const { CheckboxField, FormError } = F as unknown as Record<string, React.Compon
 import { emailValido, issuesToFields, mensagemDeErro, texto } from "@/lib/formErrors.js";
 import { useAuth } from "./AuthGate";
 import {
-  listUsers, createUser, updateUser, deleteUser,
-  listRoles, createRole, updateRole, deleteRole,
-  listPermissions,
+  getAdminBootstrap, createUser, updateUser, deleteUser,
+  createRole, updateRole, deleteRole,
   type AdminUserView, type AdminRoleView,
 } from "@/services/financeApi";
 
@@ -27,21 +26,20 @@ export default function Admin() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Uma chamada só: o servidor paraleliza users/roles/permissions e já respeita
+  // a permission de cada parte. Três leituras em paralelo aqui virariam três
+  // sequenciais — o dispatcher de Server Actions é serial por cliente.
   const reload = useCallback(async () => {
     setError(null);
     try {
-      const [u, r, p] = await Promise.all([
-        can("user:view") ? listUsers() : Promise.resolve(null),
-        can("role:view") ? listRoles() : Promise.resolve(null),
-        can("role:view") ? listPermissions() : Promise.resolve({ permissions: [] as unknown as readonly string[] }),
-      ]);
-      setUsers(u);
-      setRoles(r);
-      setPermissions([...(p?.permissions ?? [])]);
+      const b = await getAdminBootstrap();
+      setUsers(b.users);
+      setRoles(b.roles);
+      setPermissions([...b.permissions]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [can]);
+  }, []);
 
   useEffect(() => { reload(); }, [reload]);
 
