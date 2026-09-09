@@ -2,7 +2,12 @@ import { Hono } from "hono";
 import { zValidator } from "@/server/lib/validator";
 import { requirePermission, type AuthEnv } from "@/server/auth/middleware";
 import { espacoService } from "./espaco.service";
-import { createEspacoSchema, updateEspacoSchema, setActiveSchema } from "./espaco.dto";
+import {
+  createEspacoSchema,
+  updateEspacoSchema,
+  setActiveSchema,
+  orcamentoQuerySchema,
+} from "./espaco.dto";
 
 const view = requirePermission("espaco:view");
 const manage = requirePermission("espaco:manage");
@@ -29,6 +34,12 @@ export const espacoRoutes = new Hono<AuthEnv>()
   .delete("/despesas/espacos/:id/ocultar/:ym", manage, async (c) =>
     c.json(await espacoService.restaurarNoMes(c.get("user").id, c.req.param("id"), c.req.param("ym")))
   )
-  .get("/despesas/espacos/:esp", view, async (c) =>
-    c.json(await espacoService.getOrcamento(c.get("user").id, c.req.param("esp")))
+  .get("/despesas/espacos/:esp", view, zValidator("query", orcamentoQuerySchema), async (c) =>
+    c.json(
+      await espacoService.getOrcamento(
+        c.get("user").id,
+        c.req.param("esp"),
+        c.req.valid("query").ym
+      )
+    )
   );

@@ -1,9 +1,15 @@
 import type { Espaco } from "@prisma/client";
 import { espacoRepository, type EspacoComOrcamento } from "./espaco.repository";
 import { AppError, NotFoundError } from "@/server/lib/errors";
-import { num, isoDate, round, parcelaView } from "@/server/lib/serialize";
+import { num, isoDate, round, parcelaView, addMonths, currentMonth } from "@/server/lib/serialize";
 import { aplicaDivisao, type ShareLike } from "../cartao-share/rateio";
 import type { CreateEspacoDTO, UpdateEspacoDTO } from "./espaco.dto";
+
+// Janela de histórico carregada por leitura de orçamento. 12/12 cobre com folga
+// a série de 6 meses do Início e o planejamento do ano; sair dela é o caso raro
+// que o front refaz.
+const JANELA_ATRAS = 12;
+const JANELA_FRENTE = 12;
 
 export function espacoView(esp: Espaco) {
   return { id: esp.id, nome: esp.nome, tipo: esp.tipo, emoji: esp.emoji };
@@ -145,10 +151,17 @@ export const espacoService = {
     return { id, ym };
   },
 
-  async getOrcamento(userId: string, espacoId: string) {
-    const esp = await espacoRepository.findWithOrcamento(espacoId, userId);
+  // Orçamento do espaço numa JANELA de meses ao redor de `ym` (o front refaz a
+  // busca quando o seletor sai dela). Devolve `janela` pra ele saber o alcance
+  // do que recebeu, e as listas de meses com lançamento pros pontinhos do
+  // seletor — que precisam enxergar além da janela.
+  async getOrcamento(userId: string, espacoId: string, ym = currentMonth()) {
+    const de = addMonths(ym, -JANELA_ATRAS);
+    const ate = addMonths(ym, JANELA_FRENTE);
+    const esp = await espacoRepository.findWithOrcamento(espacoId, userId, de, ate);
     if (!esp) throw new NotFoundError(`Espaço de despesa não encontrado: ${espacoId}`);
-    return orcamentoView(esp);
+    const meses = await espacoRepository.mesesComLancamento(espacoId);
+    return { ...orcamentoView(esp), janela: { de, ate }, ...meses };
   },
 
   async setActive(userId: string, id: string) {

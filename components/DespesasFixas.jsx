@@ -76,7 +76,7 @@ export default function DespesasFixas() {
     despesasFixas, despesasMes, receitasMes, receitasSkips, rendasMensais, config,
     espacos, espacosOcultos, activeEspacoId, orcamentoStatus, cartoes, categorias, pagamentosFixas,
     setActiveEspaco, toggleDespesaFixa, removeDespesaFixa, removeDespesaMes, removeReceitaMes, setPagamentoFixa, setPagaMes,
-    bulkMes, bulkFixas, skipReceitaMes, encerrarReceitaMes, ym, setYm,
+    bulkMes, bulkFixas, skipReceitaMes, encerrarReceitaMes, ym, setYm, mesesComDespesa,
   } = fin;
   const cartoesMap = useMemo(() => Object.fromEntries(cartoes.map((c) => [c.id, c])), [cartoes]);
   const categoriasMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
@@ -142,8 +142,8 @@ export default function DespesasFixas() {
 
   // Pontinho nos meses com lançamento; janela navegável esticada pelo dado mais antigo.
   const comDados = useMemo(
-    () => mesesComDados({ rendasMensais, despesasMes, receitasMes }),
-    [rendasMensais, despesasMes, receitasMes]
+    () => mesesComDados({ rendasMensais, despesasMes, receitasMes, mesesComDespesa }),
+    [rendasMensais, despesasMes, receitasMes, mesesComDespesa]
   );
   const janela = useMemo(() => janelaMeses({ dados: comDados }), [comDados]);
   const orc = useMemo(

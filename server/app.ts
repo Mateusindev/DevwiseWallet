@@ -6,6 +6,8 @@ import { AppError } from "@/server/lib/errors";
 import { authRoutes } from "@/server/auth/auth.routes";
 import { requireAuth, requirePermission } from "@/server/auth/middleware";
 import { getState } from "@/server/modules/bootstrap/bootstrap.service";
+import { zValidator } from "@/server/lib/validator";
+import { orcamentoQuerySchema } from "@/server/modules/espaco/espaco.dto";
 import { caixinhaRoutes } from "@/server/modules/caixinha/caixinha.routes";
 import { movimentacaoRoutes } from "@/server/modules/movimentacao/movimentacao.routes";
 import { espacoRoutes } from "@/server/modules/espaco/espaco.routes";
@@ -49,8 +51,11 @@ export const app = base
   // tudo abaixo exige sessão (JWT no cookie httpOnly); cada rota exige a
   // permission granular dela (PBAC)
   .use(requireAuth)
-  .get("/state", requirePermission("state:view"), async (c) =>
-    c.json(await getState(c.get("user").id))
+  .get(
+    "/state",
+    requirePermission("state:view"),
+    zValidator("query", orcamentoQuerySchema),
+    async (c) => c.json(await getState(c.get("user").id, c.req.valid("query").ym))
   )
   .route("/", caixinhaRoutes)
   .route("/", movimentacaoRoutes)

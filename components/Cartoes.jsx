@@ -13,7 +13,7 @@ import * as api from "../services/financeApi";
 import { useAuth } from "./AuthGate";
 
 export default function Cartoes() {
-  const { cartoes, reloadCartoes, removeCartao, despesasFixas, despesasMes, ym, setYm } = useFinance();
+  const { cartoes, reloadCartoes, removeCartao, despesasFixas, despesasMes, ym, setYm, mesesComFatura: mesesComFaturaFora } = useFinance();
   const { can } = useAuth();
   const canManage = can("cartao:manage");
   const canShare = can("cartao:share");
@@ -23,7 +23,10 @@ export default function Cartoes() {
   const [sharing, setSharing] = useState(null);
   const [importando, setImportando] = useState(null); // cartão pré-selecionado no import
   // Janela de faturas: 12 meses pra cada lado, esticada pelas parcelas em aberto.
-  const comFatura = useMemo(() => mesesComFatura(despesasFixas, despesasMes), [despesasFixas, despesasMes]);
+  const comFatura = useMemo(
+    () => mesesComFatura(despesasFixas, despesasMes, undefined, mesesComFaturaFora),
+    [despesasFixas, despesasMes, mesesComFaturaFora]
+  );
   const janela = useMemo(() => janelaMeses({ dados: comFatura, atras: 12, frente: 12 }), [comFatura]);
 
   // recarrega os agregados quando troca o mês

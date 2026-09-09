@@ -40,6 +40,7 @@ mock.module("@/server/modules/espaco/espaco.repository", () => ({
     list: async () => state.espacos,
     findById: async (id: string) => state.espacos.find((e) => e.id === id) ?? null,
     findWithOrcamento: async (id: string) => (state.orcamento?.id === id ? state.orcamento : null),
+    mesesComLancamento: async () => ({ mesesComDespesa: [], mesesComFatura: [] }),
     count: async () => state.espacos.length,
     create: async (data: Row) => {
       state.created = data;

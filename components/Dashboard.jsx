@@ -41,11 +41,11 @@ export default function Dashboard({ onOpenCaixinha }) {
     if (!vizId || vizId === activeEspacoId) { setVizOrc(null); return; }
     let cancel = false;
     setVizLoading(true);
-    api.getOrcamento(vizId)
+    api.getOrcamento(vizId, ym)
       .then((o) => { if (!cancel) setVizOrc(o); })
       .finally(() => { if (!cancel) setVizLoading(false); });
     return () => { cancel = true; };
-  }, [vizId, activeEspacoId]);
+  }, [vizId, activeEspacoId, ym]);
 
   // Fonte do orçamento p/ os gráficos: contexto (espaço ativo, dados vivos) ou o buscado.
   const usaAtivo = !vizId || vizId === activeEspacoId;
@@ -55,12 +55,13 @@ export default function Dashboard({ onOpenCaixinha }) {
   const rSkips = usaAtivo ? receitasSkips : (vizOrc?.receitasSkips || []);
   const rendas = usaAtivo ? rendasMensais : (vizOrc?.rendasMensais || {});
   const cfg = usaAtivo ? config : (vizOrc?.config || { rendaMensal: 0 });
+  const mComDespesa = usaAtivo ? fin.mesesComDespesa : (vizOrc?.mesesComDespesa || []);
 
   const catMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
   // janela do seletor de mês — mesma regra de Despesas (mês global no contexto)
   const comDados = useMemo(
-    () => mesesComDados({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes }),
-    [rendas, dMes, rMes]
+    () => mesesComDados({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, mesesComDespesa: mComDespesa }),
+    [rendas, dMes, rMes, mComDespesa]
   );
   const janela = useMemo(() => janelaMeses({ dados: comDados }), [comDados]);
   const orc = useMemo(

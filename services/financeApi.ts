@@ -104,8 +104,9 @@ export async function listPermissions() {
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
-export async function getBootstrap() {
-  return unwrap(client.api.state.$get());
+// `ym` centra a janela de histórico do orçamento que vem embutido.
+export async function getBootstrap(ym?: string) {
+  return unwrap(client.api.state.$get({ query: ym ? { ym } : {} }));
 }
 
 // ── Caixinhas / movimentações (da conta, não por espaço) ─────────────────────
@@ -178,8 +179,15 @@ export async function removeEspaco(id: string) {
   return unwrap(client.api.despesas.espacos[":id"].$delete({ param: { id } }));
 }
 
-export async function getOrcamento(espacoId: string) {
-  return unwrap(client.api.despesas.espacos[":esp"].$get({ param: { esp: espacoId } }));
+// Traz o orçamento numa janela de meses ao redor de `ym` (o payload devolve
+// `janela` — quem consome refaz a busca quando o mês visto sai dela).
+export async function getOrcamento(espacoId: string, ym?: string) {
+  return unwrap(
+    client.api.despesas.espacos[":esp"].$get({
+      param: { esp: espacoId },
+      query: ym ? { ym } : {},
+    })
+  );
 }
 
 // Oculta / restaura o espaço só no mês ym (exclusão reversível daquele mês).

@@ -246,3 +246,5 @@ console.table(medidas);
 console.log("total:", total, "\n");
 
 await prisma.$disconnect();
+
+export {};

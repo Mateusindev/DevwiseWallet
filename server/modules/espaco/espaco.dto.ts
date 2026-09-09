@@ -18,5 +18,13 @@ export const updateEspacoSchema = z.object({
 
 export const setActiveSchema = z.object({ id: z.string().uuid() });
 
+// ?ym=YYYY-MM — centro da janela de histórico do orçamento (default: mês atual).
+export const orcamentoQuerySchema = z.object({
+  ym: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/, "O mês deve estar no formato YYYY-MM")
+    .optional(),
+});
+
 export type CreateEspacoDTO = z.infer<typeof createEspacoSchema>;
 export type UpdateEspacoDTO = z.infer<typeof updateEspacoSchema>;

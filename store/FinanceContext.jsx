@@ -26,6 +26,11 @@ const initial = {
   pagamentosFixas: [], // [{ despesaFixaId, ym }] — fixas marcadas pagas por mês
   rendasMensais: {},
   config: { rendaMensal: 0, moeda: "BRL" },
+  // Janela de histórico carregada ({ de, ate }) + os meses que têm lançamento
+  // fora dela (só a lista de 'YYYY-MM', não o payload). Ver espacoService.
+  janela: null,
+  mesesComDespesa: [],
+  mesesComFatura: [],
 };
 
 function reducer(state, action) {
@@ -278,6 +283,23 @@ export function FinanceProvider({ children }) {
     bootstrap();
   }, [bootstrap]);
 
+  // O orçamento vem por janela de meses. Sair dela (planejar dois anos à
+  // frente, revisitar 2024) refaz a busca centrada no mês novo — sem isso o
+  // mês fora da janela apareceria vazio em vez de "carregando".
+  const janela = state.janela;
+  useEffect(() => {
+    if (!esp || !janela) return;
+    if (ym >= janela.de && ym <= janela.ate) return;
+    let cancel = false;
+    dispatch({ type: "ORC_LOADING" });
+    api.getOrcamento(esp, ym).then((orcamento) => {
+      if (!cancel) dispatch({ type: "SET_ORCAMENTO", id: esp, orcamento });
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [ym, esp, janela]);
+
   // Refaz os agregados de fatura dos cartões (mês corrente por padrão).
   const reloadCartoes = useCallback(async (ymArg) => {
     const cartoes = await api.getCartoes(ymArg);
@@ -327,7 +349,7 @@ export function FinanceProvider({ children }) {
       dispatch({ type: "ORC_LOADING" });
       // sem espaco:manage o PUT /active falha (403) — troca vira só local
       try { await api.setActiveEspaco(id); } catch { /* viewer */ }
-      const orcamento = await api.getOrcamento(id);
+      const orcamento = await api.getOrcamento(id, ym);
       dispatch({ type: "SET_ORCAMENTO", id, orcamento });
     },
     async addEspaco(dto) {
@@ -343,7 +365,7 @@ export function FinanceProvider({ children }) {
       const { activeEspacoId } = await api.removeEspaco(id);
       dispatch({ type: "REMOVE_ESPACO", id });
       if (activeEspacoId !== esp) {
-        const orcamento = await api.getOrcamento(activeEspacoId);
+        const orcamento = await api.getOrcamento(activeEspacoId, ym);
         dispatch({ type: "SET_ORCAMENTO", id: activeEspacoId, orcamento });
       }
     },
@@ -361,7 +383,7 @@ export function FinanceProvider({ children }) {
         const proxima = state.espacos.find((e) => !ocultosNoMes.has(e.id));
         if (proxima && proxima.id !== esp) {
           await api.setActiveEspaco(proxima.id);
-          const orcamento = await api.getOrcamento(proxima.id);
+          const orcamento = await api.getOrcamento(proxima.id, ym);
           dispatch({ type: "SET_ORCAMENTO", id: proxima.id, orcamento });
         }
       }
