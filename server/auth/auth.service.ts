@@ -40,6 +40,8 @@ export function toAuthUser(u: UserWithRoles): AuthUser {
   };
 }
 
+const entitlementsDaSessao = new WeakMap<AuthUser, Promise<string[]>>();
+
 export const authService = {
   // Login por email/senha → AuthUser (rota assina o JWT e seta o cookie).
   async login(email: string, senha: string): Promise<AuthUser> {
@@ -76,9 +78,20 @@ export const authService = {
   },
 
   // PBAC: permission das roles ∩ entitlement do plano (billing futuro).
+  //
+  // Uma rota chama `can()` uma vez por permission exigida (e `requireAnyPermission`
+  // uma vez por alias), então o plano seria resolvido várias vezes na mesma
+  // request. O WeakMap é chaveado pelo PRÓPRIO objeto de sessão — que
+  // `requireAuth` monta uma vez por request — então o cache nasce e morre com
+  // ela, sem plumbing de contexto e sem risco de vazar entre usuários.
   async can(user: AuthUser, required: string): Promise<boolean> {
     if (!hasPermission(user.permissions, required)) return false;
-    return hasPermission(await planEntitlements(user.id), required);
+    let ents = entitlementsDaSessao.get(user);
+    if (!ents) {
+      ents = planEntitlements(user.id);
+      entitlementsDaSessao.set(user, ents);
+    }
+    return hasPermission(await ents, required);
   },
 
   async signToken(userId: string): Promise<string> {

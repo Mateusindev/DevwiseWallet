@@ -7,9 +7,10 @@ type Row = Record<string, unknown>;
 const state: {
   user: Row | null;
   entitlements: string[];
+  chamadasEntitlements: number;
   roleMembroExiste: boolean;
   created: Row | null;
-} = { user: null, entitlements: ["*"], roleMembroExiste: true, created: null };
+} = { user: null, entitlements: ["*"], chamadasEntitlements: 0, roleMembroExiste: true, created: null };
 
 const roleMembro = { id: "r1", nome: "membro", permissions: ["caixinha:*", "state:view"] };
 const roleLeitor = { id: "r2", nome: "leitor", permissions: ["cartao:view"] };
@@ -38,7 +39,10 @@ mock.module("@/server/auth/auth.repository", () => ({
 }));
 
 mock.module("@/server/auth/entitlements", () => ({
-  planEntitlements: async () => state.entitlements,
+  planEntitlements: async () => {
+    state.chamadasEntitlements += 1;
+    return state.entitlements;
+  },
 }));
 
 const { authService, toAuthUser, authSecret, AUTH_COOKIE, TOKEN_TTL_S } = await import("./auth.service");
@@ -46,6 +50,7 @@ const { authService, toAuthUser, authSecret, AUTH_COOKIE, TOKEN_TTL_S } = await 
 beforeEach(() => {
   state.user = userRow();
   state.entitlements = ["*"];
+  state.chamadasEntitlements = 0;
   state.roleMembroExiste = true;
   state.created = null;
 });
@@ -163,6 +168,24 @@ describe("authService.can — roles ∩ entitlements", () => {
     const u = toAuthUser(userRow() as never);
     expect(await authService.can(u, "state:view")).toBe(true);
     expect(await authService.can(u, "caixinha:manage")).toBe(false);
+  });
+
+  it("resolve o plano uma vez por sessão, não uma vez por permission", async () => {
+    const u = toAuthUser(userRow() as never);
+    await authService.can(u, "state:view");
+    await authService.can(u, "caixinha:view");
+    await authService.can(u, "caixinha:manage");
+    expect(state.chamadasEntitlements).toBe(1);
+
+    // outra request = outro objeto de sessão = resolve de novo (plano pode ter mudado)
+    await authService.can(toAuthUser(userRow() as never), "state:view");
+    expect(state.chamadasEntitlements).toBe(2);
+  });
+
+  it("permission que a role nem tem nem consulta o plano", async () => {
+    const u = toAuthUser(userRow() as never);
+    expect(await authService.can(u, "dev:reset")).toBe(false);
+    expect(state.chamadasEntitlements).toBe(0);
   });
 });
 
