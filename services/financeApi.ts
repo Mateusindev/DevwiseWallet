@@ -28,6 +28,28 @@ import type {
 } from "@/server/modules/caixinha/caixinha.dto";
 import { criarMovimentacao, removerMovimentacao } from "@/server/modules/movimentacao/movimentacao.actions";
 import { resetarDados } from "@/server/modules/dev/dev.actions";
+import {
+  listarEspacos,
+  resumoDoMes,
+  orcamentoDoEspaco,
+  definirEspacoAtivo,
+  criarEspaco,
+  atualizarEspaco,
+  removerEspaco,
+  ocultarEspacoNoMes,
+  restaurarEspacoNoMes,
+} from "@/server/modules/espaco/espaco.actions";
+import type { createEspacoSchema } from "@/server/modules/espaco/espaco.dto";
+import {
+  listarCartoes,
+  listarParceladas,
+  resumoDeCartoes,
+  linhasDaFatura,
+  criarCartao,
+  atualizarCartao,
+  removerCartao,
+} from "@/server/modules/cartao/cartao.actions";
+import type { createCartaoSchema, updateCartaoSchema } from "@/server/modules/cartao/cartao.dto";
 
 const client = hc<AppType>("/");
 
@@ -190,53 +212,48 @@ export async function removeCaixinha(id: string) {
 
 // ── Espaços de despesa ────────────────────────────────────────────────────────
 export async function getEspacos() {
-  return unwrap(client.api.despesas.espacos.$get());
+  return unwrapAction(await listarEspacos());
 }
 
 export async function setActiveEspaco(id: string) {
-  return unwrap(client.api.despesas.espacos.active.$put({ json: { id } }));
+  return unwrapAction(await definirEspacoAtivo({ id }));
 }
 
-export async function addEspaco(dto: Body<typeof client.api.despesas.espacos.$post>) {
-  return unwrap(client.api.despesas.espacos.$post({ json: dto }));
+export async function addEspaco(dto: z.input<typeof createEspacoSchema>) {
+  return unwrapAction(await criarEspaco(dto));
 }
 
 export async function renameEspaco(id: string, nome: string) {
-  return unwrap(client.api.despesas.espacos[":id"].$patch({ param: { id }, json: { nome } }));
+  return unwrapAction(await atualizarEspaco(id, { nome }));
 }
 
 export async function removeEspaco(id: string) {
-  return unwrap(client.api.despesas.espacos[":id"].$delete({ param: { id } }));
+  return unwrapAction(await removerEspaco(id));
 }
 
 // Traz o orçamento numa janela de meses ao redor de `ym` (o payload devolve
 // `janela` — quem consome refaz a busca quando o mês visto sai dela).
 export async function getOrcamento(espacoId: string, ym?: string) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].$get({
-      param: { esp: espacoId },
-      query: ym ? { ym } : {},
-    })
-  );
+  return unwrapAction(await orcamentoDoEspaco(espacoId, ym));
 }
 
 // Gasto do mês por espaço — base do gráfico "por página" do Início.
 export async function getResumoEspacos(ym?: string) {
-  return unwrap(client.api.despesas.resumo.$get({ query: ym ? { ym } : {} }));
+  return unwrapAction(await resumoDoMes(ym));
 }
 
 // Oculta / restaura o espaço só no mês ym (exclusão reversível daquele mês).
 export async function ocultarEspacoMes(id: string, ym: string) {
-  return unwrap(client.api.despesas.espacos[":id"].ocultar[":ym"].$post({ param: { id, ym } }));
+  return unwrapAction(await ocultarEspacoNoMes(id, ym));
 }
 
 export async function restaurarEspacoMes(id: string, ym: string) {
-  return unwrap(client.api.despesas.espacos[":id"].ocultar[":ym"].$delete({ param: { id, ym } }));
+  return unwrapAction(await restaurarEspacoNoMes(id, ym));
 }
 
 // Resumo da fatura mês a mês (por cartão e por categoria) — base dos gráficos.
 export async function getResumoCartoes(de?: string, ate?: string) {
-  return unwrap(client.api.cartoes.resumo.$get({ query: { de, ate } }));
+  return unwrapAction(await resumoDeCartoes(de, ate));
 }
 
 // ── Despesas fixas (por espaço) ──────────────────────────────────────────────
@@ -313,7 +330,7 @@ export async function clearRendaMes(espacoId: string, ym: string) {
 
 // Salário fixo mensal = default do espaço (RendaMensal cai como fallback).
 export async function setRendaFixa(espacoId: string, rendaMensal: number) {
-  return unwrap(client.api.despesas.espacos[":id"].$patch({ param: { id: espacoId }, json: { rendaMensal } }));
+  return unwrapAction(await atualizarEspaco(espacoId, { rendaMensal }));
 }
 
 // ── Despesas do mês (por espaço) ──────────────────────────────────────────────
@@ -370,30 +387,30 @@ export async function removeReceitaMes(espacoId: string, id: string) {
 
 // ── Cartões de crédito (da conta, não por espaço) ────────────────────────────
 export async function getCartoes(ym?: string) {
-  return unwrap(client.api.cartoes.$get({ query: ym ? { ym } : {} }));
+  return unwrapAction(await listarCartoes(ym));
 }
 
-export async function addCartao(dto: Body<typeof client.api.cartoes.$post>) {
-  return unwrap(client.api.cartoes.$post({ json: dto }));
+export async function addCartao(dto: z.input<typeof createCartaoSchema>) {
+  return unwrapAction(await criarCartao(dto));
 }
 
-export async function updateCartao(id: string, patch: Body<(typeof client.api.cartoes)[":id"]["$patch"]>) {
-  return unwrap(client.api.cartoes[":id"].$patch({ param: { id }, json: patch }));
+export async function updateCartao(id: string, patch: z.input<typeof updateCartaoSchema>) {
+  return unwrapAction(await atualizarCartao(id, patch));
 }
 
 export async function removeCartao(id: string) {
-  return unwrap(client.api.cartoes[":id"].$delete({ param: { id } }));
+  return unwrapAction(await removerCartao(id));
 }
 
 // Parceladas em aberto da conta (todos os espaços) + pagamentos do mês.
 // Base do painel de quitação na aba de cartões.
 export async function getParceladas(ym?: string) {
-  return unwrap(client.api.cartoes.parceladas.$get({ query: ym ? { ym } : {} }));
+  return unwrapAction(await listarParceladas(ym));
 }
 
 // Linhas da fatura de um cartão num mês (pra escolher qual compartilhar).
 export async function getFaturaLinhas(cartaoId: string, ym?: string) {
-  return unwrap(client.api.cartoes[":id"].fatura.$get({ param: { id: cartaoId }, query: ym ? { ym } : {} }));
+  return unwrapAction(await linhasDaFatura(cartaoId, ym));
 }
 
 // ── Compartilhamento (contatos + shares + convites + adoção) ─────────────────
