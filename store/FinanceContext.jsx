@@ -1,5 +1,6 @@
-import { createContext, useContext, useCallback, useEffect, useReducer, useState } from "react";
+import { createContext, use, useContext, useCallback, useEffect, useReducer, useState } from "react";
 import * as api from "../services/financeApi";
+import { useAuth } from "../components/AuthGate";
 import { currentMonthKey } from "../lib/format.js";
 
 // ── State shape ────────────────────────────────────────────────────────────
@@ -263,8 +264,19 @@ function reducer(state, action) {
 
 const Ctx = createContext(null);
 
-export function FinanceProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, initial);
+// Estado do servidor (RSC) já entra montado, sem passar por "loading".
+const semear = (p) => (p ? reducer(initial, { type: "BOOT_OK", p }) : initial);
+
+// `estadoPromise` vem de app/page.tsx sem await: o servidor dispara o getState
+// antes de o bundle existir e o React suspende aqui. Sem ela (ou com um estado
+// de outra sessão — logout e login com outra conta reaproveitariam a mesma
+// Promise) o provider volta a buscar no efeito, como antes.
+export function FinanceProvider({ children, estadoPromise }) {
+  const { user } = useAuth();
+  const doServidor = estadoPromise ? use(estadoPromise) : null;
+  const inicial = doServidor?.userId === user.id ? doServidor : null;
+
+  const [state, dispatch] = useReducer(reducer, inicial, semear);
   const esp = state.activeEspacoId;
   // Mês visto — global: Início, Despesas e Cartões olham sempre o mesmo mês.
   const [ym, setYm] = useState(currentMonthKey());
@@ -280,8 +292,8 @@ export function FinanceProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    if (!inicial) bootstrap();
+  }, [bootstrap, inicial]);
 
   // O orçamento vem por janela de meses. Sair dela (planejar dois anos à
   // frente, revisitar 2024) refaz a busca centrada no mês novo — sem isso o

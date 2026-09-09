@@ -81,9 +81,11 @@ describe("getState", () => {
         "espacosOcultos",
         "movimentacoes",
         "orcamento",
+        "userId",
       ].sort()
     );
     expect(s).toMatchObject({
+      userId: U,
       caixinhas: [{ id: "cx-1" }],
       movimentacoes: [{ id: "mv-1" }],
       cartoes: [{ id: "ct-1" }],

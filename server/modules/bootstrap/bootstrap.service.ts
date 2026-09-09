@@ -25,5 +25,9 @@ export async function getState(userId: string, ym?: string) {
     ? await espacoService.getOrcamento(userId, activeEspacoId, ym)
     : null;
 
-  return { caixinhas, movimentacoes, espacos, activeEspacoId, espacosOcultos, cartoes, categorias, orcamento };
+  // `userId` volta no payload porque o boot pode chegar pronto do servidor
+  // (RSC): o FinanceProvider precisa saber se aquele estado é da sessão atual
+  // antes de adotá-lo — logout e login com outra conta reaproveitariam a mesma
+  // Promise.
+  return { userId, caixinhas, movimentacoes, espacos, activeEspacoId, espacosOcultos, cartoes, categorias, orcamento };
 }

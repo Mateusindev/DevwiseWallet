@@ -34,20 +34,34 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
-// Gate de sessão: resolve /auth/me antes de montar o app. Sem sessão → form
-// de login. Com sessão → provê { user, can } pro app inteiro.
-export default function AuthGate({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<Status>("checking");
-  const [user, setUser] = useState<AuthUser | null>(null);
+// Gate de sessão. Sem sessão → form de login. Com sessão → provê { user, can }
+// pro app inteiro.
+//
+// `usuarioInicial` vem resolvido do servidor (app/page.tsx): quando ele chega,
+// não há `me()` nenhum no caminho crítico. `undefined` = ninguém resolveu ainda
+// (o gate usado fora do boot servido), e aí o fetch no efeito continua valendo.
+export default function AuthGate({
+  children,
+  usuarioInicial,
+}: {
+  children: ReactNode;
+  usuarioInicial?: AuthUser | null;
+}) {
+  const resolvidoNoServidor = usuarioInicial !== undefined;
+  const [status, setStatus] = useState<Status>(
+    !resolvidoNoServidor ? "checking" : usuarioInicial ? "authed" : "anon"
+  );
+  const [user, setUser] = useState<AuthUser | null>(usuarioInicial ?? null);
 
   useEffect(() => {
+    if (resolvidoNoServidor) return;
     me()
       .then((u) => {
         setUser(u);
         setStatus(u ? "authed" : "anon");
       })
       .catch(() => setStatus("anon"));
-  }, []);
+  }, [resolvidoNoServidor]);
 
   const can = useCallback(
     (permission: string) => (user ? hasPermission(user.permissions, permission) : false),
