@@ -7,6 +7,8 @@ import type { InferRequestType } from "hono/client";
 import type { z } from "zod";
 import type { AppType } from "@/app/api/[[...route]]/route";
 import type { ActionResult } from "@/server/next/action";
+import { entrar, cadastrar, sair, usuarioLogado } from "@/server/auth/auth.actions";
+import { estadoInicial } from "@/server/modules/bootstrap/bootstrap.actions";
 import {
   listarCategorias,
   criarCategoria,
@@ -181,22 +183,20 @@ async function unwrap<
 export type AuthUser = Awaited<ReturnType<typeof login>>;
 
 export async function login(email: string, senha: string) {
-  return unwrap(client.api.auth.login.$post({ json: { email, senha } }));
+  return unwrapAction(await entrar({ email, senha }));
 }
 
 export async function register(nome: string, email: string, senha: string) {
-  return unwrap(client.api.auth.register.$post({ json: { nome, email, senha } }));
+  return unwrapAction(await cadastrar({ nome, email, senha }));
 }
 
 export async function logout() {
-  return unwrap(client.api.auth.logout.$post());
+  return unwrapAction(await sair());
 }
 
-// null = sem sessão (401); componente decide mostrar login.
+// null = sem sessão; componente decide mostrar login.
 export async function me() {
-  const res = await client.api.auth.me.$get();
-  if (res.status === 401) return null;
-  return unwrap(Promise.resolve(res));
+  return unwrapAction(await usuarioLogado());
 }
 
 // ── Admin: usuários e roles (PBAC: user:* / role:*) ──────────────────────────
@@ -246,9 +246,10 @@ export async function listPermissions() {
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
-// `ym` centra a janela de histórico do orçamento que vem embutido.
+// `ym` centra a janela de histórico do orçamento que vem embutido. No boot
+// servido isso já vem pronto do RSC; aqui é o caminho do refresh.
 export async function getBootstrap(ym?: string) {
-  return unwrap(client.api.state.$get({ query: ym ? { ym } : {} }));
+  return unwrapAction(await estadoInicial(ym));
 }
 
 // ── Caixinhas / movimentações (da conta, não por espaço) ─────────────────────
