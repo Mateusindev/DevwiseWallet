@@ -99,6 +99,41 @@ import type {
   bulkFixaSchema,
   bulkMesSchema,
 } from "@/server/modules/orcamento/orcamento.dto";
+import {
+  listarContatos,
+  criarContato,
+  atualizarContato,
+  removerContato,
+  criarConvite as criarConviteAction,
+  listarSharesDoCartao,
+  criarShare,
+  atualizarShare,
+  removerShare,
+  salvarRateioDaLinha,
+  lerRateioDaLinha,
+  listarMeusConvites,
+  lerConvitePorToken,
+  aceitarConvite as aceitarConviteAction,
+  recusarConvite as recusarConviteAction,
+  listarMeusCompartilhamentos,
+  adotarShare as adotarShareAction,
+  ignorarShare as ignorarShareAction,
+  desfazerAdocao as desfazerAdocaoAction,
+  adiantarShare as adiantarShareAction,
+  sincronizarShare as sincronizarShareAction,
+  abrirRateio,
+  painelDoCartao,
+} from "@/server/modules/cartao-share/cartao-share.actions";
+import type {
+  createContatoSchema,
+  updateContatoSchema,
+  createShareSchema,
+  updateShareSchema,
+  rateioSchema,
+  conviteSchema,
+  adotarSchema,
+  adiantarSchema,
+} from "@/server/modules/cartao-share/cartao-share.dto";
 
 const client = hc<AppType>("/");
 
@@ -450,45 +485,45 @@ export type ConviteView = Awaited<ReturnType<typeof getMeusConvites>>[number];
 export type RateioView = Awaited<ReturnType<typeof getRateio>>;
 
 export async function getContatos() {
-  return unwrap(client.api.contatos.$get());
+  return unwrapAction(await listarContatos());
 }
 
-export async function addContato(dto: Body<typeof client.api.contatos.$post>) {
-  return unwrap(client.api.contatos.$post({ json: dto }));
+export async function addContato(dto: z.input<typeof createContatoSchema>) {
+  return unwrapAction(await criarContato(dto));
 }
 
-export async function updateContato(id: string, patch: Body<(typeof client.api.contatos)[":id"]["$patch"]>) {
-  return unwrap(client.api.contatos[":id"].$patch({ param: { id }, json: patch }));
+export async function updateContato(id: string, patch: z.input<typeof updateContatoSchema>) {
+  return unwrapAction(await atualizarContato(id, patch));
 }
 
 export async function removeContato(id: string) {
-  return unwrap(client.api.contatos[":id"].$delete({ param: { id } }));
+  return unwrapAction(await removerContato(id));
 }
 
 export async function getCartaoShares(cartaoId: string, ym?: string) {
-  return unwrap(client.api.cartoes[":id"].shares.$get({ param: { id: cartaoId }, query: ym ? { ym } : {} }));
+  return unwrapAction(await listarSharesDoCartao(cartaoId, ym));
 }
 
-export async function addCartaoShare(cartaoId: string, dto: Body<(typeof client.api.cartoes)[":id"]["shares"]["$post"]>) {
-  return unwrap(client.api.cartoes[":id"].shares.$post({ param: { id: cartaoId }, json: dto }));
+export async function addCartaoShare(cartaoId: string, dto: z.input<typeof createShareSchema>) {
+  return unwrapAction(await criarShare(dto, cartaoId));
 }
 
-export async function updateCartaoShare(id: string, patch: Body<(typeof client.api.shares)[":id"]["$patch"]>) {
-  return unwrap(client.api.shares[":id"].$patch({ param: { id }, json: patch }));
+export async function updateCartaoShare(id: string, patch: z.input<typeof updateShareSchema>) {
+  return unwrapAction(await atualizarShare(id, patch));
 }
 
 export async function removeCartaoShare(id: string) {
-  return unwrap(client.api.shares[":id"].$delete({ param: { id } }));
+  return unwrapAction(await removerShare(id));
 }
 
 // Share que não é "de cartão": aponta uma fixa (aluguel) ou uma despesa do mês.
-export async function addShare(dto: Body<typeof client.api.shares.$post>) {
-  return unwrap(client.api.shares.$post({ json: dto }));
+export async function addShare(dto: z.input<typeof createShareSchema>) {
+  return unwrapAction(await criarShare(dto));
 }
 
 // Rateio N-a-N de uma linha: substitui o conjunto inteiro numa transação.
-export async function salvarRateio(dto: Body<typeof client.api.shares.rateio.$post>, ym?: string) {
-  return unwrap(client.api.shares.rateio.$post({ json: dto, query: ym ? { ym } : {} }));
+export async function salvarRateio(dto: z.input<typeof rateioSchema>, ym?: string) {
+  return unwrapAction(await salvarRateioDaLinha(dto, ym));
 }
 
 // Rateio pelo id da linha (não precisa do espaço — quem vem da fatura não o tem).
@@ -496,99 +531,79 @@ export async function getRateio(
   ref: { despesaFixaId?: string; despesaMesId?: string },
   ym?: string
 ) {
-  return unwrap(client.api.shares.rateio.$get({ query: { ...ref, ...(ym ? { ym } : {}) } }));
+  return unwrapAction(await lerRateioDaLinha(ref, ym));
+}
+
+// Modal de rateio numa chamada: contatos + rateio atual da linha.
+export async function getRateioBootstrap(
+  ref: { despesaFixaId?: string; despesaMesId?: string },
+  ym?: string
+) {
+  return unwrapAction(await abrirRateio(ref, ym));
+}
+
+// Painel de compartilhamento do cartão numa chamada: contatos + linhas da
+// fatura + shares.
+export async function getPainelCartaoShare(cartaoId: string, ym?: string) {
+  return unwrapAction(await painelDoCartao(cartaoId, ym));
 }
 
 export async function getRateioFixa(espacoId: string, id: string, ym?: string) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].fixas[":id"].rateio.$get({
-      param: { esp: espacoId, id },
-      query: ym ? { ym } : {},
-    })
-  );
+  return unwrapAction(await lerRateioDaLinha({ despesaFixaId: id }, ym));
 }
 
 export async function getRateioMes(espacoId: string, id: string, ym?: string) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].mes[":id"].rateio.$get({
-      param: { esp: espacoId, id },
-      query: ym ? { ym } : {},
-    })
-  );
+  return unwrapAction(await lerRateioDaLinha({ despesaMesId: id }, ym));
 }
 
 // ── Convite / aceite ─────────────────────────────────────────────────────────
 // Sem infra de email: o retorno traz o token e o link pra UI copiar.
-export async function criarConvite(
-  contatoId: string,
-  dto: Body<(typeof client.api.contatos)[":id"]["convite"]["$post"]>
-) {
-  return unwrap(client.api.contatos[":id"].convite.$post({ param: { id: contatoId }, json: dto }));
+export async function criarConvite(contatoId: string, dto: z.input<typeof conviteSchema>) {
+  return unwrapAction(await criarConviteAction(contatoId, dto));
 }
 
 export async function getMeusConvites() {
-  return unwrap(client.api.me.convites.$get());
+  return unwrapAction(await listarMeusConvites());
 }
 
 export async function getConvitePorToken(token: string) {
-  return unwrap(client.api.me.convites.token[":token"].$get({ param: { token } }));
+  return unwrapAction(await lerConvitePorToken(token));
 }
 
 export async function aceitarConvite(id: string) {
-  return unwrap(client.api.me.convites[":id"].aceitar.$post({ param: { id } }));
+  return unwrapAction(await aceitarConviteAction(id));
 }
 
 export async function recusarConvite(id: string) {
-  return unwrap(client.api.me.convites[":id"].recusar.$post({ param: { id } }));
+  return unwrapAction(await recusarConviteAction(id));
 }
 
 // O que o usuário logado deve — agrupado por dono, com subgrupos por cartão.
 export async function getMeusCompartilhamentos(ym?: string) {
-  return unwrap(client.api.me.compartilhamentos.$get({ query: ym ? { ym } : {} }));
+  return unwrapAction(await listarMeusCompartilhamentos(ym));
 }
 
 // ── Adoção da dívida (lado de quem deve) ─────────────────────────────────────
-export async function adotarShare(
-  shareId: string,
-  dto: Body<(typeof client.api.me.compartilhamentos)[":shareId"]["adotar"]["$post"]>
-) {
-  return unwrap(client.api.me.compartilhamentos[":shareId"].adotar.$post({ param: { shareId }, json: dto }));
+export async function adotarShare(shareId: string, dto: z.input<typeof adotarSchema>) {
+  return unwrapAction(await adotarShareAction(shareId, dto));
 }
 
 export async function ignorarShare(shareId: string, ym?: string) {
-  return unwrap(
-    client.api.me.compartilhamentos[":shareId"].ignorar.$post({
-      param: { shareId },
-      query: ym ? { ym } : {},
-    })
-  );
+  return unwrapAction(await ignorarShareAction(shareId, ym));
 }
 
 // `removerDespesa` também apaga a despesa criada; sem ele a despesa fica (é do
 // devedor, não some por decisão de terceiro).
 export async function desfazerAdocao(shareId: string, removerDespesa = false) {
-  return unwrap(
-    client.api.me.compartilhamentos[":shareId"].adocao.$delete({
-      param: { shareId },
-      query: removerDespesa ? { removerDespesa: "true" } : {},
-    })
-  );
+  return unwrapAction(await desfazerAdocaoAction(shareId, removerDespesa));
 }
 
-export async function adiantarShare(
-  shareId: string,
-  dto: Body<(typeof client.api.me.compartilhamentos)[":shareId"]["adiantar"]["$post"]>
-) {
-  return unwrap(client.api.me.compartilhamentos[":shareId"].adiantar.$post({ param: { shareId }, json: dto }));
+export async function adiantarShare(shareId: string, dto: z.input<typeof adiantarSchema>) {
+  return unwrapAction(await adiantarShareAction(shareId, dto));
 }
 
 export async function sincronizarShare(shareId: string, ym?: string) {
-  return unwrap(
-    client.api.me.compartilhamentos[":shareId"].sincronizar.$post({
-      param: { shareId },
-      query: ym ? { ym } : {},
-    })
-  );
+  return unwrapAction(await sincronizarShareAction(shareId, ym));
 }
 
 // ── Categorias de despesa (da conta, não por espaço) ─────────────────────────

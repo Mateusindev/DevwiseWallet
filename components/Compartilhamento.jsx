@@ -60,11 +60,12 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
   );
   const base = linha?.valor ?? 0;
 
-  // carrega o rateio atual da linha ao abrir
+  // Contatos + rateio atual da linha numa chamada só: o dispatcher de Server
+  // Actions é serial por cliente, então um Promise.all aqui viraria fila.
   useEffect(() => {
     if (!open || !linha) return;
-    Promise.all([api.getContatos(), api.getRateio(ref)])
-      .then(([cs, r]) => {
+    api.getRateioBootstrap(ref)
+      .then(({ contatos: cs, rateio: r }) => {
         setErro("");
         setContatos(cs);
         setAbate(!!linha.abateShares);
@@ -278,13 +279,10 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
     }
   );
 
+  // Idem: contatos + linhas da fatura + shares do cartão numa chamada só.
   async function reload() {
     if (!cartao) return;
-    const [cs, ls, ss] = await Promise.all([
-      api.getContatos(),
-      api.getFaturaLinhas(cartao.id, ym),
-      api.getCartaoShares(cartao.id, ym),
-    ]);
+    const { contatos: cs, linhas: ls, shares: ss } = await api.getPainelCartaoShare(cartao.id, ym);
     setContatos(cs);
     setLinhas(ls);
     setShares(ss);
