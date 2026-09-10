@@ -68,6 +68,37 @@ import type {
   createRoleSchema,
   updateRoleSchema,
 } from "@/server/modules/admin/admin.dto";
+import {
+  criarDespesaFixa,
+  atualizarDespesaFixa,
+  alternarDespesaFixa,
+  removerDespesaFixa,
+  definirPagamentoFixa,
+  loteDeFixas,
+  definirRendaDoMes,
+  limparRendaDoMes,
+  criarDespesaMes,
+  atualizarDespesaMes,
+  removerDespesaMes,
+  definirPagoDaDespesaMes,
+  loteDeDespesasMes,
+  criarReceitaMes,
+  atualizarReceitaMes,
+  removerReceitaMes,
+  pularReceitaNoMes,
+  desfazerPuloDaReceita,
+  encerrarReceitaNoMes,
+} from "@/server/modules/orcamento/orcamento.actions";
+import type {
+  addDespesaFixaSchema,
+  updateDespesaFixaSchema,
+  addDespesaMesSchema,
+  updateDespesaMesSchema,
+  addReceitaMesSchema,
+  updateReceitaMesSchema,
+  bulkFixaSchema,
+  bulkMesSchema,
+} from "@/server/modules/orcamento/orcamento.dto";
 
 const client = hc<AppType>("/");
 
@@ -281,75 +312,54 @@ export async function getResumoCartoes(de?: string, ate?: string) {
 }
 
 // ── Despesas fixas (por espaço) ──────────────────────────────────────────────
-export async function addDespesaFixa(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["fixas"]["$post"]>) {
-  return unwrap(client.api.despesas.espacos[":esp"].fixas.$post({ param: { esp: espacoId }, json: dto }));
+export async function addDespesaFixa(espacoId: string, dto: z.input<typeof addDespesaFixaSchema>) {
+  return unwrapAction(await criarDespesaFixa(espacoId, dto));
 }
 
 export async function toggleDespesaFixa(espacoId: string, id: string) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].fixas[":id"].toggle.$patch({ param: { esp: espacoId, id } })
-  );
+  return unwrapAction(await alternarDespesaFixa(espacoId, id));
 }
 
-export async function updateDespesaFixa(espacoId: string, id: string, patch: Body<(typeof client.api.despesas.espacos)[":esp"]["fixas"][":id"]["$patch"]>) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].fixas[":id"].$patch({ param: { esp: espacoId, id }, json: patch })
-  );
+export async function updateDespesaFixa(espacoId: string, id: string, patch: z.input<typeof updateDespesaFixaSchema>) {
+  return unwrapAction(await atualizarDespesaFixa(espacoId, id, patch));
 }
 
 export async function removeDespesaFixa(espacoId: string, id: string) {
-  return unwrap(client.api.despesas.espacos[":esp"].fixas[":id"].$delete({ param: { esp: espacoId, id } }));
+  return unwrapAction(await removerDespesaFixa(espacoId, id));
 }
 
 // Define quanto pago da fixa no mês ym (valor absoluto) -> { despesaFixaId, ym, valorPago, pago }.
 export async function setPagamentoFixa(espacoId: string, id: string, ym: string, valorPago: number) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].fixas[":id"].pago[":ym"].$put({
-      param: { esp: espacoId, id, ym },
-      json: { valorPago },
-    })
-  );
+  return unwrapAction(await definirPagamentoFixa(espacoId, id, ym, valorPago));
 }
 
 // Ação em lote nas fixas: pagar/despagar (no mês `ym`), excluir, categoria,
 // cartão, ativar/pausar. Uma requisição, transação no back.
-export async function bulkDespesasFixas(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["fixas"]["bulk"]["$post"]>) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].fixas.bulk.$post({ param: { esp: espacoId }, json: dto })
-  );
+export async function bulkDespesasFixas(espacoId: string, dto: z.input<typeof bulkFixaSchema>) {
+  return unwrapAction(await loteDeFixas(espacoId, dto));
 }
 
 // Receita recorrente: pular um mês, desfazer o pulo e encerrar daquele mês em diante.
 export async function skipReceitaMes(espacoId: string, id: string, ym: string) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].receitas[":id"].skip[":ym"].$put({ param: { esp: espacoId, id, ym } })
-  );
+  return unwrapAction(await pularReceitaNoMes(espacoId, id, ym));
 }
 
 export async function unskipReceitaMes(espacoId: string, id: string, ym: string) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].receitas[":id"].skip[":ym"].$delete({ param: { esp: espacoId, id, ym } })
-  );
+  return unwrapAction(await desfazerPuloDaReceita(espacoId, id, ym));
 }
 
 export async function encerrarReceitaMes(espacoId: string, id: string, ym: string) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].receitas[":id"].encerrar[":ym"].$patch({
-      param: { esp: espacoId, id, ym },
-    })
-  );
+  return unwrapAction(await encerrarReceitaNoMes(espacoId, id, ym));
 }
 
 // ── Renda do mês (por espaço) ─────────────────────────────────────────────────
 export async function setRendaMes(espacoId: string, ym: string, valor: number) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].rendas[":ym"].$put({ param: { esp: espacoId, ym }, json: { valor } })
-  );
+  return unwrapAction(await definirRendaDoMes(espacoId, ym, valor));
 }
 
 // Remove o override do mês → volta a herdar o salário fixo do espaço.
 export async function clearRendaMes(espacoId: string, ym: string) {
-  return unwrap(client.api.despesas.espacos[":esp"].rendas[":ym"].$delete({ param: { esp: espacoId, ym } }));
+  return unwrapAction(await limparRendaDoMes(espacoId, ym));
 }
 
 // Salário fixo mensal = default do espaço (RendaMensal cai como fallback).
@@ -358,18 +368,16 @@ export async function setRendaFixa(espacoId: string, rendaMensal: number) {
 }
 
 // ── Despesas do mês (por espaço) ──────────────────────────────────────────────
-export async function addDespesaMes(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["mes"]["$post"]>) {
-  return unwrap(client.api.despesas.espacos[":esp"].mes.$post({ param: { esp: espacoId }, json: dto }));
+export async function addDespesaMes(espacoId: string, dto: z.input<typeof addDespesaMesSchema>) {
+  return unwrapAction(await criarDespesaMes(espacoId, dto));
 }
 
-export async function updateDespesaMes(espacoId: string, id: string, patch: Body<(typeof client.api.despesas.espacos)[":esp"]["mes"][":id"]["$patch"]>) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].mes[":id"].$patch({ param: { esp: espacoId, id }, json: patch })
-  );
+export async function updateDespesaMes(espacoId: string, id: string, patch: z.input<typeof updateDespesaMesSchema>) {
+  return unwrapAction(await atualizarDespesaMes(espacoId, id, patch));
 }
 
 export async function removeDespesaMes(espacoId: string, id: string) {
-  return unwrap(client.api.despesas.espacos[":esp"].mes[":id"].$delete({ param: { esp: espacoId, id } }));
+  return unwrapAction(await removerDespesaMes(espacoId, id));
 }
 
 // Import de OFX: cria as despesas do mês e devolve o que foi ignorado por fitid
@@ -381,32 +389,26 @@ export async function importDespesasMes(espacoId: string, dto: Body<(typeof clie
 }
 
 // Ação em lote nas despesas do mês: pagar/despagar, excluir, categoria, cartão.
-export async function bulkDespesasMes(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["mes"]["bulk"]["$post"]>) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].mes.bulk.$post({ param: { esp: espacoId }, json: dto })
-  );
+export async function bulkDespesasMes(espacoId: string, dto: z.input<typeof bulkMesSchema>) {
+  return unwrapAction(await loteDeDespesasMes(espacoId, dto));
 }
 
 // Define quanto pago de uma despesa do mês (valor absoluto) -> despesa atualizada.
 export async function setPagaMes(espacoId: string, id: string, valorPago: number) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].mes[":id"].pago.$put({ param: { esp: espacoId, id }, json: { valorPago } })
-  );
+  return unwrapAction(await definirPagoDaDespesaMes(espacoId, id, valorPago));
 }
 
 // ── Receitas do mês (dinheiro extra por fora, por espaço) ─────────────────────
-export async function addReceitaMes(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["receitas"]["$post"]>) {
-  return unwrap(client.api.despesas.espacos[":esp"].receitas.$post({ param: { esp: espacoId }, json: dto }));
+export async function addReceitaMes(espacoId: string, dto: z.input<typeof addReceitaMesSchema>) {
+  return unwrapAction(await criarReceitaMes(espacoId, dto));
 }
 
-export async function updateReceitaMes(espacoId: string, id: string, patch: Body<(typeof client.api.despesas.espacos)[":esp"]["receitas"][":id"]["$patch"]>) {
-  return unwrap(
-    client.api.despesas.espacos[":esp"].receitas[":id"].$patch({ param: { esp: espacoId, id }, json: patch })
-  );
+export async function updateReceitaMes(espacoId: string, id: string, patch: z.input<typeof updateReceitaMesSchema>) {
+  return unwrapAction(await atualizarReceitaMes(espacoId, id, patch));
 }
 
 export async function removeReceitaMes(espacoId: string, id: string) {
-  return unwrap(client.api.despesas.espacos[":esp"].receitas[":id"].$delete({ param: { esp: espacoId, id } }));
+  return unwrapAction(await removerReceitaMes(espacoId, id));
 }
 
 // ── Cartões de crédito (da conta, não por espaço) ────────────────────────────
