@@ -3,7 +3,7 @@
 Escopo pedido: (1) transformar o que devo em despesa/despesa fixa, respeitando parcelas até o fim,
 com adiantamento e opção de ignorar; (2) agenda de contatos formada por aceite ("compartilhei, a
 pessoa aceitou, virou meu contato"); (3) compartilhar despesa fixa, não só cartão (ex.: aluguel);
-(4) compartilhar com N pessoas, não uma só.
+(4) compartilhar com N pessoas, não uma só
 
 ---
 
