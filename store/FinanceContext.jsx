@@ -313,10 +313,19 @@ export function FinanceProvider({ children, estadoPromise }) {
   }, [ym, esp, janela]);
 
   // Refaz os agregados de fatura dos cartões (mês corrente por padrão).
+  // `cartoesCarregando` existe porque essa leitura acontece a cada troca de mês
+  // e os números da tela ficam VÁLIDOS mas do mês anterior enquanto ela roda —
+  // sem sinal, parece que o app ignorou o clique.
+  const [cartoesCarregando, setCartoesCarregando] = useState(false);
   const reloadCartoes = useCallback(async (ymArg) => {
-    const cartoes = await api.getCartoes(ymArg);
-    dispatch({ type: "SET_CARTOES", cartoes });
-    return cartoes;
+    setCartoesCarregando(true);
+    try {
+      const cartoes = await api.getCartoes(ymArg);
+      dispatch({ type: "SET_CARTOES", cartoes });
+      return cartoes;
+    } finally {
+      setCartoesCarregando(false);
+    }
   }, []);
 
   const actions = {
@@ -563,7 +572,11 @@ export function FinanceProvider({ children, estadoPromise }) {
     },
   };
 
-  return <Ctx.Provider value={{ ...state, ...actions, ym, setYm }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ ...state, ...actions, ym, setYm, cartoesCarregando }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useFinance() {

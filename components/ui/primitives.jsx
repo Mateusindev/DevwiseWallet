@@ -1,5 +1,5 @@
 // Small shared UI primitives. Kept in one file — they're tiny and cohesive.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
@@ -29,10 +29,43 @@ const VARIANTS = {
   danger: "bg-rose-600/90 hover:bg-rose-600 text-white",
   outline: "border border-[var(--color-line)] hover:bg-white/5 text-slate-200",
 };
-export function Button({ variant = "primary", className, loading, children, disabled, ...rest }) {
+// ── Pendência automática do clique ──────────────────────────────────────────
+// Se o `onClick` devolve Promise, o botão se desabilita até ela resolver. É o
+// que impede clique repetido em ação lenta — o sintoma era criar oito contatos
+// iguais numa fila de requests, porque o dispatcher de Server Actions é serial
+// e nada na tela dizia que estava indo.
+//
+// Botão `type="submit"` NÃO passa por aqui (quem submete é o form): esses
+// recebem `loading={submitting}` do useFormState.
+export function usePendenteDoClique(onClick) {
+  const [pendente, setPendente] = useState(false);
+  const vivo = useRef(true);
+  useEffect(() => () => { vivo.current = false; }, []);
+
+  if (!onClick) return [false, undefined];
+  const clique = (e) => {
+    const r = onClick(e);
+    if (!r || typeof r.then !== "function") return r;
+    setPendente(true);
+    const solta = () => { if (vivo.current) setPendente(false); };
+    // rejeição segue propagando (quem chamou é que trata / loga) — aqui só
+    // liberamos o botão.
+    return r.then(
+      (v) => { solta(); return v; },
+      (err) => { solta(); throw err; }
+    );
+  };
+  return [pendente, clique];
+}
+
+export function Button({ variant = "primary", className, loading, children, disabled, onClick, ...rest }) {
+  const [pendente, clique] = usePendenteDoClique(onClick);
+  const ocupado = disabled || loading || pendente;
   return (
     <button
-      disabled={disabled || loading}
+      disabled={ocupado}
+      onClick={clique}
+      aria-busy={loading || pendente ? true : undefined}
       className={cx(
         "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold",
         "transition-colors duration-150 cursor-pointer select-none",
@@ -43,8 +76,34 @@ export function Button({ variant = "primary", className, loading, children, disa
       )}
       {...rest}
     >
-      {loading && <Spinner />}
+      {(loading || pendente) && <Spinner />}
       {children}
+    </button>
+  );
+}
+
+// Botão só-ícone (lixeira, sincronizar) com a MESMA pendência automática do
+// Button: eram esses os cliques que ninguém segurava.
+export function IconButton({ className, tone = "neutral", children, onClick, disabled, ...rest }) {
+  const [pendente, clique] = usePendenteDoClique(onClick);
+  const tons = {
+    neutral: "text-slate-500 hover:bg-white/10 hover:text-slate-200",
+    danger: "text-slate-500 hover:bg-rose-500/15 hover:text-rose-400",
+  };
+  return (
+    <button
+      onClick={clique}
+      disabled={disabled || pendente}
+      aria-busy={pendente ? true : undefined}
+      className={cx(
+        "shrink-0 rounded-lg p-1.5 transition-colors cursor-pointer",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        tons[tone] ?? tons.neutral,
+        className
+      )}
+      {...rest}
+    >
+      {pendente ? <Spinner className="h-3.5 w-3.5 border-slate-400/40 border-t-slate-200" /> : children}
     </button>
   );
 }
@@ -55,6 +114,51 @@ export function Spinner({ className }) {
       className={cx("inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white", className)}
       aria-hidden
     />
+  );
+}
+
+// ── Skeleton ────────────────────────────────────────────────────────────────
+// Bloco cinza no lugar do conteúdo que está vindo. Serve pra tela nunca ficar
+// vazia (nem "pronta e errada") enquanto a leitura acontece — o app tem ida ao
+// banco fora da máquina, então esse intervalo é sempre visível.
+export function Skeleton({ className, rounded = "rounded-lg", style }) {
+  return <span aria-hidden style={style} className={cx("skel block", rounded, className)} />;
+}
+
+// N linhas de texto fantasma; a última sai mais curta (parece parágrafo).
+export function SkeletonLines({ lines = 3, className }) {
+  return (
+    <div className={cx("space-y-2", className)}>
+      {Array.from({ length: lines }, (_, i) => (
+        <Skeleton key={i} className={cx("h-3.5", i === lines - 1 ? "w-2/5" : "w-full")} />
+      ))}
+    </div>
+  );
+}
+
+// Lista de itens (linha de contato, linha de despesa, card de cartão).
+export function SkeletonList({ rows = 3, height = "h-14", className, label = "Carregando…" }) {
+  return (
+    <div className={cx("space-y-2", className)} role="status" aria-label={label}>
+      {Array.from({ length: rows }, (_, i) => (
+        <Skeleton key={i} className={cx(height, "w-full rounded-xl")} />
+      ))}
+    </div>
+  );
+}
+
+// Placeholder de gráfico: barras de altura variada, não um retângulo chapado —
+// o formato já diz que ali vai nascer um gráfico.
+const ALTURAS_SKEL = [0.55, 0.8, 0.42, 0.95, 0.62, 0.75, 0.5, 0.85, 0.68, 0.9, 0.46, 0.72];
+export function SkeletonChart({ height = 168, bars = 8, className }) {
+  return (
+    <div className={cx("flex items-end gap-2", className)} style={{ height }}
+         role="status" aria-label="Carregando gráfico">
+      {Array.from({ length: bars }, (_, i) => (
+        <Skeleton key={i} className="flex-1 rounded-t-md"
+                  style={{ height: `${ALTURAS_SKEL[i % ALTURAS_SKEL.length] * 100}%` }} />
+      ))}
+    </div>
   );
 }
 

@@ -164,6 +164,46 @@ function unwrapAction<T>(r: ActionResult<T>): T {
   throw new ApiError(r.error, r.status, r.issues);
 }
 
+// ── Cache de leitura ────────────────────────────────────────────────────────
+// O dispatcher de Server Actions do Next é SERIAL por cliente: duas leituras
+// disparadas juntas viram fila, e cada uma custa uma volta de rede até o banco.
+// Sem cache, trocar de aba remontava os componentes e refazia tudo do zero —
+// era o "toda tela demora" que se sentia no app.
+//
+// `ler` dedupa chamada idêntica em voo e reaproveita o resultado por
+// TTL_LEITURA_MS. Não é cache de verdade: toda mutação chama
+// `invalidarLeituras()` (o wrapper das actions do FinanceContext faz isso pra
+// todas de uma vez), então a janela serve pra matar rajada de request, não pra
+// servir dado velho.
+const TTL_LEITURA_MS = 20_000;
+const leituras = new Map<string, { em: number; p: Promise<unknown> }>();
+
+export function invalidarLeituras() {
+  leituras.clear();
+}
+
+// Escrita: desfaz o cache de leitura. Fica AQUI, no seam, e não em cada tela —
+// é o que garante que nenhuma mutação nova esqueça de invalidar.
+async function mutar<T>(p: Promise<ActionResult<T>>): Promise<T> {
+  try {
+    return unwrapAction(await p);
+  } finally {
+    invalidarLeituras();
+  }
+}
+
+function ler<T>(chave: string, fn: () => Promise<T>): Promise<T> {
+  const atual = leituras.get(chave);
+  if (atual && Date.now() - atual.em < TTL_LEITURA_MS) return atual.p as Promise<T>;
+  // erro não fica em cache: a próxima tentativa tem que ir no servidor de novo
+  const p = fn().catch((e) => {
+    if (leituras.get(chave)?.p === p) leituras.delete(chave);
+    throw e;
+  });
+  leituras.set(chave, { em: Date.now(), p });
+  return p;
+}
+
 // Resposta do hc: propaga mensagem de erro do back-end, devolve JSON tipado.
 async function unwrap<
   R extends { ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> }
@@ -183,15 +223,15 @@ async function unwrap<
 export type AuthUser = Awaited<ReturnType<typeof login>>;
 
 export async function login(email: string, senha: string) {
-  return unwrapAction(await entrar({ email, senha }));
+  return mutar(entrar({ email, senha }));
 }
 
 export async function register(nome: string, email: string, senha: string) {
-  return unwrapAction(await cadastrar({ nome, email, senha }));
+  return mutar(cadastrar({ nome, email, senha }));
 }
 
 export async function logout() {
-  return unwrapAction(await sair());
+  return mutar(sair());
 }
 
 // null = sem sessão; componente decide mostrar login.
@@ -206,7 +246,7 @@ export type AdminRoleView = Awaited<ReturnType<typeof listRoles>>[number];
 // Tela inteira numa chamada: users + roles + catálogo de permissions, com o
 // Promise.all rodando no servidor (o dispatcher do cliente é sequencial).
 export async function getAdminBootstrap() {
-  return unwrapAction(await bootstrapAdmin());
+  return ler(`admin:bootstrap`, async () => unwrapAction(await bootstrapAdmin()));
 }
 
 export async function listUsers() {
@@ -214,15 +254,15 @@ export async function listUsers() {
 }
 
 export async function createUser(dto: z.input<typeof createUserSchema>) {
-  return unwrapAction(await criarUsuario(dto));
+  return mutar(criarUsuario(dto));
 }
 
 export async function updateUser(id: string, patch: z.input<typeof updateUserSchema>) {
-  return unwrapAction(await atualizarUsuario(id, patch));
+  return mutar(atualizarUsuario(id, patch));
 }
 
 export async function deleteUser(id: string) {
-  return unwrapAction(await removerUsuario(id));
+  return mutar(removerUsuario(id));
 }
 
 export async function listRoles() {
@@ -230,15 +270,15 @@ export async function listRoles() {
 }
 
 export async function createRole(dto: z.input<typeof createRoleSchema>) {
-  return unwrapAction(await criarRole(dto));
+  return mutar(criarRole(dto));
 }
 
 export async function updateRole(id: string, patch: z.input<typeof updateRoleSchema>) {
-  return unwrapAction(await atualizarRole(id, patch));
+  return mutar(atualizarRole(id, patch));
 }
 
 export async function deleteRole(id: string) {
-  return unwrapAction(await removerRole(id));
+  return mutar(removerRole(id));
 }
 
 export async function listPermissions() {
@@ -264,9 +304,7 @@ export async function addAporte({
   descricao?: string;
   data?: string;
 }) {
-  return unwrapAction(
-    await criarMovimentacao({ caixinhaId, tipo: "aporte", valor, descricao, data })
-  );
+  return mutar(criarMovimentacao({ caixinhaId, tipo: "aporte", valor, descricao, data }));
 }
 
 export async function addDespesaVariavel({
@@ -280,25 +318,23 @@ export async function addDespesaVariavel({
   descricao?: string;
   data?: string;
 }) {
-  return unwrapAction(
-    await criarMovimentacao({ caixinhaId, tipo: "despesa", valor, descricao, data })
-  );
+  return mutar(criarMovimentacao({ caixinhaId, tipo: "despesa", valor, descricao, data }));
 }
 
 export async function removeMovimentacao(id: string) {
-  return unwrapAction(await removerMovimentacao(id));
+  return mutar(removerMovimentacao(id));
 }
 
 export async function addCaixinha(dto: z.input<typeof createCaixinhaSchema>) {
-  return unwrapAction(await criarCaixinha(dto));
+  return mutar(criarCaixinha(dto));
 }
 
 export async function updateCaixinha(id: string, patch: z.input<typeof updateCaixinhaSchema>) {
-  return unwrapAction(await atualizarCaixinha(id, patch));
+  return mutar(atualizarCaixinha(id, patch));
 }
 
 export async function removeCaixinha(id: string) {
-  return unwrapAction(await removerCaixinha(id));
+  return mutar(removerCaixinha(id));
 }
 
 // ── Espaços de despesa ────────────────────────────────────────────────────────
@@ -307,118 +343,120 @@ export async function getEspacos() {
 }
 
 export async function setActiveEspaco(id: string) {
-  return unwrapAction(await definirEspacoAtivo({ id }));
+  return mutar(definirEspacoAtivo({ id }));
 }
 
 export async function addEspaco(dto: z.input<typeof createEspacoSchema>) {
-  return unwrapAction(await criarEspaco(dto));
+  return mutar(criarEspaco(dto));
 }
 
 export async function renameEspaco(id: string, nome: string) {
-  return unwrapAction(await atualizarEspaco(id, { nome }));
+  return mutar(atualizarEspaco(id, { nome }));
 }
 
 export async function removeEspaco(id: string) {
-  return unwrapAction(await removerEspaco(id));
+  return mutar(removerEspaco(id));
 }
 
 // Traz o orçamento numa janela de meses ao redor de `ym` (o payload devolve
 // `janela` — quem consome refaz a busca quando o mês visto sai dela).
 export async function getOrcamento(espacoId: string, ym?: string) {
-  return unwrapAction(await orcamentoDoEspaco(espacoId, ym));
+  return ler(`orcamento:${espacoId}:${ym ?? ""}`, async () => unwrapAction(await orcamentoDoEspaco(espacoId, ym)));
 }
 
 // Gasto do mês por espaço — base do gráfico "por página" do Início.
 export async function getResumoEspacos(ym?: string) {
-  return unwrapAction(await resumoDoMes(ym));
+  return ler(`resumoEspacos:${ym ?? ""}`, async () => unwrapAction(await resumoDoMes(ym)));
 }
 
 // Oculta / restaura o espaço só no mês ym (exclusão reversível daquele mês).
 export async function ocultarEspacoMes(id: string, ym: string) {
-  return unwrapAction(await ocultarEspacoNoMes(id, ym));
+  return mutar(ocultarEspacoNoMes(id, ym));
 }
 
 export async function restaurarEspacoMes(id: string, ym: string) {
-  return unwrapAction(await restaurarEspacoNoMes(id, ym));
+  return mutar(restaurarEspacoNoMes(id, ym));
 }
 
 // Resumo da fatura mês a mês (por cartão e por categoria) — base dos gráficos.
 export async function getResumoCartoes(de?: string, ate?: string) {
-  return unwrapAction(await resumoDeCartoes(de, ate));
+  return ler(`resumoCartoes:${de ?? ""}:${ate ?? ""}`, async () => unwrapAction(await resumoDeCartoes(de, ate)));
 }
 
 // ── Despesas fixas (por espaço) ──────────────────────────────────────────────
 export async function addDespesaFixa(espacoId: string, dto: z.input<typeof addDespesaFixaSchema>) {
-  return unwrapAction(await criarDespesaFixa(espacoId, dto));
+  return mutar(criarDespesaFixa(espacoId, dto));
 }
 
 export async function toggleDespesaFixa(espacoId: string, id: string) {
-  return unwrapAction(await alternarDespesaFixa(espacoId, id));
+  return mutar(alternarDespesaFixa(espacoId, id));
 }
 
 export async function updateDespesaFixa(espacoId: string, id: string, patch: z.input<typeof updateDespesaFixaSchema>) {
-  return unwrapAction(await atualizarDespesaFixa(espacoId, id, patch));
+  return mutar(atualizarDespesaFixa(espacoId, id, patch));
 }
 
 export async function removeDespesaFixa(espacoId: string, id: string) {
-  return unwrapAction(await removerDespesaFixa(espacoId, id));
+  return mutar(removerDespesaFixa(espacoId, id));
 }
 
 // Define quanto pago da fixa no mês ym (valor absoluto) -> { despesaFixaId, ym, valorPago, pago }.
 export async function setPagamentoFixa(espacoId: string, id: string, ym: string, valorPago: number) {
-  return unwrapAction(await definirPagamentoFixa(espacoId, id, ym, valorPago));
+  return mutar(definirPagamentoFixa(espacoId, id, ym, valorPago));
 }
 
 // Ação em lote nas fixas: pagar/despagar (no mês `ym`), excluir, categoria,
 // cartão, ativar/pausar. Uma requisição, transação no back.
 export async function bulkDespesasFixas(espacoId: string, dto: z.input<typeof bulkFixaSchema>) {
-  return unwrapAction(await loteDeFixas(espacoId, dto));
+  return mutar(loteDeFixas(espacoId, dto));
 }
 
 // Receita recorrente: pular um mês, desfazer o pulo e encerrar daquele mês em diante.
 export async function skipReceitaMes(espacoId: string, id: string, ym: string) {
-  return unwrapAction(await pularReceitaNoMes(espacoId, id, ym));
+  return mutar(pularReceitaNoMes(espacoId, id, ym));
 }
 
 export async function unskipReceitaMes(espacoId: string, id: string, ym: string) {
-  return unwrapAction(await desfazerPuloDaReceita(espacoId, id, ym));
+  return mutar(desfazerPuloDaReceita(espacoId, id, ym));
 }
 
 export async function encerrarReceitaMes(espacoId: string, id: string, ym: string) {
-  return unwrapAction(await encerrarReceitaNoMes(espacoId, id, ym));
+  return mutar(encerrarReceitaNoMes(espacoId, id, ym));
 }
 
 // ── Renda do mês (por espaço) ─────────────────────────────────────────────────
 export async function setRendaMes(espacoId: string, ym: string, valor: number) {
-  return unwrapAction(await definirRendaDoMes(espacoId, ym, valor));
+  return mutar(definirRendaDoMes(espacoId, ym, valor));
 }
 
 // Remove o override do mês → volta a herdar o salário fixo do espaço.
 export async function clearRendaMes(espacoId: string, ym: string) {
-  return unwrapAction(await limparRendaDoMes(espacoId, ym));
+  return mutar(limparRendaDoMes(espacoId, ym));
 }
 
 // Salário fixo mensal = default do espaço (RendaMensal cai como fallback).
 export async function setRendaFixa(espacoId: string, rendaMensal: number) {
-  return unwrapAction(await atualizarEspaco(espacoId, { rendaMensal }));
+  return mutar(atualizarEspaco(espacoId, { rendaMensal }));
 }
 
 // ── Despesas do mês (por espaço) ──────────────────────────────────────────────
 export async function addDespesaMes(espacoId: string, dto: z.input<typeof addDespesaMesSchema>) {
-  return unwrapAction(await criarDespesaMes(espacoId, dto));
+  return mutar(criarDespesaMes(espacoId, dto));
 }
 
 export async function updateDespesaMes(espacoId: string, id: string, patch: z.input<typeof updateDespesaMesSchema>) {
-  return unwrapAction(await atualizarDespesaMes(espacoId, id, patch));
+  return mutar(atualizarDespesaMes(espacoId, id, patch));
 }
 
 export async function removeDespesaMes(espacoId: string, id: string) {
-  return unwrapAction(await removerDespesaMes(espacoId, id));
+  return mutar(removerDespesaMes(espacoId, id));
 }
 
 // Import de OFX: cria as despesas do mês e devolve o que foi ignorado por fitid
 // repetido.
 export async function importDespesasMes(espacoId: string, dto: Body<(typeof client.api.despesas.espacos)[":esp"]["mes"]["import"]["$post"]>) {
+  // única rota que não é action (payload passa do cap de 1MB) — invalida na mão
+  invalidarLeituras();
   return unwrap(
     client.api.despesas.espacos[":esp"].mes.import.$post({ param: { esp: espacoId }, json: dto })
   );
@@ -426,53 +464,53 @@ export async function importDespesasMes(espacoId: string, dto: Body<(typeof clie
 
 // Ação em lote nas despesas do mês: pagar/despagar, excluir, categoria, cartão.
 export async function bulkDespesasMes(espacoId: string, dto: z.input<typeof bulkMesSchema>) {
-  return unwrapAction(await loteDeDespesasMes(espacoId, dto));
+  return mutar(loteDeDespesasMes(espacoId, dto));
 }
 
 // Define quanto pago de uma despesa do mês (valor absoluto) -> despesa atualizada.
 export async function setPagaMes(espacoId: string, id: string, valorPago: number) {
-  return unwrapAction(await definirPagoDaDespesaMes(espacoId, id, valorPago));
+  return mutar(definirPagoDaDespesaMes(espacoId, id, valorPago));
 }
 
 // ── Receitas do mês (dinheiro extra por fora, por espaço) ─────────────────────
 export async function addReceitaMes(espacoId: string, dto: z.input<typeof addReceitaMesSchema>) {
-  return unwrapAction(await criarReceitaMes(espacoId, dto));
+  return mutar(criarReceitaMes(espacoId, dto));
 }
 
 export async function updateReceitaMes(espacoId: string, id: string, patch: z.input<typeof updateReceitaMesSchema>) {
-  return unwrapAction(await atualizarReceitaMes(espacoId, id, patch));
+  return mutar(atualizarReceitaMes(espacoId, id, patch));
 }
 
 export async function removeReceitaMes(espacoId: string, id: string) {
-  return unwrapAction(await removerReceitaMes(espacoId, id));
+  return mutar(removerReceitaMes(espacoId, id));
 }
 
 // ── Cartões de crédito (da conta, não por espaço) ────────────────────────────
 export async function getCartoes(ym?: string) {
-  return unwrapAction(await listarCartoes(ym));
+  return ler(`cartoes:${ym ?? ""}`, async () => unwrapAction(await listarCartoes(ym)));
 }
 
 export async function addCartao(dto: z.input<typeof createCartaoSchema>) {
-  return unwrapAction(await criarCartao(dto));
+  return mutar(criarCartao(dto));
 }
 
 export async function updateCartao(id: string, patch: z.input<typeof updateCartaoSchema>) {
-  return unwrapAction(await atualizarCartao(id, patch));
+  return mutar(atualizarCartao(id, patch));
 }
 
 export async function removeCartao(id: string) {
-  return unwrapAction(await removerCartao(id));
+  return mutar(removerCartao(id));
 }
 
 // Parceladas em aberto da conta (todos os espaços) + pagamentos do mês.
 // Base do painel de quitação na aba de cartões.
 export async function getParceladas(ym?: string) {
-  return unwrapAction(await listarParceladas(ym));
+  return ler(`parceladas:${ym ?? ""}`, async () => unwrapAction(await listarParceladas(ym)));
 }
 
 // Linhas da fatura de um cartão num mês (pra escolher qual compartilhar).
 export async function getFaturaLinhas(cartaoId: string, ym?: string) {
-  return unwrapAction(await linhasDaFatura(cartaoId, ym));
+  return ler(`faturaLinhas:${cartaoId}:${ym ?? ""}`, async () => unwrapAction(await linhasDaFatura(cartaoId, ym)));
 }
 
 // ── Compartilhamento (contatos + shares + convites + adoção) ─────────────────
@@ -486,19 +524,19 @@ export type ConviteView = Awaited<ReturnType<typeof getMeusConvites>>[number];
 export type RateioView = Awaited<ReturnType<typeof getRateio>>;
 
 export async function getContatos() {
-  return unwrapAction(await listarContatos());
+  return ler(`contatos`, async () => unwrapAction(await listarContatos()));
 }
 
 export async function addContato(dto: z.input<typeof createContatoSchema>) {
-  return unwrapAction(await criarContato(dto));
+  return mutar(criarContato(dto));
 }
 
 export async function updateContato(id: string, patch: z.input<typeof updateContatoSchema>) {
-  return unwrapAction(await atualizarContato(id, patch));
+  return mutar(atualizarContato(id, patch));
 }
 
 export async function removeContato(id: string) {
-  return unwrapAction(await removerContato(id));
+  return mutar(removerContato(id));
 }
 
 export async function getCartaoShares(cartaoId: string, ym?: string) {
@@ -506,25 +544,25 @@ export async function getCartaoShares(cartaoId: string, ym?: string) {
 }
 
 export async function addCartaoShare(cartaoId: string, dto: z.input<typeof createShareSchema>) {
-  return unwrapAction(await criarShare(dto, cartaoId));
+  return mutar(criarShare(dto, cartaoId));
 }
 
 export async function updateCartaoShare(id: string, patch: z.input<typeof updateShareSchema>) {
-  return unwrapAction(await atualizarShare(id, patch));
+  return mutar(atualizarShare(id, patch));
 }
 
 export async function removeCartaoShare(id: string) {
-  return unwrapAction(await removerShare(id));
+  return mutar(removerShare(id));
 }
 
 // Share que não é "de cartão": aponta uma fixa (aluguel) ou uma despesa do mês.
 export async function addShare(dto: z.input<typeof createShareSchema>) {
-  return unwrapAction(await criarShare(dto));
+  return mutar(criarShare(dto));
 }
 
 // Rateio N-a-N de uma linha: substitui o conjunto inteiro numa transação.
 export async function salvarRateio(dto: z.input<typeof rateioSchema>, ym?: string) {
-  return unwrapAction(await salvarRateioDaLinha(dto, ym));
+  return mutar(salvarRateioDaLinha(dto, ym));
 }
 
 // Rateio pelo id da linha (não precisa do espaço — quem vem da fatura não o tem).
@@ -540,13 +578,13 @@ export async function getRateioBootstrap(
   ref: { despesaFixaId?: string; despesaMesId?: string },
   ym?: string
 ) {
-  return unwrapAction(await abrirRateio(ref, ym));
+  return ler(`rateioBootstrap:${ref.despesaFixaId ?? ref.despesaMesId}:${ym ?? ""}`, async () => unwrapAction(await abrirRateio(ref, ym)));
 }
 
 // Painel de compartilhamento do cartão numa chamada: contatos + linhas da
 // fatura + shares.
 export async function getPainelCartaoShare(cartaoId: string, ym?: string) {
-  return unwrapAction(await painelDoCartao(cartaoId, ym));
+  return ler(`painelCartao:${cartaoId}:${ym ?? ""}`, async () => unwrapAction(await painelDoCartao(cartaoId, ym)));
 }
 
 export async function getRateioFixa(espacoId: string, id: string, ym?: string) {
@@ -560,11 +598,11 @@ export async function getRateioMes(espacoId: string, id: string, ym?: string) {
 // ── Convite / aceite ─────────────────────────────────────────────────────────
 // Sem infra de email: o retorno traz o token e o link pra UI copiar.
 export async function criarConvite(contatoId: string, dto: z.input<typeof conviteSchema>) {
-  return unwrapAction(await criarConviteAction(contatoId, dto));
+  return mutar(criarConviteAction(contatoId, dto));
 }
 
 export async function getMeusConvites() {
-  return unwrapAction(await listarMeusConvites());
+  return ler(`meusConvites`, async () => unwrapAction(await listarMeusConvites()));
 }
 
 export async function getConvitePorToken(token: string) {
@@ -572,39 +610,39 @@ export async function getConvitePorToken(token: string) {
 }
 
 export async function aceitarConvite(id: string) {
-  return unwrapAction(await aceitarConviteAction(id));
+  return mutar(aceitarConviteAction(id));
 }
 
 export async function recusarConvite(id: string) {
-  return unwrapAction(await recusarConviteAction(id));
+  return mutar(recusarConviteAction(id));
 }
 
 // O que o usuário logado deve — agrupado por dono, com subgrupos por cartão.
 export async function getMeusCompartilhamentos(ym?: string) {
-  return unwrapAction(await listarMeusCompartilhamentos(ym));
+  return ler(`meusCompartilhamentos:${ym ?? ""}`, async () => unwrapAction(await listarMeusCompartilhamentos(ym)));
 }
 
 // ── Adoção da dívida (lado de quem deve) ─────────────────────────────────────
 export async function adotarShare(shareId: string, dto: z.input<typeof adotarSchema>) {
-  return unwrapAction(await adotarShareAction(shareId, dto));
+  return mutar(adotarShareAction(shareId, dto));
 }
 
 export async function ignorarShare(shareId: string, ym?: string) {
-  return unwrapAction(await ignorarShareAction(shareId, ym));
+  return mutar(ignorarShareAction(shareId, ym));
 }
 
 // `removerDespesa` também apaga a despesa criada; sem ele a despesa fica (é do
 // devedor, não some por decisão de terceiro).
 export async function desfazerAdocao(shareId: string, removerDespesa = false) {
-  return unwrapAction(await desfazerAdocaoAction(shareId, removerDespesa));
+  return mutar(desfazerAdocaoAction(shareId, removerDespesa));
 }
 
 export async function adiantarShare(shareId: string, dto: z.input<typeof adiantarSchema>) {
-  return unwrapAction(await adiantarShareAction(shareId, dto));
+  return mutar(adiantarShareAction(shareId, dto));
 }
 
 export async function sincronizarShare(shareId: string, ym?: string) {
-  return unwrapAction(await sincronizarShareAction(shareId, ym));
+  return mutar(sincronizarShareAction(shareId, ym));
 }
 
 // ── Categorias de despesa (da conta, não por espaço) ─────────────────────────
@@ -615,18 +653,18 @@ export async function getCategorias() {
 }
 
 export async function addCategoria(dto: z.input<typeof createCategoriaSchema>) {
-  return unwrapAction(await criarCategoria(dto));
+  return mutar(criarCategoria(dto));
 }
 
 export async function updateCategoria(id: string, patch: z.input<typeof updateCategoriaSchema>) {
-  return unwrapAction(await atualizarCategoria(id, patch));
+  return mutar(atualizarCategoria(id, patch));
 }
 
 export async function removeCategoria(id: string) {
-  return unwrapAction(await removerCategoria(id));
+  return mutar(removerCategoria(id));
 }
 
 // ── Dev helper ─────────────────────────────────────────────────────────────
 export async function resetState() {
-  return unwrapAction(await resetarDados());
+  return mutar(resetarDados());
 }

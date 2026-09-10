@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { ShieldCheck, Users, KeyRound, Plus, Pencil, Trash2 } from "lucide-react";
 // primitives são .jsx sem tipos — TS inferiria todas as props como obrigatórias
 import * as P from "./ui/primitives.jsx";
-const { Card, Button, Modal, Field, TextInput, Badge, Spinner } =
+const { Card, Button, IconButton, Modal, Field, TextInput, Badge, Skeleton, SkeletonList } =
   P as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
 import * as F from "./ui/fields.jsx";
 const { CheckboxField, FormError } = F as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
@@ -128,17 +128,16 @@ function UsersTab({ users, roles, meId, canManage, onChanged }: {
               </div>
               {canManage && (
                 <>
-                  <button onClick={() => setEditing(u)} aria-label={`Editar ${u.nome}`}
-                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                  <IconButton onClick={() => setEditing(u)} aria-label={`Editar ${u.nome}`}>
                     <Pencil size={15} />
-                  </button>
+                  </IconButton>
                   {u.id !== meId && (
-                    <button
+                    <IconButton
+                      tone="danger"
                       onClick={async () => { await deleteUser(u.id); await onChanged(); }}
-                      aria-label={`Excluir ${u.nome}`}
-                      className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
+                      aria-label={`Excluir ${u.nome}`}>
                       <Trash2 size={15} />
-                    </button>
+                    </IconButton>
                   )}
                 </>
               )}
@@ -302,16 +301,15 @@ function RolesTab({ roles, permissions, canManage, onChanged }: {
               </div>
               {canManage && (
                 <div className="flex shrink-0 gap-1">
-                  <button onClick={() => setEditing(r)} aria-label={`Editar ${r.nome}`}
-                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                  <IconButton onClick={() => setEditing(r)} aria-label={`Editar ${r.nome}`}>
                     <Pencil size={15} />
-                  </button>
-                  <button
+                  </IconButton>
+                  <IconButton
+                    tone="danger"
                     onClick={async () => { await deleteRole(r.id); await onChanged(); }}
-                    aria-label={`Excluir ${r.nome}`}
-                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
+                    aria-label={`Excluir ${r.nome}`}>
                     <Trash2 size={15} />
-                  </button>
+                  </IconButton>
                 </div>
               )}
             </div>
@@ -435,10 +433,15 @@ function PermChip({ p, on, onToggle, destaque }: { p: string; on: boolean; onTog
   );
 }
 
+// Skeleton no formato da lista (e não um spinner centralizado): o bloco já
+// mostra quantas linhas vêm e a página não salta quando os dados chegam.
 function Loading() {
   return (
-    <Card className="grid place-items-center px-5 py-14">
-      <Spinner className="h-6 w-6" />
-    </Card>
+    <div className="space-y-4">
+      <Skeleton className="h-4 w-28" />
+      <Card className="p-4">
+        <SkeletonList rows={4} height="h-14" label="Carregando" />
+      </Card>
+    </div>
   );
 }

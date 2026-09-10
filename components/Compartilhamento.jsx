@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Users, Trash2, Plus, HandCoins, Link2, Check, X, Mail, UserPlus,
   RefreshCw, EyeOff, CalendarCheck, Split, AlertTriangle,
 } from "lucide-react";
-import { Card, Button, Modal, Field, TextInput, MoneyInput, Badge } from "./ui/primitives.jsx";
+import {
+  Card, Button, IconButton, Modal, Field, TextInput, MoneyInput, Badge,
+  Spinner, SkeletonList,
+} from "./ui/primitives.jsx";
 import { Select, SelectItem, NumberInput, FormError, CheckboxField } from "./ui/fields.jsx";
 import { useFormState } from "./ui/useFormState.js";
+import { useAsync } from "./ui/useAsync.js";
 import { emailValido, texto } from "../lib/formErrors.js";
 import { fmtMoney } from "../lib/format.js";
 import { acento, iniciais } from "../lib/calc.js";
@@ -52,6 +56,9 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
   const [abate, setAbate] = useState(false);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  // "Carregando" derivado de QUAL linha já foi carregada, não de um boolean
+  // ligado dentro do efeito: assim o efeito só escreve estado nos callbacks.
+  const [carregadoDe, setCarregadoDe] = useState(null);
   const [novo, setNovo] = useState({ nome: "", email: "" });
 
   const ref = useMemo(
@@ -59,16 +66,25 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
     [campo, linha?.id]
   );
   const base = linha?.valor ?? 0;
+  const abateInicial = !!linha?.abateShares;
 
   // Contatos + rateio atual da linha numa chamada só: o dispatcher de Server
   // Actions é serial por cliente, então um Promise.all aqui viraria fila.
+  //
+  // Deps por VALOR (`ref` já carrega o id da linha), não pelo objeto `linha`: o
+  // pai remonta o objeto a cada render e o efeito refazia a busca junto.
+  const linhaId = ref.despesaFixaId ?? ref.despesaMesId ?? null;
+  const carregando = open && !!linhaId && carregadoDe !== linhaId;
+
   useEffect(() => {
-    if (!open || !linha) return;
+    if (!open || !linhaId) return;
+    let cancelado = false;
     api.getRateioBootstrap(ref)
       .then(({ contatos: cs, rateio: r }) => {
+        if (cancelado) return;
         setErro("");
         setContatos(cs);
-        setAbate(!!linha.abateShares);
+        setAbate(abateInicial);
         setItens(
           r.shares.map((sh) => ({
             contatoId: sh.contatoId,
@@ -78,8 +94,10 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
           }))
         );
       })
-      .catch((e) => setErro(erroDe(e)));
-  }, [open, linha, ref]);
+      .catch((e) => !cancelado && setErro(erroDe(e)))
+      .finally(() => !cancelado && setCarregadoDe(linhaId));
+    return () => { cancelado = true; };
+  }, [open, ref, linhaId, abateInicial]);
 
   // espelha validaRateio do server: a barra tem que fechar antes de salvar
   const partes = itens.map((i) =>
@@ -171,7 +189,10 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
         </div>
 
         <div className="space-y-2">
-          {itens.length === 0 && <p className="text-sm text-slate-500">Ninguém dividindo essa linha ainda.</p>}
+          {carregando && <SkeletonList rows={2} height="h-20" label="Carregando a divisão" />}
+          {!carregando && itens.length === 0 && (
+            <p className="text-sm text-slate-500">Ninguém dividindo essa linha ainda.</p>
+          )}
           {itens.map((i, idx) => (
             <div key={i.contatoId} className="rounded-xl bg-white/4 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -418,25 +439,26 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
 
 // ── Convites recebidos ───────────────────────────────────────────────────────
 export function ConvitesBanner({ onRespondido }) {
-  const [convites, setConvites] = useState([]);
+  const { dado: convites, recarregar } = useAsync(() => api.getMeusConvites(), "convites", {
+    inicial: [],
+  });
   const [erro, setErro] = useState("");
-
-  const carregar = useCallback(() => {
-    api.getMeusConvites().then(setConvites).catch(() => setConvites([]));
-  }, []);
-  useEffect(carregar, [carregar]);
 
   async function responder(id, aceitar) {
     setErro("");
     try {
       await (aceitar ? api.aceitarConvite(id) : api.recusarConvite(id));
-      carregar();
+      recarregar();
       await onRespondido?.();
     } catch (e) {
       setErro(erroDe(e));
     }
   }
 
+  // Sem skeleton de propósito: o normal é NÃO ter convite, e um banner fantasma
+  // em todo carregamento seria pior que a espera. Os botões seguram o clique
+  // repetido sozinhos (Button fica pendente enquanto a Promise não volta) — era
+  // o que fazia o "aceitar" ir duas vezes e a segunda voltar 422.
   if (convites.length === 0) return null;
 
   return (
@@ -467,27 +489,36 @@ export function ConvitesBanner({ onRespondido }) {
 
 // ── Agenda de contatos (dono) ────────────────────────────────────────────────
 export function Contatos() {
-  const [contatos, setContatos] = useState([]);
+  const {
+    dado: contatos,
+    carregando,
+    erro: erroCarga,
+    revalidando: revalidandoContatos,
+    recarregar,
+  } = useAsync(() => api.getContatos(), "contatos", { inicial: [] });
   const [erro, setErro] = useState("");
   const [linkDe, setLinkDe] = useState(null); // { contatoId, link }
   const [novo, setNovo] = useState({ nome: "", email: "" });
-
-  const carregar = useCallback(() => {
-    api.getContatos().then(setContatos).catch((e) => setErro(erroDe(e)));
-  }, []);
-  useEffect(carregar, [carregar]);
+  // O submit do form não passa pelo onClick do Button (quem submete é o form),
+  // então a pendência do "Adicionar" é explícita. Sem isso o Enter/clique
+  // repetido criava a mesma pessoa N vezes — era o bug mais visível da aba.
+  const [salvando, setSalvando] = useState(false);
 
   async function criar(e) {
     e.preventDefault();
     setErro("");
+    if (salvando) return;
     if (!novo.nome.trim()) return setErro("Informe o nome.");
     if (novo.email.trim() && !emailValido(novo.email)) return setErro("Email inválido.");
+    setSalvando(true);
     try {
       await api.addContato({ nome: novo.nome.trim(), email: novo.email.trim() || null });
       setNovo({ nome: "", email: "" });
-      carregar();
+      recarregar();
     } catch (e) {
       setErro(erroDe(e));
+    } finally {
+      setSalvando(false);
     }
   }
 
@@ -496,27 +527,37 @@ export function Contatos() {
     try {
       const cv = await api.criarConvite(c.id, {});
       setLinkDe({ contatoId: c.id, link: `${window.location.origin}${cv.link}` });
-      carregar();
+      recarregar();
     } catch (e) {
       setErro(erroDe(e));
     }
   }
 
   async function remover(id) {
-    await api.removeContato(id);
-    carregar();
+    setErro("");
+    try {
+      await api.removeContato(id);
+      recarregar();
+    } catch (e) {
+      setErro(erroDe(e));
+    }
   }
 
   return (
     <Card className="p-5 sm:p-6">
       <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-white">
         <Users size={18} /> Pessoas
+        {revalidandoContatos && <Spinner className="h-3.5 w-3.5 border-slate-500/40 border-t-slate-300" />}
       </h3>
-      <FormError>{erro}</FormError>
+      <FormError>{erro || erroCarga}</FormError>
 
       <div className="space-y-2">
-        {contatos.length === 0 && <p className="text-sm text-slate-500">Nenhuma pessoa na agenda ainda.</p>}
-        {contatos.map((c) => {
+        {carregando ? (
+          <SkeletonList rows={3} height="h-16" label="Carregando a agenda" />
+        ) : (
+          contatos.length === 0 && <p className="text-sm text-slate-500">Nenhuma pessoa na agenda ainda.</p>
+        )}
+        {!carregando && contatos.map((c) => {
           const st = STATUS[c.status] ?? STATUS.local;
           return (
             <div key={c.id} className="rounded-xl bg-white/4 px-3 py-2.5">
@@ -536,10 +577,9 @@ export function Contatos() {
                       <Mail size={15} /> {c.status === "convidado" ? "Reenviar" : "Convidar"}
                     </Button>
                   )}
-                  <button onClick={() => remover(c.id)} aria-label={`Remover ${c.nome}`}
-                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
+                  <IconButton tone="danger" onClick={() => remover(c.id)} aria-label={`Remover ${c.nome}`}>
                     <Trash2 size={15} />
-                  </button>
+                  </IconButton>
                 </div>
               </div>
               {linkDe?.contatoId === c.id && (
@@ -566,41 +606,71 @@ export function Contatos() {
           <TextInput name="email" value={novo.email} placeholder="email (opcional)"
             onChange={(e) => setNovo((v) => ({ ...v, email: e.target.value }))} />
         </div>
-        <Button type="submit" variant="ghost" className="w-full"><UserPlus size={15} /> Adicionar</Button>
+        <Button type="submit" variant="ghost" className="w-full" loading={salvando}>
+          {salvando ? "Adicionando…" : <><UserPlus size={15} /> Adicionar</>}
+        </Button>
       </form>
     </Card>
   );
 }
 
 // ── Painel "O que devo" ──────────────────────────────────────────────────────
+const SEM_DEVIDO = { donos: [], orfas: [] };
+
 export function MeusCompartilhamentos({ ym }) {
   const { espacos, refresh } = useFinance();
-  const [dados, setDados] = useState({ donos: [], orfas: [] });
+  const {
+    dado: dados,
+    carregando,
+    erro: erroCarga,
+    revalidando,
+    recarregar,
+  } = useAsync(() => api.getMeusCompartilhamentos(ym), ["devido", ym], { inicial: SEM_DEVIDO });
   const [erro, setErro] = useState("");
   const [acao, setAcao] = useState(null); // { linha, modo: "adotar"|"adiantar" }
-
-  const carregar = useCallback(() => {
-    api.getMeusCompartilhamentos(ym).then(setDados).catch(() => setDados({ donos: [], orfas: [] }));
-  }, [ym]);
-  useEffect(carregar, [carregar]);
 
   async function roda(fn) {
     setErro("");
     try {
       await fn();
-      carregar();
+      recarregar();
       await refresh();
     } catch (e) {
       setErro(erroDe(e));
     }
   }
 
+  // Este painel é a leitura mais cara do app (cruza contatos, shares, adoções e
+  // adiantamentos). Sem skeleton ele ficava indistinguível de "não devo nada"
+  // por vários segundos e depois aparecia empurrando a página.
+  if (carregando) {
+    return (
+      <Card className="p-5 sm:p-6">
+        <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-white">
+          <HandCoins size={18} /> O que devo
+        </h3>
+        <SkeletonList rows={2} height="h-20" label="Carregando o que você deve" />
+      </Card>
+    );
+  }
+  if (erroCarga && dados.donos.length === 0 && dados.orfas.length === 0) {
+    return (
+      <Card className="p-5 sm:p-6">
+        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
+          <HandCoins size={18} /> O que devo
+        </h3>
+        <FormError>{erroCarga}</FormError>
+        <Button variant="ghost" onClick={recarregar}><RefreshCw size={15} /> Tentar de novo</Button>
+      </Card>
+    );
+  }
   if (dados.donos.length === 0 && dados.orfas.length === 0) return null;
 
   return (
     <Card className="p-5 sm:p-6">
       <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-white">
         <HandCoins size={18} /> O que devo
+        {revalidando && <Spinner className="h-3.5 w-3.5 border-slate-500/40 border-t-slate-300" />}
       </h3>
       <FormError>{erro}</FormError>
 

@@ -1,3 +1,5 @@
+"use client";
+
 import { Users } from "lucide-react";
 import { ConvitesBanner, Contatos, MeusCompartilhamentos } from "./Compartilhamento.jsx";
 import { MonthStepper } from "./ui/fields.jsx";

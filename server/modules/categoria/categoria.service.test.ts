@@ -22,6 +22,11 @@ mock.module("@/server/modules/categoria/categoria.repository", () => ({
       db.onCreate?.(data);
       return cat({ id: "cat-new", ...data });
     },
+    createMany: async (data: Row[]) => {
+      for (const d of data) db.onCreate?.(d);
+      db.created = data.at(-1) ?? null;
+      return { count: data.length };
+    },
     update: async (id: string, data: Row) => cat({ id, ...data }),
     delete: async (id: string) => {
       db.deleted = id;

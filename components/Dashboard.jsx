@@ -1,8 +1,13 @@
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
 import { Plus, PiggyBank, Target, LifeBuoy, ChevronRight } from "lucide-react";
-import { Card, Donut, Button, ProgressBar, Modal } from "./ui/primitives.jsx";
+import {
+  Card, Donut, Button, ProgressBar, Modal, Skeleton, SkeletonChart, SkeletonLines, Spinner,
+} from "./ui/primitives.jsx";
+import { useAsync } from "./ui/useAsync.js";
 import { MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
-import { GroupedBars, HBars, LineTrend, StackedBars } from "./ui/charts.jsx";
+import { GroupedBars, HBars, SobraMensal, StackedBars } from "./ui/charts.jsx";
 import CaixinhaCard from "./CaixinhaCard.jsx";
 import { ConvitesBanner, MeusCompartilhamentos } from "./Compartilhamento.jsx";
 import { AporteModal, DespesaVariavelModal, CaixinhaModal, ReservaEmergenciaModal } from "./forms.jsx";
@@ -13,6 +18,9 @@ import { useAuth } from "./AuthGate";
 import * as api from "../services/financeApi";
 
 const GREY = "#64748b";
+// Paleta do "gasto por página": página não tem cor cadastrada (só nome e
+// emoji), então a cor vem da posição — ordem estável dentro do mesmo mês.
+const CORES_PAGINA = ["#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#06b6d4", "#f43f5e"];
 
 export default function Dashboard({ onOpenCaixinha }) {
   const fin = useFinance();
@@ -64,14 +72,21 @@ export default function Dashboard({ onOpenCaixinha }) {
     [rendas, dMes, rMes, mComDespesa]
   );
   const janela = useMemo(() => janelaMeses({ dados: comDados }), [comDados]);
-  const orc = useMemo(
-    () => orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, receitasSkips: rSkips, despesasFixas: dFixas, config: cfg }, ym),
-    [rendas, dMes, rMes, rSkips, dFixas, cfg, ym]
-  );
-  // série dos últimos 6 meses (evolução + sobra)
+  // série dos últimos 6 meses (evolução + composição)
   const serie = useMemo(() =>
     lastMonths(6, ym).map((m) => ({
       ym: m,
+      ...orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, receitasSkips: rSkips, despesasFixas: dFixas, config: cfg }, m),
+    })),
+    [rendas, dMes, rMes, rSkips, dFixas, cfg, ym]
+  );
+  // Sobra pega 12 meses: é a série em que "está melhorando ou piorando?" só
+  // aparece com mais de meia dúzia de pontos, e a janela do orçamento já vem
+  // com 12 meses pra trás — não custa request nenhuma.
+  const serieSobra = useMemo(() =>
+    lastMonths(12, ym).map((m) => ({
+      key: m,
+      label: fmtMonthShort(m),
       ...orcamentoMes({ rendasMensais: rendas, despesasMes: dMes, receitasMes: rMes, receitasSkips: rSkips, despesasFixas: dFixas, config: cfg }, m),
     })),
     [rendas, dMes, rMes, rSkips, dFixas, cfg, ym]
@@ -144,25 +159,21 @@ export default function Dashboard({ onOpenCaixinha }) {
     return { series, data };
   }, [serie, dFixas, dMes, catMap]);
 
-  // Gasto por espaço no mês — uma request agregada. Deps só de espacos/ym pra
-  // não refazer a busca a cada mutação local.
-  const [porEspaco, setPorEspaco] = useState([]);
-  useEffect(() => {
-    if (espacos.length === 0) { setPorEspaco([]); return; }
-    let cancel = false;
-    api.getResumoEspacos(ym)
-      .then((r) => {
-        if (cancel) return;
-        setPorEspaco(
-          r.espacos
-            .filter((e) => e.saiu > 0)
-            .map((e) => ({ label: `${e.emoji ? `${e.emoji} ` : ""}${e.nome}`, value: e.saiu }))
-            .sort((a, b) => b.value - a.value)
-        );
-      })
-      .catch(() => { if (!cancel) setPorEspaco([]); });
-    return () => { cancel = true; };
-  }, [espacos, ym]);
+  // Gasto por espaço no mês — uma request agregada. A chave é só o mês: refazer
+  // a busca a cada mutação local seria uma ida ao banco por clique.
+  const { dado: porEspacoBruto, carregando: carregandoEspacos } = useAsync(
+    () => api.getResumoEspacos(ym),
+    ["resumoEspacos", ym],
+    { ativo: espacos.length > 0 }
+  );
+  const porEspaco = useMemo(
+    () =>
+      (porEspacoBruto?.espacos ?? [])
+        .filter((e) => e.saiu > 0)
+        .map((e) => ({ label: `${e.emoji ? `${e.emoji} ` : ""}${e.nome}`, value: e.saiu }))
+        .sort((a, b) => b.value - a.value),
+    [porEspacoBruto]
+  );
 
   // null | { caixinhaId? } — com id, o modal abre travado naquela caixinha.
   const [aporte, setAporte] = useState(null);
@@ -285,7 +296,10 @@ export default function Dashboard({ onOpenCaixinha }) {
       {can("orcamento:view") && (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-white">Gráficos do orçamento</h3>
+            <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+              Gráficos do orçamento
+              {vizLoading && <Spinner className="h-4 w-4 border-slate-500/40 border-t-slate-300" />}
+            </h3>
             {espacos.length > 0 && (
               <label className="flex items-center gap-2 text-sm text-slate-400">
                 <span className="whitespace-nowrap">Visualizar página</span>
@@ -297,6 +311,16 @@ export default function Dashboard({ onOpenCaixinha }) {
               </label>
             )}
           </div>
+          {/* Primeira carga de uma página que NÃO é a ativa: sem skeleton os
+              gráficos apareciam vazios (dados = []) e depois se preenchiam, o
+              que se lê como "essa página não tem nada". */}
+          {vizLoading && !vizOrc ? (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="space-y-4 p-5 lg:col-span-2"><Skeleton className="h-4 w-52" /><SkeletonChart /></Card>
+              <Card className="space-y-4 p-5"><Skeleton className="h-4 w-32" /><SkeletonChart height={150} bars={10} /></Card>
+              <Card className="space-y-4 p-5"><Skeleton className="h-4 w-44" /><SkeletonLines lines={5} /></Card>
+            </div>
+          ) : (
           <div className={`space-y-6 transition-opacity ${vizLoading ? "pointer-events-none opacity-40" : "opacity-100"}`}>
           {/* Evolução mensal */}
           <Card className="p-5">
@@ -313,11 +337,13 @@ export default function Dashboard({ onOpenCaixinha }) {
           </Card>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Sobra mensal */}
+            {/* Sobra mensal — 12 meses (a janela do orçamento já traz esse histórico) */}
             <Card className="p-5">
-              <h3 className="mb-4 text-sm font-semibold text-white">Sobra mensal</h3>
-              <LineTrend points={serie.map((s) => ({ label: fmtMonthShort(s.ym), value: s.sobrou }))}
-                         color={orc.sobrou >= 0 ? "#3b82f6" : "#f43f5e"} />
+              <div className="mb-4 flex items-baseline justify-between gap-2">
+                <h3 className="text-sm font-semibold text-white">Sobra mensal</h3>
+                <span className="text-[11px] text-slate-500">recebido − gasto</span>
+              </div>
+              <SobraMensal points={serieSobra} destaque={ym} />
             </Card>
 
             {/* Despesas por categoria */}
@@ -400,11 +426,18 @@ export default function Dashboard({ onOpenCaixinha }) {
             <Card className="p-5 lg:col-span-2">
               <h3 className="mb-1 text-sm font-semibold text-white">Gasto por página · {fmtMonthLabel(ym)}</h3>
               <p className="mb-4 text-xs text-slate-500">Fixas do mês + despesas lançadas, em todas as páginas.</p>
-              <HBars items={porEspaco.map((l) => ({ label: l.label, value: l.value, color: acento(l.cor).dot }))}
-                     empty="Nenhuma despesa neste mês." />
+              {carregandoEspacos ? (
+                <SkeletonLines lines={3} />
+              ) : (
+                // A cor vem da posição na lista: o payload do resumo traz nome,
+                // emoji e valor — página não tem cor cadastrada.
+                <HBars items={porEspaco.map((l, i) => ({ ...l, color: CORES_PAGINA[i % CORES_PAGINA.length] }))}
+                       empty="Nenhuma despesa neste mês." />
+              )}
             </Card>
           </div>
           </div>
+          )}
         </div>
       )}
 

@@ -18,6 +18,10 @@ export const categoriaRepository = {
     return prisma.categoria.create({ data });
   },
 
+  createMany(data: Prisma.CategoriaUncheckedCreateInput[]) {
+    return prisma.categoria.createMany({ data });
+  },
+
   update(id: string, data: Prisma.CategoriaUncheckedUpdateInput) {
     return prisma.categoria.update({ where: { id }, data });
   },

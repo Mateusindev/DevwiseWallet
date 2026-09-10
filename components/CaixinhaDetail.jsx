@@ -1,6 +1,8 @@
+"use client";
+
 import { useMemo, useState } from "react";
 import { ArrowLeft, Plus, Minus, Trash2, Target, Pencil } from "lucide-react";
-import { Card, ProgressBar, Button, Modal } from "./ui/primitives.jsx";
+import { Card, ProgressBar, Button, IconButton, Modal } from "./ui/primitives.jsx";
 import { AporteModal, DespesaVariavelModal, CaixinhaModal } from "./forms.jsx";
 import { fmtMoney, fmtMeses, fmtDate, monthKey, fmtMonthLabel } from "../lib/format.js";
 import { progresso, mesesParaMeta, faltaParaMeta, acento } from "../lib/calc.js";
@@ -147,10 +149,11 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
                           {m.tipo === "aporte" ? "+" : "−"}{fmtMoney(m.valor)}
                         </span>
                         {canMov && (
-                          <button onClick={() => removeMovimentacao(m.id)} aria-label="Remover movimentação"
-                                  className="rounded-lg p-1.5 text-slate-600 opacity-0 transition-all hover:bg-rose-500/15 hover:text-rose-400 group-hover:opacity-100 cursor-pointer">
+                          <IconButton tone="danger" onClick={() => removeMovimentacao(m.id)}
+                                      aria-label="Remover movimentação"
+                                      className="text-slate-600 opacity-0 group-hover:opacity-100">
                             <Trash2 size={15} />
-                          </button>
+                          </IconButton>
                         )}
                       </li>
                     ))}

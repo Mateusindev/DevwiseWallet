@@ -35,6 +35,40 @@ body {
 /* tabular numerals helper */
 .tnum { font-variant-numeric: tabular-nums; }
 
+/* ── Skeleton ───────────────────────────────────────────────────────────
+   Brilho varrendo em vez de só pulsar: pulse sozinho parece um bloco
+   desenhado, o sweep lê como "está vindo". `prefers-reduced-motion` já
+   desliga toda animação mais abaixo. */
+.skel {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.055);
+}
+.skel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.06) 45%,
+    rgba(255, 255, 255, 0.09) 55%,
+    transparent
+  );
+  animation: skel-sweep 1.35s ease-in-out infinite;
+}
+@keyframes skel-sweep {
+  100% { transform: translateX(100%); }
+}
+
+/* Feedback de navegação: a barra fina no topo enquanto a rota carrega. */
+@keyframes rota-progresso {
+  0%   { transform: translateX(-100%) scaleX(0.35); }
+  55%  { transform: translateX(-15%) scaleX(0.7); }
+  100% { transform: translateX(0) scaleX(1); }
+}
+
 /* thin scrollbar */
 * { scrollbar-width: thin; scrollbar-color: #1e293b transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }

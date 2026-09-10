@@ -177,6 +177,19 @@ function diaDaLinha(s: ShareComDono): number {
   return cartaoDoShare(s)?.diaVencimento ?? 1;
 }
 
+// Redução pura dos adiantamentos em `quitadoAte` por share (maior `cobreAte`).
+// Separada da busca pra quem já tem os adiantamentos em mão não repetir a query.
+function quitadoPorAdiantamentos(
+  adiantamentos: { shareId: string; cobreAte: string }[]
+): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const a of adiantamentos) {
+    const atual = m.get(a.shareId);
+    if (!atual || a.cobreAte > atual) m.set(a.shareId, a.cobreAte);
+  }
+  return m;
+}
+
 export const cartaoShareService = {
   // ── Contatos ──────────────────────────────────────────────────────────────
   async listContatos(ownerId: string) {
@@ -266,10 +279,14 @@ export const cartaoShareService = {
   // ── Convites (quem recebe) ────────────────────────────────────────────────
   // Fallback pra contas pré-existentes: contato cadastrado só com email vira
   // convite pendente na primeira visita — não vira acesso liberado.
-  async sincronizaConvites(user: AuthUser) {
-    const vinculados = await cartaoShareRepository.contatosByUserId(user.id);
+  // `vinculados` pode vir de fora: quem já leu os contatos do usuário nesta
+  // request não precisa relê-los aqui (era a mesma query duas vezes em série).
+  async sincronizaConvites(user: AuthUser, vinculadosPreLidos?: Contato[]) {
+    const [vinculados, soltos] = await Promise.all([
+      vinculadosPreLidos ?? cartaoShareRepository.contatosByUserId(user.id),
+      cartaoShareRepository.contatosUnlinkedByEmail(user.email),
+    ]);
     const donos = new Set(vinculados.map((c) => c.ownerId));
-    const soltos = await cartaoShareRepository.contatosUnlinkedByEmail(user.email);
 
     const pendentes = [...vinculados.filter((c) => c.status === "convidado")];
     for (const c of soltos) {
@@ -283,17 +300,21 @@ export const cartaoShareService = {
       if (atualizado.status === "convidado") pendentes.push(atualizado);
     }
 
-    // um convite aberto por contato pendente, pra tudo passar pelo mesmo aceite
-    for (const c of pendentes) {
-      if ((await cartaoShareRepository.convitesPendentesDoContato(c.id)).length > 0) continue;
-      await cartaoShareRepository.conviteCreate({
-        ownerId: c.ownerId,
-        contatoId: c.id,
-        email: user.email,
-        token: randomBytes(24).toString("base64url"),
-        expiraEm: new Date(Date.now() + DIAS_CONVITE * 24 * 60 * 60 * 1000),
-      });
-    }
+    // um convite aberto por contato pendente, pra tudo passar pelo mesmo aceite.
+    // Em paralelo: o caso comum é nenhum pendente, e quando há são poucos e
+    // independentes entre si.
+    await Promise.all(
+      pendentes.map(async (c) => {
+        if ((await cartaoShareRepository.convitesPendentesDoContato(c.id)).length > 0) return;
+        await cartaoShareRepository.conviteCreate({
+          ownerId: c.ownerId,
+          contatoId: c.id,
+          email: user.email,
+          token: randomBytes(24).toString("base64url"),
+          expiraEm: new Date(Date.now() + DIAS_CONVITE * 24 * 60 * 60 * 1000),
+        });
+      })
+    );
   },
 
   async meusConvites(user: AuthUser) {
@@ -525,19 +546,34 @@ export const cartaoShareService = {
   // ── Visão de quem deve ("o que devo") ─────────────────────────────────────
   // Só contato ATIVO (aceitou). `local`/`convidado`/`recusado` não veem nada.
   async contatosAtivos(user: AuthUser): Promise<Contato[]> {
-    await this.sincronizaConvites(user);
-    return (await cartaoShareRepository.contatosByUserId(user.id)).filter((c) => c.status === "ativo");
+    const vinculados = await cartaoShareRepository.contatosByUserId(user.id);
+    await this.sincronizaConvites(user, vinculados);
+    return vinculados.filter((c) => c.status === "ativo");
   },
 
+  // Duas levas de queries: tudo que não depende de nada primeiro, os shares
+  // depois (dependem dos ids dos contatos). Eram seis idas ao banco em série —
+  // o painel mais lento do app.
+  //
+  // `sincronizaConvites` entra na leva paralela porque só mexe em contato
+  // `local`/`convidado`: nenhuma escrita dela pode criar um contato `ativo`, que
+  // é o único status que este painel enxerga.
   async meusCompartilhamentos(user: AuthUser, mes = currentMonth()) {
-    const contatos = await this.contatosAtivos(user);
-    const adocoes = await cartaoShareRepository.adocoesByUser(user.id);
+    const [contatosTodos, adocoes, adiantamentos] = await Promise.all([
+      cartaoShareRepository.contatosByUserId(user.id),
+      cartaoShareRepository.adocoesByUser(user.id),
+      cartaoShareRepository.adiantamentosByUser(user.id),
+    ]);
+    const contatos = contatosTodos.filter((c) => c.status === "ativo");
     const porShare = new Map(adocoes.map((a) => [a.shareId, a]));
-    const quitados = await this.quitadoPorShare(user.id);
+    const quitados = quitadoPorAdiantamentos(adiantamentos);
 
-    const shares = contatos.length
-      ? await cartaoShareRepository.sharesByContatoIds(contatos.map((c) => c.id))
-      : [];
+    const [shares] = await Promise.all([
+      contatos.length
+        ? cartaoShareRepository.sharesByContatoIds(contatos.map((c) => c.id))
+        : Promise.resolve([] as Awaited<ReturnType<typeof cartaoShareRepository.sharesByContatoIds>>),
+      this.sincronizaConvites(user, contatosTodos),
+    ]);
     const vistos = new Set(shares.map((s) => s.id));
 
     const donos = new Map<
@@ -581,25 +617,29 @@ export const cartaoShareService = {
 
     // Adoção cujo share sumiu: a despesa criada é do devedor e NÃO é apagada —
     // ela só ganha o aviso e a opção de excluir.
-    const orfas: OrfaView[] = [];
-    for (const a of adocoes) {
-      if (vistos.has(a.shareId) || a.modo === "ignorado") continue;
-      const despesa = a.despesaFixaId
-        ? await orcamentoRepository.findDespesaFixa(a.despesaFixaId, user.id)
-        : a.despesaMesId
-          ? await orcamentoRepository.findDespesaMes(a.despesaMesId, user.id)
-          : null;
-      orfas.push({
-        shareId: a.shareId,
-        modo: a.modo,
-        espacoId: a.espacoId,
-        despesaFixaId: a.despesaFixaId,
-        despesaMesId: a.despesaMesId,
-        descricao: despesa?.descricao ?? null,
-        valorAdotado: numOrNull(a.valorAdotado),
-        aviso: "Compartilhamento removido pelo dono",
-      });
-    }
+    // As buscas de descrição são independentes: em série viravam um N+1 (raro,
+    // mas cada volta custa uma ida ao banco).
+    const orfas: OrfaView[] = await Promise.all(
+      adocoes
+        .filter((a) => !vistos.has(a.shareId) && a.modo !== "ignorado")
+        .map(async (a) => {
+          const despesa = a.despesaFixaId
+            ? await orcamentoRepository.findDespesaFixa(a.despesaFixaId, user.id)
+            : a.despesaMesId
+              ? await orcamentoRepository.findDespesaMes(a.despesaMesId, user.id)
+              : null;
+          return {
+            shareId: a.shareId,
+            modo: a.modo,
+            espacoId: a.espacoId,
+            despesaFixaId: a.despesaFixaId,
+            despesaMesId: a.despesaMesId,
+            descricao: despesa?.descricao ?? null,
+            valorAdotado: numOrNull(a.valorAdotado),
+            aviso: "Compartilhamento removido pelo dono",
+          };
+        })
+    );
 
     return { donos: lista, orfas };
   },
@@ -608,12 +648,7 @@ export const cartaoShareService = {
   // fica no adiantamento (a adoção só guarda cache) — assim dá pra adiantar sem
   // ter adotado.
   async quitadoPorShare(userId: string): Promise<Map<string, string>> {
-    const m = new Map<string, string>();
-    for (const a of await cartaoShareRepository.adiantamentosByUser(userId)) {
-      const atual = m.get(a.shareId);
-      if (!atual || a.cobreAte > atual) m.set(a.shareId, a.cobreAte);
-    }
-    return m;
+    return quitadoPorAdiantamentos(await cartaoShareRepository.adiantamentosByUser(userId));
   },
 
   async shareDoDevedorOrThrow(user: AuthUser, shareId: string): Promise<ShareComDono> {

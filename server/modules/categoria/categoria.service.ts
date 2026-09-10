@@ -21,13 +21,12 @@ const DEFAULT_CATEGORIAS = [
 
 export const categoriaService = {
   // Cria as categorias padrão do usuário se ele ainda não tiver nenhuma. Idempotente.
+  // Um INSERT só: em série eram oito idas ao banco no primeiro boot da conta.
   async ensureDefaults(userId: string) {
     if ((await categoriaRepository.count(userId)) > 0) return;
-    let ordem = 0;
-    for (const d of DEFAULT_CATEGORIAS) {
-      ordem += 1;
-      await categoriaRepository.create({ userId, nome: d.nome, cor: d.cor, ordem });
-    }
+    await categoriaRepository.createMany(
+      DEFAULT_CATEGORIAS.map((d, i) => ({ userId, nome: d.nome, cor: d.cor, ordem: i + 1 }))
+    );
   },
 
   async list(userId: string) {

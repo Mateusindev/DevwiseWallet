@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { fmtMoney } from "../lib/format.js";
+import { Spinner, usePendenteDoClique } from "./ui/primitives.jsx";
 
 // Barra de ações em lote, fixa no rodapé. Vive num portal pro body: dentro da
 // lista ela seria cortada pelo overflow dos Cards.
@@ -40,6 +41,9 @@ export default function BulkBar({ quantos, total, label, aviso, erro, onLimpar, 
 
 // Botão da barra (compacto, cabe 5 numa tela de 390px).
 export function BulkAcao({ onClick, disabled, tone = "ghost", children }) {
+  // Lote é a ação mais lenta do app (carrega todos os ids antes de escrever
+  // nada): sem a pendência automática o segundo clique disparava o lote de novo.
+  const [pendente, clique] = usePendenteDoClique(onClick);
   const tons = {
     ghost: "bg-white/5 text-slate-200 hover:bg-white/10",
     primary: "bg-blue-600 text-white hover:bg-blue-500",
@@ -47,9 +51,9 @@ export function BulkAcao({ onClick, disabled, tone = "ghost", children }) {
     danger: "bg-rose-600/90 text-white hover:bg-rose-600",
   };
   return (
-    <button type="button" onClick={onClick} disabled={disabled}
+    <button type="button" onClick={clique} disabled={disabled || pendente} aria-busy={pendente ? true : undefined}
             className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${tons[tone]}`}>
-      {children}
+      {pendente ? <Spinner className="h-3.5 w-3.5" /> : children}
     </button>
   );
 }

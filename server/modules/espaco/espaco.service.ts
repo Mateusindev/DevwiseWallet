@@ -134,18 +134,21 @@ export const espacoService = {
   },
 
   // Lista + espaço ativo (com fallback pro primeiro se o ativo sumir).
+  // As três leituras não dependem uma da outra: em série eram três voltas de
+  // rede no caminho crítico do boot.
   async listWithActive(userId: string) {
-    const espacos = await espacoRepository.list(userId);
-    let activeEspacoId = await espacoRepository.getActiveEspacoId(userId);
+    const [espacos, ativoGravado, ocultos] = await Promise.all([
+      espacoRepository.list(userId),
+      espacoRepository.getActiveEspacoId(userId),
+      espacoRepository.listOcultos(userId),
+    ]);
+    let activeEspacoId = ativoGravado;
     const exists = activeEspacoId && espacos.some((e) => e.id === activeEspacoId);
     if (!exists) {
       activeEspacoId = espacos[0]?.id ?? null;
       await espacoRepository.setActiveEspacoId(userId, activeEspacoId);
     }
-    const espacosOcultos = (await espacoRepository.listOcultos(userId)).map((o) => ({
-      espacoId: o.espacoId,
-      ym: o.ym,
-    }));
+    const espacosOcultos = ocultos.map((o) => ({ espacoId: o.espacoId, ym: o.ym }));
     return { espacos: espacos.map(espacoView), activeEspacoId, espacosOcultos };
   },
 
@@ -153,8 +156,10 @@ export const espacoService = {
   //   guarda: não deixa ocultar o último espaço visível do mês.
   async ocultarNoMes(userId: string, id: string, ym: string) {
     await this.getOrThrow(userId, id);
-    const espacos = await espacoRepository.list(userId);
-    const ocultos = await espacoRepository.listOcultos(userId);
+    const [espacos, ocultos] = await Promise.all([
+      espacoRepository.list(userId),
+      espacoRepository.listOcultos(userId),
+    ]);
     const ocultosNoMes = new Set(ocultos.filter((o) => o.ym === ym).map((o) => o.espacoId));
     const visiveis = espacos.filter((e) => !ocultosNoMes.has(e.id));
     if (visiveis.length <= 1 && visiveis.some((e) => e.id === id)) {
@@ -178,9 +183,11 @@ export const espacoService = {
   async getOrcamento(userId: string, espacoId: string, ym = currentMonth()) {
     const de = addMonths(ym, -JANELA_ATRAS);
     const ate = addMonths(ym, JANELA_FRENTE);
-    const esp = await espacoRepository.findWithOrcamento(espacoId, userId, de, ate);
+    const [esp, meses] = await Promise.all([
+      espacoRepository.findWithOrcamento(espacoId, userId, de, ate),
+      espacoRepository.mesesComLancamento(espacoId),
+    ]);
     if (!esp) throw new NotFoundError(`Espaço de despesa não encontrado: ${espacoId}`);
-    const meses = await espacoRepository.mesesComLancamento(espacoId);
     return { ...orcamentoView(esp), janela: { de, ate }, ...meses };
   },
 

@@ -1,6 +1,11 @@
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
 import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users, Receipt, Flag, TrendingDown, ChevronDown, Upload } from "lucide-react";
-import { Card, Button, ProgressBar, Donut } from "./ui/primitives.jsx";
+import {
+  Card, Button, IconButton, ProgressBar, Donut, Skeleton, SkeletonChart, SkeletonLines, SkeletonList, Spinner,
+} from "./ui/primitives.jsx";
+import { useAsync } from "./ui/useAsync.js";
 import { HBars, StackedBars } from "./ui/charts.jsx";
 import { CartaoModal } from "./forms.jsx";
 import ImportOfxModal from "./ImportOfx.jsx";
@@ -13,7 +18,10 @@ import * as api from "../services/financeApi";
 import { useAuth } from "./AuthGate";
 
 export default function Cartoes() {
-  const { cartoes, reloadCartoes, removeCartao, despesasFixas, despesasMes, ym, setYm, mesesComFatura: mesesComFaturaFora } = useFinance();
+  const {
+    cartoes, reloadCartoes, cartoesCarregando, removeCartao, despesasFixas, despesasMes,
+    ym, setYm, mesesComFatura: mesesComFaturaFora,
+  } = useFinance();
   const { can } = useAuth();
   const canManage = can("cartao:manage");
   const canShare = can("cartao:share");
@@ -49,8 +57,11 @@ export default function Cartoes() {
         <div>
           <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
             <CreditCard size={20} /> Cartões de crédito
+            {cartoesCarregando && <Spinner className="h-4 w-4 border-slate-500/40 border-t-slate-300" />}
           </h2>
-          <p className="text-sm text-slate-400">Limites, faturas e parcelas em aberto.</p>
+          <p className="text-sm text-slate-400">
+            {cartoesCarregando ? `Atualizando a fatura de ${fmtMonthLabel(ym)}…` : "Limites, faturas e parcelas em aberto."}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comFatura} />
@@ -134,16 +145,11 @@ const CINZA = "#64748b"; // "sem categoria" — neutro de propósito, não é um
 // primeiros — 6 meses × N cartões em requests separadas seria dezenas de idas.
 function ParaOndeVaiAFatura({ ym, cartoes }) {
   const { categorias } = useFinance();
-  const [resumo, setResumo] = useState(null);
   const de = addMonths(ym, -5);
-
-  useEffect(() => {
-    let vivo = true;
-    api.getResumoCartoes(de, ym)
-      .then((r) => vivo && setResumo(r))
-      .catch(() => vivo && setResumo(null));
-    return () => { vivo = false; };
-  }, [de, ym]);
+  const { dado: resumo, carregando, erro, recarregar } = useAsync(
+    () => api.getResumoCartoes(de, ym),
+    ["resumoCartoes", de, ym]
+  );
 
   const cartoesMap = useMemo(() => Object.fromEntries(cartoes.map((c) => [c.id, c])), [cartoes]);
   const catMap = useMemo(() => Object.fromEntries(categorias.map((c) => [c.id, c])), [categorias]);
@@ -182,6 +188,32 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
       };
     })
     .sort((a, b) => b.value - a.value);
+
+  // Enquanto o resumo não chega, o bloco inteiro é skeleton. Antes ele
+  // renderizava os quatro cards com "Nada na fatura deste mês" — indistinguível
+  // de uma fatura vazia de verdade, e depois trocava tudo.
+  if (carregando || (erro && !resumo)) {
+    return (
+      <div className="space-y-4">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+          <TrendingDown size={17} /> Para onde vai a fatura
+        </h3>
+        {erro ? (
+          <Card className="space-y-3 p-5">
+            <p className="text-sm text-slate-400">{erro}</p>
+            <Button variant="ghost" onClick={recarregar}>Tentar de novo</Button>
+          </Card>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="space-y-4 p-5"><Skeleton className="h-4 w-48" /><SkeletonChart height={140} bars={6} /></Card>
+            <Card className="space-y-4 p-5"><Skeleton className="h-4 w-40" /><SkeletonLines lines={4} /></Card>
+            <Card className="space-y-4 p-5 lg:col-span-2"><Skeleton className="h-4 w-44" /><SkeletonChart /></Card>
+            <Card className="space-y-4 p-5 lg:col-span-2"><Skeleton className="h-4 w-52" /><SkeletonLines lines={3} /></Card>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -238,19 +270,11 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
 // conta inteira, não o espaço ativo: busca as parceladas de todos os espaços,
 // igual ao `comprometido` que cada card mostra.
 function QuitacaoParceladas({ ym, cartoes }) {
-  const [dados, setDados] = useState(null);
+  const { dado: dados, carregando } = useAsync(() => api.getParceladas(ym), ["parceladas", ym]);
   const [aberto, setAberto] = useState(false);
   const cartoesMap = useMemo(() => Object.fromEntries(cartoes.map((c) => [c.id, c])), [cartoes]);
   // o cálculo é genérico e não carrega o espaço da fixa — busca no payload por id
   const fixasMap = useMemo(() => Object.fromEntries((dados?.fixas || []).map((d) => [d.id, d])), [dados]);
-
-  useEffect(() => {
-    let vivo = true;
-    api.getParceladas(ym)
-      .then((d) => vivo && setDados(d))
-      .catch(() => vivo && setDados(null));
-    return () => { vivo = false; };
-  }, [ym]);
 
   const total = useMemo(
     () => quitacaoParceladas(dados?.fixas, dados?.pagamentos, ym),
@@ -261,6 +285,16 @@ function QuitacaoParceladas({ ym, cartoes }) {
     [dados, ym]
   );
 
+  // Só existe painel se houver parcelada em aberto — mas isso a gente só sabe
+  // DEPOIS da busca. Sem o skeleton o painel nascia do nada empurrando a página.
+  if (carregando) {
+    return (
+      <Card className="space-y-4 p-5 sm:p-6">
+        <Skeleton className="h-4 w-56" />
+        <SkeletonList rows={2} height="h-16" label="Carregando parcelas em aberto" />
+      </Card>
+    );
+  }
   if (total.itens.length === 0) return null;
 
   const mediaMes = total.cronograma.length > 0 ? total.falta / total.cronograma.length : 0;
@@ -416,21 +450,18 @@ function CartaoCard({ cartao: c, canManage, canShare, onEdit, onRemove, onShare 
         {(canManage || canShare) && (
           <div className="flex gap-1">
             {canShare && (
-              <button onClick={onShare} aria-label="Compartilhar cartão"
-                      className="rounded-lg p-1.5 text-slate-500 hover:bg-white/10 hover:text-slate-200 cursor-pointer transition-colors">
+              <IconButton onClick={onShare} aria-label="Compartilhar cartão">
                 <Users size={15} />
-              </button>
+              </IconButton>
             )}
             {canManage && (
               <>
-                <button onClick={onEdit} aria-label="Editar cartão"
-                        className="rounded-lg p-1.5 text-slate-500 hover:bg-white/10 hover:text-slate-200 cursor-pointer transition-colors">
+                <IconButton onClick={onEdit} aria-label="Editar cartão">
                   <Pencil size={15} />
-                </button>
-                <button onClick={onRemove} aria-label="Remover cartão"
-                        className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer transition-colors">
+                </IconButton>
+                <IconButton tone="danger" onClick={onRemove} aria-label="Remover cartão">
                   <Trash2 size={15} />
-                </button>
+                </IconButton>
               </>
             )}
           </div>

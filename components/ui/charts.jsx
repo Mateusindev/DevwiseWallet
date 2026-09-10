@@ -57,38 +57,178 @@ export function HBars({ items, format = fmtMoneyCompact, empty = "Sem dados." })
   );
 }
 
-// ── Sparkline-ish line (evolução de saldo/sobra) ────────────────────────────
-// points: [{ label, value }]
-export function LineTrend({ points, height = 120, color = "#3b82f6", format = fmtMoneyCompact }) {
-  if (points.length < 2) return <p className="py-6 text-center text-sm text-slate-500">Pouco histórico.</p>;
-  const vals = points.map((p) => p.value);
-  const min = Math.min(0, ...vals);
-  const max = Math.max(1, ...vals);
-  const span = max - min || 1;
-  const W = 100, H = 100;
-  const xs = (i) => (i / (points.length - 1)) * W;
-  const ys = (v) => H - ((v - min) / span) * H;
-  const line = points.map((p, i) => `${xs(i)},${ys(p.value)}`).join(" ");
-  const area = `0,${H} ${line} ${W},${H}`;
-  const zeroY = ys(0);
+// ── Sobra mensal ────────────────────────────────────────────────────────────
+// points: [{ key, label, sobrou, recebido, saiu }] — do mês mais antigo ao mais
+// recente. `destaque` = key do mês visto.
+//
+// Substituiu um LineTrend. O problema não era o desenho, era a pergunta: "sobra"
+// é um número COM SINAL, e uma linha com o eixo colado no menor valor não mostra
+// nem quando o mês fechou no vermelho, nem quanto. Aqui:
+//   · zero é uma linha real no meio, sempre desenhada — barra pra cima sobrou,
+//     pra baixo faltou, e a cor segue o sinal de cada mês (não o do mês atual,
+//     que era o que a linha inteira usava);
+//   · a média entra como referência tracejada: sobrar 200 num mês só diz algo
+//     comparado com o normal;
+//   · o mês visto fica destacado com valor à vista — nos outros o número
+//     aparece no hover, senão viram doze rótulos brigando;
+//   · a escala é simétrica quando há vermelho, pra que -300 e +300 tenham o
+//     mesmo tamanho e a comparação seja honesta.
+export function SobraMensal({ points, height = 200, format = fmtMoneyCompact, destaque }) {
+  if (!points || points.length === 0) {
+    return <p className="py-10 text-center text-sm text-slate-500">Sem histórico ainda.</p>;
+  }
+
+  const vals = points.map((p) => p.sobrou);
+  const maxPos = Math.max(0, ...vals);
+  const maxNeg = Math.max(0, ...vals.map((v) => -v));
+  // Escala simétrica quando existe mês negativo: o vermelho não pode parecer
+  // menor que o verde só porque o pico positivo é maior.
+  const escala = Math.max(maxNeg > 0 ? Math.max(maxPos, maxNeg) : maxPos, 1);
+
+  // Faixa reservada no topo pro rótulo do mês destacado — sem ela o número
+  // ficava cortado justo no mês que interessa.
+  const PAD_TOPO = 24;
+  const util = height - PAD_TOPO;
+  const areaPos = maxNeg > 0 ? util / 2 : util;
+  const areaNeg = util - areaPos;
+  const topoZero = PAD_TOPO + areaPos;
+  const px = (v) => {
+    const area = v >= 0 ? areaPos : areaNeg;
+    return Math.min((Math.abs(v) / escala) * area, area);
+  };
+
+  const media = vals.reduce((s, v) => s + v, 0) / vals.length;
+  const negativos = vals.filter((v) => v < 0).length;
+  const atual = points.find((p) => (p.key ?? p.label) === destaque) ?? points[points.length - 1];
+  const topoMedia = media >= 0 ? topoZero - px(media) : topoZero + px(media);
+
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height }}>
-        <defs>
-          <linearGradient id="lt" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.35" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {min < 0 && <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" strokeDasharray="2 2" />}
-        <polygon points={area} fill="url(#lt)" />
-        <polyline points={line} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-        {points.map((p, i) => (
-          <circle key={i} cx={xs(i)} cy={ys(p.value)} r="1.6" fill={color} vectorEffect="non-scaling-stroke" />
-        ))}
-      </svg>
-      <div className="mt-1 flex justify-between text-[10px] text-slate-500">
-        {points.map((p, i) => <span key={i} className={cx(i !== 0 && i !== points.length - 1 && "hidden sm:inline")}>{p.label}</span>)}
+      {/* o número antes do desenho: o gráfico contextualiza, não informa */}
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-slate-500">
+            Sobrou em {atual?.label ?? "—"}
+          </p>
+          <p className={cx("tnum text-2xl font-bold", (atual?.sobrou ?? 0) < 0 ? "text-rose-400" : "text-emerald-400")}>
+            {format(atual?.sobrou ?? 0)}
+          </p>
+        </div>
+        <dl className="flex gap-5 text-right">
+          <div>
+            <dt className="text-[11px] text-slate-500">média {points.length}m</dt>
+            <dd className={cx("tnum text-sm font-semibold", media < 0 ? "text-rose-400" : "text-slate-200")}>
+              {format(media)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[11px] text-slate-500">no vermelho</dt>
+            <dd className={cx("tnum text-sm font-semibold", negativos > 0 ? "text-rose-400" : "text-slate-200")}>
+              {negativos}/{points.length}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <div className="overflow-x-auto pb-1">
+        <div className="relative min-w-[300px]" style={{ height }}
+             role="img"
+             aria-label={"Sobra mensal: " + points.map((p) => p.label + " " + format(p.sobrou)).join(", ")}>
+          {/* zero: a referência que faltava na linha antiga */}
+          <div className="pointer-events-none absolute inset-x-0 z-0 border-t border-white/20" style={{ top: topoZero }} />
+
+          <div className="relative z-10 flex h-full items-stretch gap-1 sm:gap-1.5">
+            {points.map((p, i) => {
+              const k = p.key ?? p.label;
+              const destacado = k === destaque;
+              const neg = p.sobrou < 0;
+              const h = Math.max(px(p.sobrou), p.sobrou === 0 ? 0 : 2);
+              // Alinhamento do tooltip pela posição da coluna: centralizado no
+              // meio, encostado nas pontas — a caixa é larga e nas bordas sairia
+              // da área visível.
+              const ancora =
+                i <= 1 ? "left-0" : i >= points.length - 2 ? "right-0" : "left-1/2 -translate-x-1/2";
+              return (
+                <div key={k} className="group relative flex min-w-[16px] flex-1 flex-col">
+                  <span style={{ height: PAD_TOPO }} />
+                  <div className="flex flex-col justify-end" style={{ height: areaPos }}>
+                    {!neg && (
+                      <div className={cx("w-full rounded-t-md transition-colors",
+                                         destacado ? "bg-emerald-400" : "bg-emerald-500/50 group-hover:bg-emerald-400")}
+                           style={{ height: h }} />
+                    )}
+                  </div>
+                  <div className="flex flex-col justify-start" style={{ height: areaNeg }}>
+                    {neg && (
+                      <div className={cx("w-full rounded-b-md transition-colors",
+                                         destacado ? "bg-rose-400" : "bg-rose-500/50 group-hover:bg-rose-400")}
+                           style={{ height: h }} />
+                    )}
+                  </div>
+
+                  {/* mês visto: valor sempre à vista, encostado na barra */}
+                  {destacado && (
+                    <span className={cx(
+                      "tnum pointer-events-none absolute z-20 whitespace-nowrap rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold",
+                      // mesma âncora do tooltip: o mês visto é quase sempre o
+                      // último, e centralizado ali o valor saía cortado
+                      ancora,
+                      neg ? "text-rose-300" : "text-emerald-300"
+                    )}
+                      style={neg ? { top: topoZero + h + 4 } : { top: topoZero - h - 19 }}>
+                      {format(p.sobrou)}
+                    </span>
+                  )}
+
+                  {/* Hover: o mês inteiro (sobra + o porquê dela). Fica DENTRO da
+                      área do gráfico porque o wrapper tem overflow-x:auto, e isso
+                      corta também o que passa por cima — era o que fazia o tooltip
+                      antigo simplesmente não aparecer. */}
+                  <span className={cx(
+                    "pointer-events-none absolute bottom-0.5 z-30 whitespace-nowrap rounded-md bg-slate-900/95 px-2 py-1 text-[10px] leading-relaxed text-slate-200 opacity-0 ring-1 ring-white/10 transition-opacity group-hover:opacity-100",
+                    ancora
+                  )}>
+                    <b className="text-slate-100">{p.label}</b>
+                    {" · sobrou "}
+                    <b className={neg ? "text-rose-300" : "text-emerald-300"}>{format(p.sobrou)}</b>
+                    <br />
+                    recebeu {format(p.recebido ?? 0)} · gastou {format(p.saiu ?? 0)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Média por cima das barras (z-20): com pouca variação o gráfico é um
+              paredão, e é a média que diz qual mês ficou acima ou abaixo do normal.
+              O rótulo vai pra ESQUERDA — à direita ele bate no valor do mês visto,
+              que é justamente onde a barra destacada costuma estar. */}
+          <div className="pointer-events-none absolute inset-x-0 z-20 border-t border-dashed border-sky-300/70"
+               style={{ top: topoMedia }}>
+            <span className="tnum absolute -top-2 left-0 rounded bg-[var(--color-surface)] px-1 text-[9px] font-semibold text-sky-300">
+              média {format(media)}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-1.5 flex min-w-[300px] gap-1 sm:gap-1.5">
+          {points.map((p, i) => {
+            const k = p.key ?? p.label;
+            const destacado = k === destaque;
+            // Rótulo alternado no mobile (doze meses não caem lado a lado), mas
+            // com "invisible" e não "hidden": sumir do flex desalinharia o
+            // rótulo dos meses que ficam.
+            return (
+              <span key={k} className={cx(
+                "min-w-[16px] flex-1 text-center text-[10px]",
+                destacado ? "font-semibold text-slate-300" : "text-slate-500",
+                !destacado && i % 2 === 1 && "invisible sm:visible"
+              )}>
+                {p.label}
+              </span>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
