@@ -209,3 +209,86 @@ Só quando as fases 3 e 4 estiverem verdes e o app rodar um tempo em produção 
 - `.env`: adicionar `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (o `.env.example` será atualizado com o campo e um comentário).
 - Decidir se `cacheComponents: true` entra (habilita `use cache: private`, marcado experimental no 16.2.10).
 - Rodar 0.6 (baseline) antes de qualquer fase, em `bun start`, não em `bun dev`.
+
+---
+
+## 7. Estado da execução (2026-09-09)
+
+Fases 0 a 4 executadas. **Fase 5 não** — ela própria está gated em "o app rodar
+um tempo em produção com as duas camadas coexistindo", e isso é decisão de
+quem opera, não do agente.
+
+### Onde o app está agora
+
+O front não passa mais por rota Hono nenhuma, com **uma exceção de propósito**:
+o import de OFX (4.4). O `hc` sobrevive em `financeApi.ts` só por causa dela.
+
+72 Server Functions registradas no build, distribuídas assim:
+
+| módulo | actions | módulo | actions |
+|---|--:|---|--:|
+| orcamento | 19 | cartao | 6 |
+| cartao-share | 18 | auth | 4 |
+| espaco | 8 | caixinha | 3 |
+| admin | 7 | categoria | 3 |
+| movimentacao | 2 | bootstrap · dev | 1 · 1 |
+
+### Fase 0 — medida, não estimada
+
+`bun run bench` sobe o app real contra um banco com perfil de dois anos de uso
+(3 espaços, 4 cartões, 24 meses, 1800 despesas do mês) e conta requests,
+queries, ms e KB por cenário.
+
+| cenário | antes | depois |
+|---|---|---|
+| boot | 2 req · 35 q · 177,0 KB | 2 req · 27 q · 100,5 KB |
+| troca de mês no Início | 4 req · 49 q · 526,2 KB | 2 req · 14 q · 1,1 KB |
+| trocar de espaço | 2 req · 16 q · 175,2 KB | 2 req · 18 q · 98,6 KB |
+| marcar fixa como paga | 2 req · 21 q | 1 req · 5 q |
+| adicionar despesa do mês | 2 req · 21 q | 1 req · 8 q |
+| importar OFX (60 tx) | 2 req · 83 q | 1 req · 70 q |
+| **total** | **14 req · 225 q · 895,3 KB** | **9 req · 142 q · 216,4 KB** |
+
+Fora da tabela, porque o bench mede custo de servidor e não round-trips do
+cliente: depois da Fase 2 o boot custa **zero** requests a partir do browser —
+sessão e estado chegam no mesmo stream do HTML.
+
+### Desvios do plano, e por quê
+
+- **4.1–4.3 foram feitos junto com a migração do módulo**, não depois. Colapsar
+  o fan-out e migrar o módulo em commits separados significaria deixar um
+  commit intermediário em que a leitura já é action e o `Promise.all` ainda
+  está no componente — exatamente o estado que o plano manda evitar.
+- **4.5 mudou de forma.** O plano previa reapontar os testes de integração pros
+  services. Em vez disso eles ficaram como estão (cobrindo a regra de negócio
+  pelos mesmos services, via Hono) e entrou `tests/integration/actions.test.ts`,
+  que exercita a camada nova de ponta a ponta com banco e sessão reais —
+  `cookies()` é a única coisa mockada. Cobre o que a action pode errar sozinha
+  (permission declarada, schema escolhido, service chamado) e as invariantes de
+  segurança. Sai mais barato e cobre mais do que a conversão prevista.
+  `contrato.test.ts` continua válido enquanto o Hono existir.
+- **Uma correção de rota entrou antes da Fase 0**: 16 testes de integração
+  estavam quebrados no master, com expectativas do contrato anterior ao rateio
+  N-a-N. Sem suíte verde não há como distinguir regressão de dívida.
+
+### O que a Fase 5 ainda custa
+
+- Apagar `server/app.ts`, os 10 `*.routes.ts`, `server/lib/validator.ts`,
+  `server/auth/middleware.ts`; tirar `hono` e `@hono/zod-validator`.
+- `app/api/[[...route]]/route.ts` reduz ao import de OFX e ao `/health`.
+- **Reapontar as suítes de integração por rota** (as que usam `app.request()`).
+  O caminho já está provado em `actions.test.ts`: mockar `cookies()` e chamar a
+  action. `contrato.test.ts` perde sentido e sai; `bun run typecheck` passa a
+  ser a garantia de contrato.
+- `scripts/bench.ts` mede pelas rotas Hono; teria que passar a chamar actions.
+
+### Pendências manuais (fora do alcance do agente)
+
+- `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` estável entre instâncias antes do
+  primeiro deploy multi-instância. **`.env` e `.env.example` são bloqueados pra
+  edição por agente neste ambiente** — nem o exemplo pôde ser atualizado.
+- `serverActions.allowedOrigins` em `next.config.ts` se houver proxy/CDN na
+  frente (já está lá, comentado).
+- Decidir se `cacheComponents: true` entra (habilita `use cache: private`).
+- Action ID rotaciona a cada deploy: cliente com bundle antigo recebe "Failed
+  to find Server Action". Tratar como caminho de retry na UI.

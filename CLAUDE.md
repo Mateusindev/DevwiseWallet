@@ -18,7 +18,8 @@ bun run test:int            # só integração (precisa do banco de teste)
 bun run test:db:setup       # cria/atualiza o banco de teste (cofre_test)
 bun test caixinha           # filtra por caminho do arquivo
 bun test -t "nome do teste" # filtra por nome
-bun run typecheck           # tsc --noEmit — também valida contratos do RPC
+bun run typecheck           # tsc --noEmit — é a garantia de contrato das actions
+bun run bench               # requests/queries/ms/KB por cenário (banco de teste)
 bun run lint
 bun run build
 
@@ -35,16 +36,23 @@ Sempre Bun (`bun`/`bunx`), nunca npm/yarn. Prisma **pinado em v6** (v7 tem break
 
 ## Arquitetura
 
-Front e back no mesmo projeto Next.js, type-safety ponta a ponta via Hono RPC. Substitui `../api` (Fastify) e `../web` (Vite) — legado, não desenvolver neles (cutover em `../PLANO-REFATORACAO.md`).
+Front e back no mesmo projeto Next.js, type-safety ponta a ponta por **Server Functions** (o tipo é a assinatura da função importada). Substitui `../api` (Fastify) e `../web` (Vite) — legado, não desenvolver neles (cutover em `../PLANO-REFATORACAO.md`).
 
-- **Backend inteiro** no app Hono de `server/app.ts` (`basePath('/api')`, `onError` central, `export type AppType`); a rota catch-all `app/api/[[...route]]/route.ts` só pluga ele no Next (`handle(app)`) e reexporta o `AppType`. O app é importável direto — é assim que os testes de integração batem nas rotas (`app.request()`), sem subir servidor.
-- **`AppType` → client**: `services/financeApi.ts` cria `hc<AppType>('/')` e é o **único seam** entre front e API. Payloads tipados com `InferRequestType`. Front nunca digita URL.
-- **Rotas Hono obrigatoriamente encadeadas** (`.get().post()...` numa única expressão; submódulos via `.route("/", subApp)`) — é o que o `AppType` captura. Rota registrada fora da cadeia fica invisível pro client RPC.
-- **Módulos** em `server/modules/<dominio>/` (caixinha, movimentacao, cartao, cartao-share, categoria, espaco, orcamento, admin, bootstrap, dev): `*.dto.ts` (zod) · `*.repository.ts` (Prisma) · `*.service.ts` (regra de negócio) · `*.routes.ts` (Hono + zValidator). Não existem controllers.
-- **Erros centralizados** no `onError`: `ZodError → 422 {error, issues}` (o `zValidator` custom de `server/lib/validator.ts` lança em vez de responder), `AppError → statusCode`, `Prisma P2025 → 404`, `HTTPException` do Hono → status dela (ex.: body JSON malformado → 400), resto `500`. Shape sempre `{ error }`.
+O app Hono ainda existe e continua registrando todas as rotas, mas o front **não passa mais por elas** — só o import de OFX. As duas camadas coexistem de propósito (Fase 5 do `PLANO-SERVER-FUNCTIONS.md` é que apaga o Hono, e ela está gated em rodar um tempo em produção).
+
+- **Actions** em `server/modules/<dominio>/<dominio>.actions.ts` (`'use server'` no topo). Elas são o backend vivo: chamam o service e nada mais.
+- **`server/next/session.ts`**: `currentUser` / `requirePerm` / `requireAnyPerm` — o equivalente de `requireAuth`/`requirePermission` fora do Hono. Lê o MESMO cookie httpOnly e usa o MESMO `authService`, então rota e action enxergam a mesma sessão. `cache` do React memoiza a sessão por request.
+- **`server/next/action.ts`**: `acao(permissions, fn)` e `acaoValidada(permissions, schema, input, fn)`. Toda action nova passa por um dos dois — é o que torna permission e validação impossíveis de esquecer. Server Function não tem status HTTP, então o retorno é discriminado: `{ ok: true, data }` | `{ ok: false, status, error, issues? }`, com o mesmo mapeamento do `onError` (ZodError → 422 com issues, `AppError` → statusCode, Prisma P2025 → 404, resto 500). `permissions` pode ser lista: basta uma (é o alias histórico de `cartao:share`/`cartao:view_shared`).
+- **`services/financeApi.ts`** continua sendo o **único seam** entre front e dados: reconstrói o `ApiError` (com `status` e `issues`) a partir do resultado da action, então `useFormState` segue marcando o campo culpado. Nenhum componente conhece action nem URL.
+- **Boot servido em RSC**: `app/page.tsx` é Server Component, dispara `sessaoAtual()` e `getState()` **sem await** e passa as Promises pro `app/boot.tsx` (`'use client'`), que desembrulha com `use()`. `AuthGate` recebe `usuarioInicial`; `FinanceProvider` recebe `estadoPromise` e só adota o estado se o `userId` bater com a sessão. A navegação segue SPA client-side — só o boot é servido.
+- **Módulos** em `server/modules/<dominio>/` (caixinha, movimentacao, cartao, cartao-share, categoria, espaco, orcamento, admin, bootstrap, dev): `*.dto.ts` (zod) · `*.repository.ts` (Prisma) · `*.service.ts` (regra de negócio) · `*.actions.ts` (Server Functions) · `*.routes.ts` (Hono, legado). Não existem controllers.
+- **Import de OFX fica em Route Handler**, não em action: o payload passa do cap de 1MB e não é mutação com re-render. É a única rota que sobrevive à Fase 5 de propósito.
+- **Fan-out é proibido no cliente**: o Next despacha Server Actions **uma por vez por cliente**, então `Promise.all` no front vira fila. Leitura que precisa de várias fontes é uma action só que paraleliza no servidor — `bootstrapAdmin`, `abrirRateio`, `painelDoCartao`, `GET /despesas/resumo`.
+- **Backend legado** no app Hono de `server/app.ts` (`basePath('/api')`, `onError` central, `export type AppType`); a rota catch-all `app/api/[[...route]]/route.ts` pluga ele no Next. Enquanto existir, **rota nova tem que entrar na cadeia** (`.get().post()...` numa expressão só) — fora dela é invisível pro `AppType`.
 - **Serialização**: services convertem Decimal/Date (`num`, `isoDate` em `server/lib/serialize.ts`) — front nunca vê tipos do Prisma.
-- **Prisma singleton** via `globalThis` (`server/lib/prisma.ts`).
-- **Front é SPA client-side**: `app/page.tsx` `'use client'` monta `AuthGate > FinanceProvider > App`. Componentes em `components/` são jsx portados do Vite (`allowJs`).
+- **Prisma singleton** via `globalThis` (`server/lib/prisma.ts`). `PRISMA_QUERY_LOG=1` liga o evento `query` (é como `bun run bench` conta idas ao banco).
+- **Orçamento vem por janela**: `getOrcamento(userId, espacoId, ym)` carrega `despesasMes` e `pagamentosFixas` de `ym-12` a `ym+12` (fixas e receitas continuam inteiras — são cadastro). O payload traz `janela: { de, ate }` e as listas `mesesComDespesa`/`mesesComFatura` (groupBy barato) pros pontinhos do seletor de mês; o `FinanceContext` refaz a busca quando o mês visto sai da janela.
+- **Mutação de despesa devolve `cartoes`**: as respostas do orçamento carregam os agregados de fatura já recalculados, e o front não dispara mais um `GET /cartoes` atrás de cada ação. Nas mutações singulares o shape é `{ despesa, cartoes }`; no delete, `{ id, cartoes }`.
 - **Rotas em lote / import / resumo** (evitam N requests + N `reloadCartoes`): `POST /despesas/espacos/:esp/mes/bulk` e `.../fixas/bulk` (pagar/despagar · excluir · categoria · cartao · ativar/pausar), `POST .../mes/import` (OFX) e `GET /cartoes/resumo?de&ate` (fatura mês a mês, por cartão e por categoria; janela de 24 meses). Nos lotes, **todos os ids são carregados filtrando por espaço + dono antes de qualquer escrita** — se algum não voltar, 404 e nada é aplicado.
 
 ### Front — camadas próprias
@@ -99,7 +107,9 @@ Duas suítes, **processos separados** (`bun run test` roda as duas em sequência
 
 - **Unit** (`bun run test:unit`): `*.test.ts` ao lado do código em `server/` **e `lib/**/*.test.js`** (domínio puro: cálculo e validação de form), repositories mockados com `mock.module` — não tocam banco. `scripts/test-unit.ts` roda **um processo por arquivo**: `mock.module` não tem como ser desfeito, então um arquivo que mocka um *service* (bootstrap mocka `caixinha.service`; `middleware.test` mocka `auth.service`) serviria o stub pros arquivos seguintes, que testariam o mock do vizinho em vez do módulo real. Como a ordem dos arquivos vem do walk do runner, isso passa numa máquina e quebra em outra — foi o que derrubou o CI no salto do Bun 1.2 → 1.3. A cobertura sai do merge dos lcov de cada processo.
   - Rodar `bun test server` direto (sem o runner) reintroduz o vazamento — use `bun run test:unit`, ou filtre um arquivo só: `bun test server/modules/caixinha`.
-- **Integração** (`bun run test:int`): `tests/integration/*.test.ts`, banco Postgres real + app Hono real via `app.request()`. Nada mockado: passa por `onError`, `requireAuth`, `requirePermission`, `zValidator`, services, repositories e Prisma.
+- **Integração** (`bun run test:int`): `tests/integration/*.test.ts`, banco Postgres real. Duas frentes:
+  - **`actions.test.ts`** cobre o caminho **vivo** (Server Functions). `cookies()` do next/headers é a única coisa mockada — do token pra dentro é `verifyToken`, `getSessionUser` com roles do banco, `can()`, zod DTO, service, repository e Prisma. É onde moram as invariantes de segurança da camada nova: 401, 403, 404-não-403, 422 com issue por campo, alias de permission, lote tudo-ou-nada.
+  - As demais suítes batem no app Hono via `app.request()` e cobrem a regra de negócio pelos **mesmos services**. Quando a Fase 5 apagar as rotas, elas precisam ser reapontadas.
   - `tests/setup/env.ts` é preload de **todos** os testes (`bunfig.toml`) e força `DATABASE_URL` pro banco de teste (`TEST_DATABASE_URL`, default `postgresql://postgres:postgres@localhost:5432/cofre_test`). O nome do banco precisa conter "test" — as suítes truncam todas as tabelas.
   - `tests/integration/harness.ts`: `resetDb()`, `seedRoles()`, `account({ roles | permissions })` (cria usuário + loga pela rota real) e `client(cookie)` com `get/post/put/patch/delete` que prefixam `/api`.
   - Antes da primeira rodada: `bun run test:db:setup` (aplica o schema; cria o banco se não existir).

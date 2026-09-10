@@ -182,7 +182,9 @@ const mesAnterior = addMonths(hoje, -1);
 // aquece o pool/o plano de query — a primeira request paga o connect
 await req("GET", "/state");
 
-await cenario("boot (AuthGate.me + FinanceProvider.getBootstrap)", async () => {
+// Depois da Fase 2 o boot é servido em RSC: o mesmo trabalho de servidor, mas
+// zero round-trip a partir do cliente. Fica medido aqui como custo de servidor.
+await cenario("boot (sessão + estado inicial)", async () => {
   await req("GET", "/auth/me");
   await req("GET", "/state");
 });
