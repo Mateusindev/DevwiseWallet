@@ -11,7 +11,7 @@ export function Card({ className, children, as: Tag = "div", ...rest }) {
     <Tag
       className={cx(
         "rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)]",
-        "shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)]",
+        "shadow-[var(--sombra-card)]",
         className
       )}
       {...rest}
@@ -25,9 +25,9 @@ export function Card({ className, children, as: Tag = "div", ...rest }) {
 const VARIANTS = {
   primary: "bg-blue-600 hover:bg-blue-500 text-white",
   growth: "bg-emerald-600 hover:bg-emerald-500 text-white",
-  ghost: "bg-white/5 hover:bg-white/10 text-slate-200",
+  ghost: "bg-veu/5 hover:bg-veu/10 text-slate-200",
   danger: "bg-rose-600/90 hover:bg-rose-600 text-white",
-  outline: "border border-[var(--color-line)] hover:bg-white/5 text-slate-200",
+  outline: "border border-[var(--color-line)] hover:bg-veu/5 text-slate-200",
 };
 // ── Pendência automática do clique ──────────────────────────────────────────
 // Se o `onClick` devolve Promise, o botão se desabilita até ela resolver. É o
@@ -87,7 +87,7 @@ export function Button({ variant = "primary", className, loading, children, disa
 export function IconButton({ className, tone = "neutral", children, onClick, disabled, ...rest }) {
   const [pendente, clique] = usePendenteDoClique(onClick);
   const tons = {
-    neutral: "text-slate-500 hover:bg-white/10 hover:text-slate-200",
+    neutral: "text-slate-500 hover:bg-veu/10 hover:text-slate-200",
     danger: "text-slate-500 hover:bg-rose-500/15 hover:text-rose-400",
   };
   return (
@@ -111,7 +111,7 @@ export function IconButton({ className, tone = "neutral", children, onClick, dis
 export function Spinner({ className }) {
   return (
     <span
-      className={cx("inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white", className)}
+      className={cx("inline-block h-4 w-4 animate-spin rounded-full border-2 border-veu/30 border-t-white", className)}
       aria-hidden
     />
   );
@@ -166,7 +166,7 @@ export function SkeletonChart({ height = 168, bars = 8, className }) {
 export function ProgressBar({ value = 0, fromClass = "from-blue-500", toClass = "to-blue-400", className }) {
   const pct = Math.max(0, Math.min(1, value)) * 100;
   return (
-    <div className={cx("h-2.5 w-full overflow-hidden rounded-full bg-white/8", className)}
+    <div className={cx("h-2.5 w-full overflow-hidden rounded-full bg-veu/8", className)}
          role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
       <div
         className={cx("h-full rounded-full bg-gradient-to-r transition-[width] duration-500 ease-out", fromClass, toClass)}
@@ -231,11 +231,11 @@ export function Modal({ open, onClose, title, children }) {
             e o scroll do body está bloqueado enquanto o modal está aberto. */}
         <div className="modal-card m-3 flex flex-col rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface-2)] shadow-2xl">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-line)] px-5 py-4">
-            <h2 className="text-lg font-semibold text-white">{title}</h2>
+            <h2 className="text-lg font-semibold text-ink">{title}</h2>
             <button
               onClick={onClose}
               aria-label="Fechar"
-              className="-mr-1.5 shrink-0 rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer transition-colors"
+              className="-mr-1.5 shrink-0 rounded-lg p-2 text-slate-400 hover:bg-veu/10 hover:text-ink cursor-pointer transition-colors"
             >
               <X size={18} />
             </button>
@@ -276,7 +276,7 @@ export function Field({ label, hint, error, children, required }) {
 // text-base no mobile de propósito: com fonte < 16px o Safari/iOS dá zoom ao
 // focar o campo e o layout do modal "salta". Volta pra text-sm no desktop.
 export const inputBase =
-  "w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-2.5 text-base sm:text-sm text-white " +
+  "w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] px-3.5 py-2.5 text-base sm:text-sm text-ink " +
   "placeholder:text-slate-500 transition-colors focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
 
 export function TextInput({ className, ...rest }) {
@@ -346,7 +346,7 @@ export function Donut({ segments, size = 168, stroke = 18, centerLabel, centerSu
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-trilho)" strokeWidth={stroke} />
         {segments.map((s, i) => {
           const len = (s.value / total) * c;
           const dash = `${len} ${c - len}`;
@@ -371,7 +371,7 @@ export function Donut({ segments, size = 168, stroke = 18, centerLabel, centerSu
       {(centerLabel || centerSub) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
           {centerSub && <span className="text-xs text-slate-400">{centerSub}</span>}
-          {centerLabel && <span className="tnum text-xl font-bold text-white">{centerLabel}</span>}
+          {centerLabel && <span className="tnum text-xl font-bold text-ink">{centerLabel}</span>}
         </div>
       )}
     </div>

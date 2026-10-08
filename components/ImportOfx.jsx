@@ -127,10 +127,10 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
         {passo === "arquivo" && (
           <>
             {/* input nativo escondido: só o label estilizado aparece */}
-            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed border-[var(--color-line)] bg-white/[0.02] px-5 py-10 text-center transition-colors hover:border-white/30 hover:bg-white/5">
+            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed border-[var(--color-line)] bg-veu/[0.02] px-5 py-10 text-center transition-colors hover:border-veu/30 hover:bg-veu/5">
               <input type="file" accept=".ofx,.qfx,application/x-ofx" className="sr-only" onChange={escolher} />
               <Upload size={22} className="text-slate-400" />
-              <span className="text-sm font-semibold text-white">Escolher arquivo .ofx</span>
+              <span className="text-sm font-semibold text-ink">Escolher arquivo .ofx</span>
               <span className="text-xs text-slate-500">Extrato ou fatura baixada do banco (.ofx / .qfx)</span>
             </label>
             {arquivo && (
@@ -138,7 +138,7 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
                 <FileText size={14} /> {arquivo.name} · {(arquivo.size / 1024).toFixed(0)} KB
               </p>
             )}
-            <p className="rounded-xl bg-white/4 px-3.5 py-3 text-xs text-slate-400">
+            <p className="rounded-xl bg-veu/4 px-3.5 py-3 text-xs text-slate-400">
               As transações entram como despesas de <b className="text-slate-300">{mesLabel}</b>. O arquivo não sai do
               seu navegador — a leitura é local.
             </p>
@@ -150,7 +150,7 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-sm text-slate-300">
                 <b>{marcadas.length}</b> de {linhas.length} transações ·{" "}
-                <span className="tnum font-semibold text-white">{fmtMoney(total)}</span>
+                <span className="tnum font-semibold text-ink">{fmtMoney(total)}</span>
               </p>
               <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
                 <Checkbox
@@ -245,7 +245,7 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
               <span className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/15 text-emerald-400">
                 <Check size={24} />
               </span>
-              <p className="text-lg font-semibold text-white">
+              <p className="text-lg font-semibold text-ink">
                 {resultado.criadas} {resultado.criadas === 1 ? "despesa criada" : "despesas criadas"}
               </p>
               <p className="text-sm text-slate-400">

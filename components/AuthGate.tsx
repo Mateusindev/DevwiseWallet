@@ -16,6 +16,7 @@ const { Field, TextInput } =
   P as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
 import { hasPermission } from "@/server/auth/permissions";
 import { login, logout, me, register, type AuthUser } from "@/services/financeApi";
+import { BotaoTema } from "./ui/tema.jsx";
 
 type Status = "checking" | "anon" | "authed";
 
@@ -131,13 +132,14 @@ function LoginForm({ onLogged }: { onLogged: (u: AuthUser) => void }) {
 
   return (
     <div className="grid min-h-dvh place-items-center px-6">
+      <BotaoTema className="fixed right-4 top-4" />
       <form onSubmit={submit} className="w-full max-w-sm space-y-4">
         <div className="flex items-center gap-2.5">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 text-white shadow-lg shadow-blue-500/20">
             <PiggyBank size={19} />
           </span>
           <div className="leading-tight">
-            <p className="font-bold text-white">Wallet</p>
+            <p className="font-bold text-ink">Wallet</p>
             <p className="text-[11px] text-slate-500">
               {registering ? "crie sua conta" : "entre pra continuar"}
             </p>

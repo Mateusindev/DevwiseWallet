@@ -55,7 +55,7 @@ export default function Cartoes() {
     <section className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
             <CreditCard size={20} /> Cartões de crédito
             {cartoesCarregando && <Spinner className="h-4 w-4 border-slate-500/40 border-t-slate-300" />}
           </h2>
@@ -87,14 +87,14 @@ export default function Cartoes() {
             <div className="space-y-4">
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-500">Limite total</p>
-                <p className="tnum text-3xl font-bold text-white sm:text-4xl">{fmtMoney(totais.limite)}</p>
+                <p className="tnum text-3xl font-bold text-ink sm:text-4xl">{fmtMoney(totais.limite)}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-white/4 p-3">
+                <div className="rounded-xl bg-veu/4 p-3">
                   <p className="text-[11px] leading-tight text-slate-500">Comprometido</p>
                   <p className="tnum text-sm font-bold text-rose-400">{fmtMoney(totais.usado)}</p>
                 </div>
-                <div className="rounded-xl bg-white/4 p-3">
+                <div className="rounded-xl bg-veu/4 p-3">
                   <p className="text-[11px] leading-tight text-slate-500">Disponível</p>
                   <p className={`tnum text-sm font-bold ${totais.disponivel < 0 ? "text-rose-400" : "text-emerald-400"}`}>{fmtMoney(totais.disponivel)}</p>
                 </div>
@@ -103,8 +103,8 @@ export default function Cartoes() {
             <div className="flex justify-center">
               <Donut
                 segments={totais.limite > 0
-                  ? [{ value: totais.usado, color: "#fb7185" }, { value: Math.max(totais.disponivel, 0), color: "rgba(255,255,255,0.06)" }]
-                  : [{ value: 1, color: "rgba(255,255,255,0.06)" }]}
+                  ? [{ value: totais.usado, color: "#fb7185" }, { value: Math.max(totais.disponivel, 0), color: "var(--color-trilho)" }]
+                  : [{ value: 1, color: "var(--color-trilho)" }]}
                 centerSub="usado"
                 centerLabel={`${Math.round(totais.pct * 100)}%`}
               />
@@ -195,7 +195,7 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
   if (carregando || (erro && !resumo)) {
     return (
       <div className="space-y-4">
-        <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
           <TrendingDown size={17} /> Para onde vai a fatura
         </h3>
         {erro ? (
@@ -217,13 +217,13 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
 
   return (
     <div className="space-y-4">
-      <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+      <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
         <TrendingDown size={17} /> Para onde vai a fatura
       </h3>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
-          <h4 className="mb-4 text-sm font-semibold text-white">Fatura por categoria · {fmtMonthLabel(ym)}</h4>
+          <h4 className="mb-4 text-sm font-semibold text-ink">Fatura por categoria · {fmtMonthLabel(ym)}</h4>
           {porCategoria.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-500">Nada na fatura deste mês.</p>
           ) : (
@@ -245,17 +245,17 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
         </Card>
 
         <Card className="p-5">
-          <h4 className="mb-4 text-sm font-semibold text-white">Fatura por cartão · {fmtMonthLabel(ym)}</h4>
+          <h4 className="mb-4 text-sm font-semibold text-ink">Fatura por cartão · {fmtMonthLabel(ym)}</h4>
           <HBars items={porCartao} empty="Nada na fatura deste mês." />
         </Card>
 
         <Card className="p-5 lg:col-span-2">
-          <h4 className="mb-4 text-sm font-semibold text-white">Fatura total · 6 meses</h4>
+          <h4 className="mb-4 text-sm font-semibold text-ink">Fatura total · 6 meses</h4>
           <StackedBars data={serie} series={series} destaque={ym} empty="Sem fatura nesse período." />
         </Card>
 
         <Card className="p-5 lg:col-span-2">
-          <h4 className="mb-1 text-sm font-semibold text-white">Uso do limite por cartão</h4>
+          <h4 className="mb-1 text-sm font-semibold text-ink">Uso do limite por cartão</h4>
           <p className="mb-4 text-xs text-slate-500">Fatura do mês + parcelas ainda por vir.</p>
           <HBars items={usoLimite} format={(v) => `${v}%`} empty="Nenhum cartão com limite definido." />
         </Card>
@@ -302,7 +302,7 @@ function QuitacaoParceladas({ ym, cartoes }) {
   return (
     <Card className="p-5 sm:p-6">
       <div className="mb-4">
-        <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
           <Receipt size={18} /> Quitação das parceladas
         </h3>
         <p className="mt-0.5 text-xs text-slate-500">
@@ -316,21 +316,21 @@ function QuitacaoParceladas({ ym, cartoes }) {
           <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
             <Receipt size={13} className="text-amber-400" /> Falta pra quitar tudo
           </p>
-          <p className="tnum text-xl font-bold text-white sm:text-2xl">{fmtMoney(total.falta)}</p>
+          <p className="tnum text-xl font-bold text-ink sm:text-2xl">{fmtMoney(total.falta)}</p>
           <p className="mt-0.5 text-xs text-slate-500">de {fmtMoney(total.contrato)} contratados</p>
         </div>
         <div>
           <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
             <TrendingDown size={13} className="text-rose-400" /> Ainda sai em {fmtMonthShort(ym)}
           </p>
-          <p className="tnum text-xl font-bold text-white sm:text-2xl">{fmtMoney(total.faltaNoMes)}</p>
+          <p className="tnum text-xl font-bold text-ink sm:text-2xl">{fmtMoney(total.faltaNoMes)}</p>
           <p className="mt-0.5 text-xs text-slate-500">média de {fmtMoney(mediaMes)}/mês até o fim</p>
         </div>
         <div>
           <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
             <Flag size={13} className="text-emerald-400" /> Livre em
           </p>
-          <p className="text-xl font-bold text-white sm:text-2xl">{fmtMonthShort(total.ultimoMes)}</p>
+          <p className="text-xl font-bold text-ink sm:text-2xl">{fmtMonthShort(total.ultimoMes)}</p>
           <p className="mt-0.5 text-xs text-slate-500">
             {total.mesesAte === 0
               ? "última parcela é este mês"
@@ -355,7 +355,7 @@ function QuitacaoParceladas({ ym, cartoes }) {
           const c = g.cartaoId ? cartoesMap[g.cartaoId] : null;
           const a = acento(c?.cor || "amber");
           return (
-            <div key={g.cartaoId || "sem-cartao"} className="rounded-xl bg-white/4 p-4">
+            <div key={g.cartaoId || "sem-cartao"} className="rounded-xl bg-veu/4 p-4">
               <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                 <p className="min-w-0 flex-1 truncate font-semibold" style={{ color: g.cartaoId ? a.dot : undefined }}>
                   {g.cartaoId ? c?.nome || "Cartão removido" : "Sem cartão (carnê, boleto)"}
@@ -373,7 +373,7 @@ function QuitacaoParceladas({ ym, cartoes }) {
                       <span className="tnum text-sm font-semibold text-slate-200">{fmtMoney(i.falta)}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                      <span className="rounded-md bg-white/6 px-1.5 py-0.5 font-medium text-slate-300">{i.label}</span>
+                      <span className="rounded-md bg-veu/6 px-1.5 py-0.5 font-medium text-slate-300">{i.label}</span>
                       <span>
                         {i.notStarted
                           ? `começa em ${fmtMonthShort(i.primeiroMes)}`
@@ -411,7 +411,7 @@ function QuitacaoParceladas({ ym, cartoes }) {
               <span className={`w-14 shrink-0 ${m.ym === ym ? "font-semibold text-slate-200" : "text-slate-500"}`}>
                 {fmtMonthShort(m.ym)}
               </span>
-              <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/8">
+              <span className="h-2 flex-1 overflow-hidden rounded-full bg-veu/8">
                 <span className="block h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400"
                       style={{ width: `${total.picoMes > 0 ? (m.valor / total.picoMes) * 100 : 0}%` }} />
               </span>
@@ -441,7 +441,7 @@ function CartaoCard({ cartao: c, canManage, canShare, onEdit, onRemove, onShare 
             <CreditCard size={20} />
           </span>
           <div>
-            <p className="font-semibold text-white">{c.nome}</p>
+            <p className="font-semibold text-ink">{c.nome}</p>
             <p className="text-xs text-slate-500">
               {c.bandeira ? `${c.bandeira} · ` : ""}limite {fmtMoney(c.limite)}
             </p>
@@ -494,7 +494,7 @@ function Linha({ label, value, strong, muted, tone }) {
   const color = tone === "pos" ? "text-emerald-400" : tone === "neg" ? "text-rose-400" : muted ? "text-slate-400" : "text-slate-200";
   return (
     <div className="flex items-center justify-between">
-      <dt className={strong ? "font-semibold text-white" : "text-slate-400"}>{label}</dt>
+      <dt className={strong ? "font-semibold text-ink" : "text-slate-400"}>{label}</dt>
       <dd className={`tnum ${strong ? "font-bold" : ""} ${color}`}>{fmtMoney(value)}</dd>
     </div>
   );

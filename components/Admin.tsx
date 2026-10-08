@@ -47,7 +47,7 @@ export default function Admin() {
     <section className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
             <ShieldCheck size={20} /> Administração
           </h2>
           <p className="text-sm text-slate-400">Usuários, roles e permissions.</p>
@@ -80,7 +80,7 @@ function TabButton({ active, onClick, icon: Icon, label }: {
   return (
     <button onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-        active ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+        active ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "text-slate-400 hover:bg-veu/5 hover:text-slate-200"
       }`}>
       <Icon size={15} /> {label}
     </button>
@@ -124,7 +124,7 @@ function UsersTab({ users, roles, meId, canManage, onChanged }: {
                 <p className="truncate text-xs text-slate-500">{u.email}</p>
               </div>
               <div className="hidden flex-wrap justify-end gap-1 sm:flex">
-                {u.roles.map((r) => <Badge key={r.id} className="bg-white/5 text-slate-300">{r.nome}</Badge>)}
+                {u.roles.map((r) => <Badge key={r.id} className="bg-veu/5 text-slate-300">{r.nome}</Badge>)}
               </div>
               {canManage && (
                 <>
@@ -247,7 +247,7 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
                 <button key={r.id} type="button"
                   onClick={() => setRoleIds(on ? roleIds.filter((id) => id !== r.id) : [...roleIds, r.id])}
                   className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-                    on ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                    on ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "bg-veu/5 text-slate-400 hover:bg-veu/10"
                   }`}>
                   {r.nome}
                 </button>
@@ -294,7 +294,7 @@ function RolesTab({ roles, permissions, canManage, onChanged }: {
           <Card key={r.id} className="p-5">
             <div className="mb-3 flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-semibold text-white">{r.nome}</p>
+                <p className="font-semibold text-ink">{r.nome}</p>
                 <p className="text-xs text-slate-500">
                   {r.descricao || "sem descrição"} · {r.usuarios} usuário{r.usuarios === 1 ? "" : "s"}
                 </p>
@@ -317,7 +317,7 @@ function RolesTab({ roles, permissions, canManage, onChanged }: {
               {r.permissions.length === 0
                 ? <span className="text-xs text-slate-500">nenhuma permission</span>
                 : r.permissions.map((p) => (
-                  <Badge key={p} className={p === "*" ? "bg-amber-500/15 text-amber-300" : "bg-white/5 text-slate-300"}>
+                  <Badge key={p} className={p === "*" ? "bg-amber-500/15 text-amber-300" : "bg-veu/5 text-slate-300"}>
                     {p}
                   </Badge>
                 ))}
@@ -426,7 +426,7 @@ function PermChip({ p, on, onToggle, destaque }: { p: string; on: boolean; onTog
       className={`rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
         on
           ? destaque ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40" : "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40"
-          : "bg-white/5 text-slate-400 hover:bg-white/10"
+          : "bg-veu/5 text-slate-400 hover:bg-veu/10"
       }`}>
       {p}
     </button>

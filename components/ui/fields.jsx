@@ -70,7 +70,7 @@ export function SelectItem({ value, disabled, className, children }) {
       disabled={disabled}
       className={cx(
         "relative flex cursor-pointer select-none items-center gap-2 rounded-lg py-2 pl-3 pr-8 text-base sm:text-sm text-slate-200 outline-none",
-        "data-[highlighted]:bg-white/10 data-[highlighted]:text-white data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed",
+        "data-[highlighted]:bg-veu/10 data-[highlighted]:text-ink data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed",
         className
       )}
     >
@@ -89,7 +89,7 @@ export function Checkbox({ checked, onChecked, disabled, className, ...rest }) {
       onCheckedChange={(v) => onChecked(!!v)}
       disabled={disabled}
       className={cx(
-        "grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded-md border border-white/20 bg-transparent transition-colors",
+        "grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded-md border border-veu/20 bg-transparent transition-colors",
         "data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500 data-[state=indeterminate]:border-blue-500 data-[state=indeterminate]:bg-blue-500",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 disabled:cursor-not-allowed disabled:opacity-50",
         className
@@ -172,7 +172,7 @@ export function DayInput({ value, onValue, allowEmpty = false, suggestion, class
             key={d} type="button" onClick={() => onValue(d)}
             className={cx(
               "min-w-8 rounded-lg px-2 py-1 text-xs font-semibold cursor-pointer transition-colors",
-              Number(value) === d ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "bg-white/5 text-slate-400 hover:bg-white/10"
+              Number(value) === d ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "bg-veu/5 text-slate-400 hover:bg-veu/10"
             )}
           >
             {d}
@@ -200,8 +200,8 @@ export function MonthSelect({ value, onValue, min, max, marked, current = curren
     <RPopover.Root open={open} onOpenChange={(o) => { setOpen(o); if (o) setAno(Number((value || current).slice(0, 4))); }}>
       <RPopover.Trigger
         className={cx(
-          "inline-flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3.5 py-2 text-sm text-white cursor-pointer",
-          "transition-colors hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
+          "inline-flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3.5 py-2 text-sm text-ink cursor-pointer",
+          "transition-colors hover:bg-veu/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
           className
         )}
       >
@@ -213,13 +213,13 @@ export function MonthSelect({ value, onValue, min, max, marked, current = curren
           <div className="mb-2 flex items-center justify-between">
             <button type="button" aria-label="Ano anterior" onClick={() => setAno(ano - 1)}
                     disabled={!!min && ym(ano - 1, 11) < min}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-veu/10 hover:text-ink cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
               <ChevronLeft size={16} />
             </button>
-            <span className="tnum text-sm font-semibold text-white">{ano}</span>
+            <span className="tnum text-sm font-semibold text-ink">{ano}</span>
             <button type="button" aria-label="Ano seguinte" onClick={() => setAno(ano + 1)}
                     disabled={!!max && ym(ano + 1, 0) > max}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-veu/10 hover:text-ink cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
               <ChevronRight size={16} />
             </button>
           </div>
@@ -235,8 +235,8 @@ export function MonthSelect({ value, onValue, min, max, marked, current = curren
                   className={cx(
                     "relative rounded-lg py-2 text-xs font-semibold cursor-pointer transition-colors",
                     sel ? "bg-blue-500 text-white"
-                        : k === current ? "bg-white/5 text-blue-300 ring-1 ring-blue-500/40 hover:bg-white/10"
-                        : "bg-white/5 text-slate-300 hover:bg-white/10",
+                        : k === current ? "bg-veu/5 text-blue-300 ring-1 ring-blue-500/40 hover:bg-veu/10"
+                        : "bg-veu/5 text-slate-300 hover:bg-veu/10",
                     "disabled:opacity-25 disabled:cursor-not-allowed"
                   )}
                 >
@@ -259,7 +259,7 @@ export function MonthSelect({ value, onValue, min, max, marked, current = curren
 export function MonthStepper({ value, onValue, min, max, marked, current, className }) {
   const prev = addMonths(value, -1);
   const next = addMonths(value, 1);
-  const btn = "rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] p-2 text-slate-300 cursor-pointer transition-colors hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed";
+  const btn = "rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] p-2 text-slate-300 cursor-pointer transition-colors hover:bg-veu/5 disabled:opacity-30 disabled:cursor-not-allowed";
   return (
     <div className={cx("flex items-center gap-1.5", className)}>
       <button type="button" aria-label="Mês anterior" onClick={() => onValue(prev)} disabled={!!min && prev < min} className={btn}>
@@ -309,13 +309,13 @@ export function DateInput({ value, onValue, min, max, month, className, disabled
                 vez de deixar sair do mês e a linha "desaparecer" da lista. */}
             <button type="button" aria-label="Mês anterior" onClick={() => setVisto(addMonths(mesVisto, -1))}
                     disabled={!!month}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer disabled:invisible">
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-veu/10 hover:text-ink cursor-pointer disabled:invisible">
               <ChevronLeft size={16} />
             </button>
-            <span className="text-sm font-semibold text-white">{MESES[mes - 1]} de {ano}</span>
+            <span className="text-sm font-semibold text-ink">{MESES[mes - 1]} de {ano}</span>
             <button type="button" aria-label="Mês seguinte" onClick={() => setVisto(addMonths(mesVisto, 1))}
                     disabled={!!month}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer disabled:invisible">
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-veu/10 hover:text-ink cursor-pointer disabled:invisible">
               <ChevronRight size={16} />
             </button>
           </div>
@@ -335,8 +335,8 @@ export function DateInput({ value, onValue, min, max, month, className, disabled
                   className={cx(
                     "tnum grid h-9 place-items-center rounded-lg text-sm cursor-pointer transition-colors",
                     sel ? "bg-blue-500 font-semibold text-white"
-                        : k === hoje ? "text-blue-300 ring-1 ring-blue-500/40 hover:bg-white/10"
-                        : "text-slate-300 hover:bg-white/10",
+                        : k === hoje ? "text-blue-300 ring-1 ring-blue-500/40 hover:bg-veu/10"
+                        : "text-slate-300 hover:bg-veu/10",
                     "disabled:opacity-25 disabled:cursor-not-allowed"
                   )}
                 >
@@ -347,7 +347,7 @@ export function DateInput({ value, onValue, min, max, month, className, disabled
           </div>
           {!fora(hoje) && (!month || hoje.slice(0, 7) === month) && (
             <button type="button" onClick={() => { onValue(hoje); setOpen(false); }}
-                    className="mt-2 w-full rounded-lg bg-white/5 py-2 text-xs font-semibold text-slate-300 hover:bg-white/10 cursor-pointer">
+                    className="mt-2 w-full rounded-lg bg-veu/5 py-2 text-xs font-semibold text-slate-300 hover:bg-veu/10 cursor-pointer">
               hoje
             </button>
           )}

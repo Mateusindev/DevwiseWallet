@@ -40,7 +40,7 @@ export function RateioChips({ d, className = "" }) {
         <span key={r.shareId}
           className={`grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold ${
             r.status === "recusado" ? "bg-rose-500/15 text-rose-400 line-through" :
-            r.status === "ativo" ? "bg-emerald-500/15 text-emerald-300" : "bg-white/8 text-slate-300"
+            r.status === "ativo" ? "bg-emerald-500/15 text-emerald-300" : "bg-veu/8 text-slate-300"
           }`}>
           {iniciais(r.nome)}
         </span>
@@ -167,7 +167,7 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
             <span className="tnum font-semibold text-slate-200">{fmtMoney(base)}</span>
           </div>
           {/* barra de rateio: cada fatia + o que sobra pro dono */}
-          <div className="flex h-2.5 overflow-hidden rounded-full bg-white/8">
+          <div className="flex h-2.5 overflow-hidden rounded-full bg-veu/8">
             {partes.map((v, i) => (
               <div key={itens[i].contatoId}
                 style={{ width: `${base ? Math.min((v / base) * 100, 100) : 0}%` }}
@@ -194,7 +194,7 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
             <p className="text-sm text-slate-500">Ninguém dividindo essa linha ainda.</p>
           )}
           {itens.map((i, idx) => (
-            <div key={i.contatoId} className="rounded-xl bg-white/4 p-3">
+            <div key={i.contatoId} className="rounded-xl bg-veu/4 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="truncate text-sm font-medium text-slate-200">{nomeDe(i.contatoId)}</p>
                 <div className="flex items-center gap-2">
@@ -235,7 +235,7 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
           </Field>
         )}
 
-        <div className="rounded-xl bg-white/4 p-3">
+        <div className="rounded-xl bg-veu/4 p-3">
           <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">Nova pessoa</p>
           <div className="grid grid-cols-2 gap-2">
             <TextInput name="novoNome" value={novo.nome} placeholder="Nome"
@@ -338,7 +338,7 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
               linhas.map((l) => {
                 const divisao = porLinha(l);
                 return (
-                  <div key={`${l.tipo}:${l.id}`} className="flex items-center justify-between gap-2 rounded-xl bg-white/4 px-3 py-2">
+                  <div key={`${l.tipo}:${l.id}`} className="flex items-center justify-between gap-2 rounded-xl bg-veu/4 px-3 py-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm text-slate-200">{l.descricao}</p>
                       <p className="text-xs text-slate-500">
@@ -367,7 +367,7 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
               <p className="text-sm text-slate-500">Nenhum valor avulso.</p>
             ) : (
               avulsos.map((s) => (
-                <div key={s.id} className="flex items-center justify-between rounded-xl bg-white/4 px-3 py-2">
+                <div key={s.id} className="flex items-center justify-between rounded-xl bg-veu/4 px-3 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm text-slate-200">
                       {s.contatoNome} · <span className="text-slate-400">{s.mesRef ? `só ${s.mesRef}` : "todo mês"}</span>
@@ -469,7 +469,7 @@ export function ConvitesBanner({ onRespondido }) {
       <FormError>{erro}</FormError>
       <div className="space-y-2">
         {convites.map((cv) => (
-          <div key={cv.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/4 px-3 py-2">
+          <div key={cv.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-veu/4 px-3 py-2">
             <div className="min-w-0">
               <p className="truncate text-sm text-slate-200">
                 <span className="font-medium">{cv.dono.nome}</span> quer dividir despesas com você
@@ -545,7 +545,7 @@ export function Contatos() {
 
   return (
     <Card className="p-5 sm:p-6">
-      <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-white">
+      <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink">
         <Users size={18} /> Pessoas
         {revalidandoContatos && <Spinner className="h-3.5 w-3.5 border-slate-500/40 border-t-slate-300" />}
       </h3>
@@ -560,7 +560,7 @@ export function Contatos() {
         {!carregando && contatos.map((c) => {
           const st = STATUS[c.status] ?? STATUS.local;
           return (
-            <div key={c.id} className="rounded-xl bg-white/4 px-3 py-2.5">
+            <div key={c.id} className="rounded-xl bg-veu/4 px-3 py-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 truncate text-sm font-medium text-slate-200">
@@ -584,12 +584,12 @@ export function Contatos() {
               </div>
               {linkDe?.contatoId === c.id && (
                 // não existe envio de email no projeto: o link é copiado à mão
-                <div className="mt-2 flex items-center gap-2 rounded-lg bg-black/25 px-2 py-1.5">
+                <div className="mt-2 flex items-center gap-2 rounded-lg bg-veu/10 px-2 py-1.5">
                   <Link2 size={13} className="shrink-0 text-slate-500" />
                   <input readOnly value={linkDe.link} onFocus={(e) => e.target.select()}
                     className="min-w-0 flex-1 bg-transparent text-xs text-slate-300 outline-none" />
                   <button onClick={() => navigator.clipboard?.writeText(linkDe.link)}
-                    className="shrink-0 rounded-md bg-white/8 px-2 py-1 text-[11px] text-slate-200 cursor-pointer hover:bg-white/15">
+                    className="shrink-0 rounded-md bg-veu/8 px-2 py-1 text-[11px] text-slate-200 cursor-pointer hover:bg-veu/15">
                     copiar
                   </button>
                 </div>
@@ -646,7 +646,7 @@ export function MeusCompartilhamentos({ ym }) {
   if (carregando) {
     return (
       <Card className="p-5 sm:p-6">
-        <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-white">
+        <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink">
           <HandCoins size={18} /> O que devo
         </h3>
         <SkeletonList rows={2} height="h-20" label="Carregando o que você deve" />
@@ -656,7 +656,7 @@ export function MeusCompartilhamentos({ ym }) {
   if (erroCarga && dados.donos.length === 0 && dados.orfas.length === 0) {
     return (
       <Card className="p-5 sm:p-6">
-        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
+        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-ink">
           <HandCoins size={18} /> O que devo
         </h3>
         <FormError>{erroCarga}</FormError>
@@ -668,7 +668,7 @@ export function MeusCompartilhamentos({ ym }) {
 
   return (
     <Card className="p-5 sm:p-6">
-      <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-white">
+      <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink">
         <HandCoins size={18} /> O que devo
         {revalidando && <Spinner className="h-3.5 w-3.5 border-slate-500/40 border-t-slate-300" />}
       </h3>
@@ -678,7 +678,7 @@ export function MeusCompartilhamentos({ ym }) {
         {dados.donos.map((d) => (
           <div key={d.dono.id}>
             <div className="mb-2 flex items-baseline justify-between gap-2">
-              <p className="truncate font-semibold text-white">{d.dono.nome}</p>
+              <p className="truncate font-semibold text-ink">{d.dono.nome}</p>
               <p className="tnum text-sm font-bold text-rose-400">{fmtMoney(d.devidoMes)}</p>
             </div>
 
@@ -686,7 +686,7 @@ export function MeusCompartilhamentos({ ym }) {
               {d.grupos.map((g) => {
                 const a = acento(g.cartao?.cor ?? "slate");
                 return (
-                  <div key={g.chave} className="rounded-xl bg-white/4 p-4">
+                  <div key={g.chave} className="rounded-xl bg-veu/4 p-4">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-medium" style={g.cartao ? { color: a.dot } : undefined}>
                         {g.titulo}
@@ -825,7 +825,7 @@ export function MeusCompartilhamentos({ ym }) {
 function AcaoMini({ icon: Icon, children, onClick }) {
   return (
     <button onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-md bg-white/6 px-1.5 py-0.5 text-slate-300 transition-colors cursor-pointer hover:bg-white/12 hover:text-white">
+      className="inline-flex items-center gap-1 rounded-md bg-veu/6 px-1.5 py-0.5 text-slate-300 transition-colors cursor-pointer hover:bg-veu/12 hover:text-ink">
       <Icon size={11} /> {children}
     </button>
   );

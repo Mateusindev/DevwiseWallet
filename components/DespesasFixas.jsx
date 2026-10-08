@@ -25,9 +25,9 @@ function EscopoOpcao({ titulo, desc, tone, disabled, onClick }) {
       className={`w-full rounded-xl border p-3.5 text-left transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
         tone === "danger"
           ? "border-rose-500/30 bg-rose-500/[0.06] hover:bg-rose-500/[0.12]"
-          : "border-[var(--color-line)] bg-white/[0.02] hover:border-white/25 hover:bg-white/5"
+          : "border-[var(--color-line)] bg-veu/[0.02] hover:border-veu/25 hover:bg-veu/5"
       }`}>
-      <span className={`block font-semibold ${tone === "danger" ? "text-rose-300" : "text-white"}`}>{titulo}</span>
+      <span className={`block font-semibold ${tone === "danger" ? "text-rose-300" : "text-ink"}`}>{titulo}</span>
       <span className="mt-0.5 block text-xs text-slate-400">{desc}</span>
     </button>
   );
@@ -236,7 +236,7 @@ export default function DespesasFixas() {
 
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
             <span>{espacoAtivo?.emoji}</span> Despesas · {espacoAtivo?.nome}
           </h2>
           <p className="text-sm text-slate-400">Quanto recebeu, quanto saiu, quanto sobrou.</p>
@@ -271,7 +271,7 @@ export default function DespesasFixas() {
         {/* receitas extras do mês */}
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-white">
+            <h3 className="text-base font-semibold text-ink">
               Receitas extras de {fmtMonthLabel(ym)}
               <span className="ml-2 tnum text-sm font-normal text-slate-400">{fmtMoney(orc.extras)}</span>
             </h3>
@@ -314,7 +314,7 @@ export default function DespesasFixas() {
                       {canOrc && (
                         <>
                           <button onClick={() => pedirReceita(r, "editar")} aria-label={`Editar ${r.descricao}`}
-                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-veu/10 hover:text-slate-200 cursor-pointer">
                             <Pencil size={15} />
                           </button>
                           <button onClick={() => pedirReceita(r, "excluir")} aria-label={`Remover ${r.descricao}`}
@@ -334,7 +334,7 @@ export default function DespesasFixas() {
         {/* despesas do mês */}
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-white">
+            <h3 className="text-base font-semibold text-ink">
               Despesas de {fmtMonthLabel(ym)}
               <span className="ml-2 tnum text-sm font-normal text-slate-400">{fmtMoney(orc.variaveis)}</span>
             </h3>
@@ -419,12 +419,12 @@ export default function DespesasFixas() {
                       {canOrc && (
                         <>
                           <button onClick={() => setRatear({ linha: d, campo: "mes" })} aria-label={`Dividir ${d.descricao}`}
-                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-veu/10 hover:text-slate-200 cursor-pointer">
                             <Split size={15} />
                           </button>
                           <PagarControl valor={d.valor} valorPago={d.valorPago || 0} onSet={(v) => setPagaMes(d.id, v)} />
                           <button onClick={() => setEditMes(d)} aria-label={`Editar ${d.descricao}`}
-                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-veu/10 hover:text-slate-200 cursor-pointer">
                             <Pencil size={15} />
                           </button>
                           <button onClick={() => setDelMes(d)} aria-label={`Remover ${d.descricao}`}
@@ -446,7 +446,7 @@ export default function DespesasFixas() {
         <div>
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <h3 className="text-base font-semibold text-white">
+              <h3 className="text-base font-semibold text-ink">
                 Despesas fixas
                 <span className="ml-2 tnum text-sm font-normal text-slate-400">{fmtMoney(fixasAtivas)}/mês</span>
               </h3>
@@ -503,7 +503,7 @@ export default function DespesasFixas() {
                                   onClick={(e) => marcarFixa(d.id, e.shiftKey)}
                                   aria-label={`Selecionar ${d.descricao}`} />
                       )}
-                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors ${paga ? "bg-emerald-500/15 text-emerald-400" : parcial ? "bg-amber-500/15 text-amber-400" : "bg-white/5 text-slate-400"}`}>
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors ${paga ? "bg-emerald-500/15 text-emerald-400" : parcial ? "bg-amber-500/15 text-amber-400" : "bg-veu/5 text-slate-400"}`}>
                         {paga ? <Check size={16} /> : <CalendarClock size={16} />}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -543,7 +543,7 @@ export default function DespesasFixas() {
                         {canOrc && (
                           <>
                             <button onClick={() => setRatear({ linha: d, campo: "fixa" })} aria-label={`Dividir ${d.descricao}`}
-                              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-veu/10 hover:text-slate-200 cursor-pointer">
                               <Split size={15} />
                             </button>
                             {conta && <PagarControl valor={d.valor} valorPago={valorPago} onSet={(v) => setPagamentoFixa(d.id, ym, v)} />}
@@ -552,7 +552,7 @@ export default function DespesasFixas() {
                                         aria-label={d.ativa ? `Pausar ${d.descricao}` : `Ativar ${d.descricao}`} />
                             </span>
                             <button onClick={() => setEditFixa(d)} aria-label={`Editar ${d.descricao}`}
-                              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200 cursor-pointer">
+                              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-veu/10 hover:text-slate-200 cursor-pointer">
                               <Pencil size={16} />
                             </button>
                             <button onClick={() => setDelFixa(d)} aria-label={`Remover ${d.descricao}`}
@@ -643,9 +643,9 @@ export default function DespesasFixas() {
           <FormError>{loteErr}</FormError>
           <p className="text-sm text-slate-300">
             Excluir <b>{linhasLote.length}</b> {linhasLote.length === 1 ? "linha" : "linhas"} ·{" "}
-            <span className="tnum font-semibold text-white">{fmtMoney(totalLote)}</span>. Não dá pra desfazer.
+            <span className="tnum font-semibold text-ink">{fmtMoney(totalLote)}</span>. Não dá pra desfazer.
           </p>
-          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-xl bg-white/4 p-3 text-sm">
+          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-xl bg-veu/4 p-3 text-sm">
             {linhasLote.map((d) => (
               <li key={d.id} className="flex items-center justify-between gap-3">
                 <span className="truncate text-slate-300">{d.descricao}</span>
@@ -702,7 +702,7 @@ export default function DespesasFixas() {
         {delFixa && (
           <div className="space-y-4">
             <p className="text-sm text-slate-300">
-              Excluir <b className="text-white">{delFixa.descricao}</b> ({fmtMoney(delFixa.valor)})?
+              Excluir <b className="text-ink">{delFixa.descricao}</b> ({fmtMoney(delFixa.valor)})?
             </p>
             <p className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-xs text-rose-200 ring-1 ring-rose-500/20">
               Some de todos os meses e apaga o histórico de pagamentos dela. Não dá pra desfazer.
@@ -723,7 +723,7 @@ export default function DespesasFixas() {
         {delMes && (
           <div className="space-y-4">
             <p className="text-sm text-slate-300">
-              Excluir <b className="text-white">{delMes.descricao}</b> ({fmtMoney(delMes.valor)})?
+              Excluir <b className="text-ink">{delMes.descricao}</b> ({fmtMoney(delMes.valor)})?
             </p>
             <p className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-xs text-rose-200 ring-1 ring-rose-500/20">
               Apaga essa despesa de {fmtMonthLabel(ym)}. Não dá pra desfazer.
@@ -744,7 +744,7 @@ export default function DespesasFixas() {
         {delReceita && (
           <div className="space-y-4">
             <p className="text-sm text-slate-300">
-              Excluir <b className="text-white">{delReceita.descricao}</b> ({fmtMoney(delReceita.valor)})?
+              Excluir <b className="text-ink">{delReceita.descricao}</b> ({fmtMoney(delReceita.valor)})?
             </p>
             <p className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-xs text-rose-200 ring-1 ring-rose-500/20">
               Apaga essa receita de {fmtMonthLabel(ym)}. Não dá pra desfazer.
@@ -811,7 +811,7 @@ function EspacoTabs({ ym }) {
               <div key={e.id} className="group relative">
                 <button onClick={() => setActiveEspaco(e.id)} disabled={loading}
                   aria-current={active ? "true" : undefined}
-                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer disabled:cursor-not-allowed ${active ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer disabled:cursor-not-allowed ${active ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "text-slate-400 hover:bg-veu/5 hover:text-slate-200"
                     }`}>
                   <span>{e.emoji}</span>
                   {e.nome}
@@ -839,7 +839,7 @@ function EspacoTabs({ ym }) {
         </div>
         {canEspaco && (
           <button onClick={() => setNovoOpen(true)} aria-label="Novo espaço de despesa"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-dashed border-white/15 text-slate-400 hover:border-white/30 hover:text-slate-200 cursor-pointer transition-colors">
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-dashed border-veu/15 text-slate-400 hover:border-veu/30 hover:text-slate-200 cursor-pointer transition-colors">
             <Plus size={18} />
           </button>
         )}
@@ -851,7 +851,7 @@ function EspacoTabs({ ym }) {
           {ocultas.map((e) => (
             <button key={e.id} onClick={() => restaurarEspacoMes(e.id, ym)}
               title={`Restaurar ${e.nome} em ${fmtMonthLabel(ym)}`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-2.5 py-1 font-medium text-slate-400 hover:text-slate-200 hover:border-white/25 cursor-pointer transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-2.5 py-1 font-medium text-slate-400 hover:text-slate-200 hover:border-veu/25 cursor-pointer transition-colors">
               <span>{e.emoji}</span>{e.nome}
               <Undo2 size={12} className="text-emerald-400" />
             </button>
@@ -866,10 +866,10 @@ function EspacoTabs({ ym }) {
         {confirmDel && (
           <div className="space-y-4">
             <p className="text-sm text-slate-300">
-              Excluir <b className="text-white">{confirmDel.emoji} {confirmDel.nome}</b> só de{" "}
-              <b className="text-white">{fmtMonthLabel(ym)}</b>?
+              Excluir <b className="text-ink">{confirmDel.emoji} {confirmDel.nome}</b> só de{" "}
+              <b className="text-ink">{fmtMonthLabel(ym)}</b>?
             </p>
-            <p className="rounded-xl bg-white/4 px-3.5 py-3 text-xs text-slate-400">
+            <p className="rounded-xl bg-veu/4 px-3.5 py-3 text-xs text-slate-400">
               Some só deste mês. A página e os dados dela continuam nos outros meses —
               dá pra restaurar quando quiser.
             </p>
@@ -889,7 +889,7 @@ function EspacoTabs({ ym }) {
         {confirmDelPerm && (
           <div className="space-y-4">
             <p className="text-sm text-slate-300">
-              Excluir <b className="text-white">{confirmDelPerm.emoji} {confirmDelPerm.nome}</b> de vez?
+              Excluir <b className="text-ink">{confirmDelPerm.emoji} {confirmDelPerm.nome}</b> de vez?
             </p>
             <p className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-xs text-rose-200 ring-1 ring-rose-500/20">
               Apaga o espaço e <b>todos os dados dele em todos os meses</b> — despesas fixas,
@@ -961,7 +961,7 @@ function RecebidoCard({ ym, valor, fixa, override }) {
           </div>
         ) : (
           <>
-            <p className="tnum text-3xl font-bold text-white">{fmtMoney(valor)}</p>
+            <p className="tnum text-3xl font-bold text-ink">{fmtMoney(valor)}</p>
             <p className="mt-0.5 text-[11px] text-slate-500">
               {hasOverride
                 ? "Só neste mês (edite p/ tornar fixo)"
@@ -972,7 +972,7 @@ function RecebidoCard({ ym, valor, fixa, override }) {
       </div>
       {!editing && can("orcamento:manage") && (
         <button onClick={startEdit}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-white/5 px-3.5 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 cursor-pointer transition-colors">
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-veu/5 px-3.5 py-2 text-sm font-medium text-slate-300 hover:bg-veu/10 cursor-pointer transition-colors">
           <Pencil size={15} /> Editar
         </button>
       )}
@@ -1027,7 +1027,7 @@ function PagarControl({ valor, valorPago = 0, onSet }) {
         title={parcial ? "Pagar o restante" : "Registrar pagamento"}
         className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60 ${parcial
             ? "bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30 hover:bg-amber-500/25"
-            : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200"
+            : "bg-veu/5 text-slate-400 hover:bg-veu/10 hover:text-slate-200"
           }`}>
         {busy ? <Spinner className="h-3.5 w-3.5" /> : <CheckCircle2 size={14} />}
         {parcial ? `Falta ${fmtMoney(falta)}` : "Pagar"}
@@ -1055,7 +1055,7 @@ function PagarControl({ valor, valorPago = 0, onSet }) {
                 Confirmar
               </Button>
               <button onClick={() => set(valor)} disabled={busy} title="Quitar valor cheio"
-                className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/10 cursor-pointer disabled:opacity-60">
+                className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-veu/10 cursor-pointer disabled:opacity-60">
                 Quitar
               </button>
             </div>
@@ -1087,7 +1087,7 @@ function Resumo({ icon: Icon, label, value, tone }) {
         <Icon size={16} />
       </span>
       <p className="text-[11px] leading-tight text-slate-400 sm:text-xs">{label}</p>
-      <p className="tnum text-[15px] font-bold leading-tight break-words text-white sm:text-xl">{fmtMoney(value)}</p>
+      <p className="tnum text-[15px] font-bold leading-tight break-words text-ink sm:text-xl">{fmtMoney(value)}</p>
     </Card>
   );
 }
@@ -1096,7 +1096,7 @@ function Row({ label, value, strong, tone }) {
   const color = tone === "pos" ? "text-emerald-400" : tone === "neg" ? "text-rose-400" : "text-slate-200";
   return (
     <div className="flex items-center justify-between">
-      <dt className={strong ? "font-semibold text-white" : "text-slate-400"}>{label}</dt>
+      <dt className={strong ? "font-semibold text-ink" : "text-slate-400"}>{label}</dt>
       <dd className={`tnum ${strong ? "font-bold" : ""} ${color}`}>{fmtMoney(value)}</dd>
     </div>
   );

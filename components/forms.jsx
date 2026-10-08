@@ -45,7 +45,7 @@ function CartaoParcelaFields({ f, set, errors = {}, comParcela = true, onPickCar
       {comParcela && f.cartaoId && (
         // Bloco destacado: no celular o checkbox solto passava despercebido
         // (aparece só depois de escolher o cartão, no fim do form).
-        <div className="rounded-xl border border-[var(--color-line)] bg-white/[0.03] p-3">
+        <div className="rounded-xl border border-[var(--color-line)] bg-veu/[0.03] p-3">
           <CheckboxField
             label="Compra parcelada"
             hint="Marque para lançar em parcelas na fatura"
@@ -484,7 +484,7 @@ export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita, escopo 
 
         {/* "só neste mês" cria uma avulsa: não faz sentido oferecer recorrência */}
         {escopo !== "mes" && (
-          <div className="rounded-xl border border-[var(--color-line)] bg-white/[0.03] p-3">
+          <div className="rounded-xl border border-[var(--color-line)] bg-veu/[0.03] p-3">
             <CheckboxField
               label="Repete todo mês"
               hint="aparece automaticamente nos meses seguintes"
@@ -576,7 +576,7 @@ export function CaixinhaModal({ open, onClose, caixinha }) {
               <button key={c} type="button" onClick={() => set("cor", c)}
                       aria-label={c}
                       style={{ backgroundColor: acento(c).dot }}
-                      className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-white scale-110" : "opacity-60 hover:opacity-100"}`} />
+                      className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-ink scale-110" : "opacity-60 hover:opacity-100"}`} />
             ))}
           </div>
         </Field>
@@ -640,7 +640,7 @@ export function ReservaEmergenciaModal({ open, onClose, caixinha, onCreated }) {
           <div className="flex flex-wrap items-center gap-2">
             {MESES_SUGERIDOS.map((m) => (
               <button key={m} type="button" onClick={() => set("meses", m)}
-                      className={`rounded-xl px-3.5 py-2 text-sm font-semibold cursor-pointer transition-colors ${f.meses === m ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-500/40" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>
+                      className={`rounded-xl px-3.5 py-2 text-sm font-semibold cursor-pointer transition-colors ${f.meses === m ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-500/40" : "bg-veu/5 text-slate-300 hover:bg-veu/10"}`}>
                 {m} meses
               </button>
             ))}
@@ -711,13 +711,13 @@ export function EspacoModal({ open, onClose, onCreated }) {
             {EMOJIS.map((em) => (
               <button key={em} type="button" onClick={() => set("emoji", em)}
                       aria-label={`Ícone ${em}`}
-                      className={`grid h-10 w-10 place-items-center rounded-xl text-lg cursor-pointer transition-colors ${f.emoji === em ? "bg-blue-500/20 ring-2 ring-blue-500/60" : "bg-white/5 hover:bg-white/10"}`}>
+                      className={`grid h-10 w-10 place-items-center rounded-xl text-lg cursor-pointer transition-colors ${f.emoji === em ? "bg-blue-500/20 ring-2 ring-blue-500/60" : "bg-veu/5 hover:bg-veu/10"}`}>
                 {em}
               </button>
             ))}
           </div>
         </Field>
-        <p className="rounded-xl bg-white/4 px-3.5 py-3 text-xs text-slate-400">
+        <p className="rounded-xl bg-veu/4 px-3.5 py-3 text-xs text-slate-400">
           Só o orçamento é separado — despesas fixas, despesas do mês e renda próprias.
           As caixinhas (economias) são compartilhadas entre todos os espaços.
         </p>
@@ -817,7 +817,7 @@ export function CartaoModal({ open, onClose, cartao }) {
             {CORES_CARTAO.map((c) => (
               <button key={c} type="button" onClick={() => set("cor", c)} aria-label={c}
                       style={{ backgroundColor: acento(c).dot }}
-                      className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-white scale-110" : "opacity-60 hover:opacity-100"}`} />
+                      className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-ink scale-110" : "opacity-60 hover:opacity-100"}`} />
             ))}
           </div>
         </Field>
@@ -858,7 +858,7 @@ export function CategoriaModal({ open, onClose, categoria, onCreated }) {
             {CORES_CATEGORIA.map((c) => (
               <button key={c} type="button" onClick={() => set("cor", c)} aria-label={c}
                       style={{ backgroundColor: acento(c).dot }}
-                      className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-white scale-110" : "opacity-60 hover:opacity-100"}`} />
+                      className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-ink scale-110" : "opacity-60 hover:opacity-100"}`} />
             ))}
           </div>
         </Field>

@@ -16,7 +16,7 @@ export function GroupedBars({ data, height = 168, format = fmtMoneyCompact }) {
               const h = Math.max((b.value / max) * height, b.value > 0 ? 3 : 0);
               return (
                 <div key={i} className="group relative flex w-full max-w-[22px] flex-col justify-end" style={{ height }}>
-                  <div className="pointer-events-none absolute -top-0.5 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 ring-1 ring-white/10 transition-opacity group-hover:opacity-100">
+                  <div className="pointer-events-none absolute -top-0.5 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 ring-1 ring-veu/10 transition-opacity group-hover:opacity-100">
                     {b.name}: {format(b.value)}
                   </div>
                   <div className="w-full rounded-t-md transition-all" style={{ height: h, backgroundColor: b.color }} />
@@ -47,7 +47,7 @@ export function HBars({ items, format = fmtMoneyCompact, empty = "Sem dados." })
             </span>
             <span className="tnum shrink-0 font-medium text-slate-200">{format(it.value)}</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/5">
+          <div className="h-2 overflow-hidden rounded-full bg-veu/5">
             <div className="h-full rounded-full transition-all" style={{ width: `${(it.value / max) * 100}%`, backgroundColor: it.color }} />
           </div>
           {it.sub && <p className="mt-0.5 text-[11px] text-slate-500">{it.sub}</p>}
@@ -135,7 +135,7 @@ export function SobraMensal({ points, height = 200, format = fmtMoneyCompact, de
              role="img"
              aria-label={"Sobra mensal: " + points.map((p) => p.label + " " + format(p.sobrou)).join(", ")}>
           {/* zero: a referência que faltava na linha antiga */}
-          <div className="pointer-events-none absolute inset-x-0 z-0 border-t border-white/20" style={{ top: topoZero }} />
+          <div className="pointer-events-none absolute inset-x-0 z-0 border-t border-veu/20" style={{ top: topoZero }} />
 
           <div className="relative z-10 flex h-full items-stretch gap-1 sm:gap-1.5">
             {points.map((p, i) => {
@@ -169,7 +169,7 @@ export function SobraMensal({ points, height = 200, format = fmtMoneyCompact, de
                   {/* mês visto: valor sempre à vista, encostado na barra */}
                   {destacado && (
                     <span className={cx(
-                      "tnum pointer-events-none absolute z-20 whitespace-nowrap rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold",
+                      "tnum pointer-events-none absolute z-20 whitespace-nowrap rounded-md bg-veu/10 px-1.5 py-0.5 text-[10px] font-semibold",
                       // mesma âncora do tooltip: o mês visto é quase sempre o
                       // último, e centralizado ali o valor saía cortado
                       ancora,
@@ -185,7 +185,7 @@ export function SobraMensal({ points, height = 200, format = fmtMoneyCompact, de
                       corta também o que passa por cima — era o que fazia o tooltip
                       antigo simplesmente não aparecer. */}
                   <span className={cx(
-                    "pointer-events-none absolute bottom-0.5 z-30 whitespace-nowrap rounded-md bg-slate-900/95 px-2 py-1 text-[10px] leading-relaxed text-slate-200 opacity-0 ring-1 ring-white/10 transition-opacity group-hover:opacity-100",
+                    "pointer-events-none absolute bottom-0.5 z-30 whitespace-nowrap rounded-md bg-slate-900/95 px-2 py-1 text-[10px] leading-relaxed text-slate-200 opacity-0 ring-1 ring-veu/10 transition-opacity group-hover:opacity-100",
                     ancora
                   )}>
                     <b className="text-slate-100">{p.label}</b>
@@ -269,7 +269,7 @@ export function StackedBars({ data, series, height = 168, format = fmtMoneyCompa
                   return (
                     <div key={sr.key} className="group relative w-full shrink-0"
                          style={{ height: h, backgroundColor: sr.color, borderRadius: topo ? "4px 4px 0 0" : 0 }}>
-                      <span className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 ring-1 ring-white/10 transition-opacity group-hover:opacity-100">
+                      <span className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 ring-1 ring-veu/10 transition-opacity group-hover:opacity-100">
                         {sr.name}: {format(v)}
                       </span>
                     </div>

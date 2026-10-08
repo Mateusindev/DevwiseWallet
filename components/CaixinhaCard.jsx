@@ -18,7 +18,7 @@ export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) 
   const [configOpen, setConfigOpen] = useState(false);
 
   return (
-    <Card className="flex flex-col p-5 transition-colors hover:border-white/15">
+    <Card className="flex flex-col p-5 transition-colors hover:border-veu/15">
       {/* header */}
       <button onClick={onOpen}
               className="group flex items-start justify-between text-left cursor-pointer"
@@ -31,7 +31,7 @@ export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) 
               : <InfinityIcon size={18} className={a.text} />}
           </span>
           <div>
-            <h3 className="font-semibold text-white group-hover:underline decoration-white/30 underline-offset-4">
+            <h3 className="font-semibold text-ink group-hover:underline decoration-veu/30 underline-offset-4">
               {caixinha.nome}
             </h3>
             <p className="text-xs text-slate-400">
@@ -40,14 +40,14 @@ export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) 
           </div>
         </div>
         {caixinha.acumulaSobra && (
-          <Badge className="bg-white/5 text-slate-300">acumula sobra</Badge>
+          <Badge className="bg-veu/5 text-slate-300">acumula sobra</Badge>
         )}
       </button>
 
       {/* saldo */}
       <div className="mt-5">
         <p className="text-xs uppercase tracking-wide text-slate-500">Saldo</p>
-        <p className={`tnum text-2xl font-bold ${caixinha.saldo < 0 ? "text-rose-400" : "text-white"}`}>
+        <p className={`tnum text-2xl font-bold ${caixinha.saldo < 0 ? "text-rose-400" : "text-ink"}`}>
           {fmtMoney(caixinha.saldo)}
         </p>
       </div>
@@ -60,7 +60,7 @@ export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) 
               <span className="text-slate-400">Meta {fmtMoney(caixinha.meta)}</span>
               <span className={`tnum font-semibold ${a.text}`}>{Math.round((prog || 0) * 100)}%</span>
             </div>
-            <ProgressBar value={prog} fromClass={a.from} toClass="to-white/70" />
+            <ProgressBar value={prog} fromClass={a.from} toClass="to-veu/70" />
             <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-400">
               <span>
                 {falta > 0
@@ -83,12 +83,12 @@ export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) 
               <span aria-hidden>→</span>
             </button>
           ) : (
-            <div className="flex h-full items-center rounded-xl bg-white/4 px-3 py-3 text-xs text-slate-400">
+            <div className="flex h-full items-center rounded-xl bg-veu/4 px-3 py-3 text-xs text-slate-400">
               Reserva ainda não configurada.
             </div>
           )
         ) : (
-          <div className="flex h-full items-center rounded-xl bg-white/4 px-3 py-3 text-xs text-slate-400">
+          <div className="flex h-full items-center rounded-xl bg-veu/4 px-3 py-3 text-xs text-slate-400">
             {caixinha.acumulaSobra
               ? "Cofre flexível — recebe o que sobra no mês."
               : "Sem meta definida. Acumulando livremente."}
@@ -108,7 +108,7 @@ export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) 
           <Plus size={15} /> Aporte
         </button>
         <button onClick={onDespesa}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white/5 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/10 cursor-pointer">
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-veu/5 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-veu/10 cursor-pointer">
           <Minus size={15} /> Despesa
         </button>
       </div>

@@ -6,6 +6,7 @@ import { LayoutGrid, Receipt, PiggyBank, CreditCard, ShieldCheck, Users } from "
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 import { Spinner, Button } from "./ui/primitives.jsx";
+import { BotaoTema } from "./ui/tema.jsx";
 
 // Casca do app: navegação + gate do boot. O conteúdo de cada área virou rota de
 // verdade (`app/despesas/page.tsx` e cia.) em vez de `useState("view")` — o
@@ -85,6 +86,7 @@ export default function AppShell({ children }) {
             <NavItem key={n.href} {...n} ativo={estaAtivo(n.href, pathname)} desktop />
           ))}
         </nav>
+        <BotaoTema className="self-start" />
       </aside>
 
       {/* main */}
@@ -92,6 +94,7 @@ export default function AppShell({ children }) {
         {/* mobile topbar */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[var(--color-line)] bg-[var(--color-bg)]/90 px-4 py-3.5 backdrop-blur lg:hidden">
           <Brand />
+          <BotaoTema />
         </header>
 
         <main className="mx-auto w-full max-w-5xl px-4 py-6 pb-28 sm:px-6 lg:py-8 lg:pb-10">
@@ -116,7 +119,7 @@ function Brand() {
         <PiggyBank size={19} />
       </span>
       <div className="leading-tight">
-        <p className="font-bold text-white">Wallet</p>
+        <p className="font-bold text-ink">Wallet</p>
         <p className="text-[11px] text-slate-500">finanças pessoais</p>
       </div>
     </Link>
@@ -146,7 +149,7 @@ function NavItem({ href, label, icon: Icon, ativo, desktop }) {
         prefetch
         aria-current={ativo ? "page" : undefined}
         className={`${base} inline-flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
-          ativo ? "bg-blue-500/15 text-blue-300" : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+          ativo ? "bg-blue-500/15 text-blue-300" : "text-slate-400 hover:bg-veu/5 hover:text-slate-200"
         }`}
       >
         <Icon size={18} /> {label}

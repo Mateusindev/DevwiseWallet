@@ -54,7 +54,7 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
   return (
     <section className="space-y-5">
       <button onClick={onBack}
-              className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white cursor-pointer transition-colors">
+              className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-ink cursor-pointer transition-colors">
         <ArrowLeft size={16} /> Voltar
       </button>
 
@@ -65,7 +65,7 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
               <Target size={22} className={a.text} />
             </span>
             <div>
-              <h2 className="text-xl font-bold text-white">{caixinha.nome}</h2>
+              <h2 className="text-xl font-bold text-ink">{caixinha.nome}</h2>
               <p className="text-sm text-slate-400">
                 {caixinha.aporteMensal > 0 ? `${fmtMoney(caixinha.aporteMensal)}/mês` : "Sem aporte fixo"}
               </p>
@@ -74,14 +74,14 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
           <div className="flex items-start gap-3">
             <div className="text-right">
               <p className="text-xs uppercase tracking-wide text-slate-500">Saldo atual</p>
-              <p className={`tnum text-3xl font-bold ${caixinha.saldo < 0 ? "text-rose-400" : "text-white"}`}>
+              <p className={`tnum text-3xl font-bold ${caixinha.saldo < 0 ? "text-rose-400" : "text-ink"}`}>
                 {fmtMoney(caixinha.saldo)}
               </p>
             </div>
             {canEdit && (
               <div className="flex items-center gap-1">
                 <button onClick={() => setEditOpen(true)} aria-label="Editar caixinha"
-                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white cursor-pointer">
+                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-veu/10 hover:text-ink cursor-pointer">
                   <Pencil size={16} />
                 </button>
                 <button onClick={() => setConfirmDel(true)} aria-label="Excluir caixinha"
@@ -99,7 +99,7 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
               <span className="text-slate-400">Meta {fmtMoney(caixinha.meta)}</span>
               <span className={`tnum font-semibold ${a.text}`}>{Math.round((prog || 0) * 100)}%</span>
             </div>
-            <ProgressBar value={prog} fromClass={a.from} toClass="to-white/70" />
+            <ProgressBar value={prog} fromClass={a.from} toClass="to-veu/70" />
             <p className="mt-2 text-xs text-slate-400">
               {faltaParaMeta(caixinha) > 0
                 ? <>Faltam <span className="tnum text-slate-200">{fmtMoney(faltaParaMeta(caixinha))}</span> · estimativa de <span className="text-slate-200">{fmtMeses(mesesParaMeta(caixinha))}</span></>
@@ -172,7 +172,7 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
       <Modal open={confirmDel} onClose={() => !delBusy && setConfirmDel(false)} title="Excluir caixinha">
         <div className="space-y-4">
           <p className="text-sm text-slate-300">
-            Excluir <b className="text-white">{caixinha.nome}</b>?
+            Excluir <b className="text-ink">{caixinha.nome}</b>?
           </p>
           <p className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-xs text-rose-200 ring-1 ring-rose-500/20">
             Apaga a caixinha e <b>todas as movimentações</b> (aportes e despesas) dela.

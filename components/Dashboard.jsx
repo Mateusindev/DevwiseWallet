@@ -223,15 +223,15 @@ export default function Dashboard({ onOpenCaixinha }) {
           <div className="space-y-5">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-500">Total guardado</p>
-              <p className="tnum text-3xl font-bold text-white sm:text-4xl">{fmtMoney(saldo)}</p>
+              <p className="tnum text-3xl font-bold text-ink sm:text-4xl">{fmtMoney(saldo)}</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-white/4 p-3">
+              <div className="rounded-xl bg-veu/4 p-3">
                 <PiggyBank size={15} className="mb-1.5 text-slate-500" />
                 <p className="text-[11px] leading-tight text-slate-500">Aporte mensal</p>
                 <p className="tnum text-sm font-bold text-emerald-400">{fmtMoney(aporteMensal)}</p>
               </div>
-              <div className="rounded-xl bg-white/4 p-3">
+              <div className="rounded-xl bg-veu/4 p-3">
                 <div className="mb-1.5 flex items-center justify-between">
                   <Target size={15} className="text-slate-500" />
                   {metas.qtd > 0 && (
@@ -252,7 +252,7 @@ export default function Dashboard({ onOpenCaixinha }) {
           </div>
           <div className="flex justify-center">
             <Donut
-              segments={segments.length ? segments : [{ value: 1, color: "rgba(255,255,255,0.06)" }]}
+              segments={segments.length ? segments : [{ value: 1, color: "var(--color-trilho)" }]}
               centerLabel={fmtMoney(saldo).replace("R$ ", "R$ ")}
             />
           </div>
@@ -271,7 +271,7 @@ export default function Dashboard({ onOpenCaixinha }) {
       {/* caixinhas */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Caixinhas</h3>
+          <h3 className="text-lg font-semibold text-ink">Caixinhas</h3>
           {can("caixinha:manage") && (
             <button onClick={() => setNovaMode(temReserva ? "normal" : "choose")}
               className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
@@ -296,7 +296,7 @@ export default function Dashboard({ onOpenCaixinha }) {
       {can("orcamento:view") && (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+            <h3 className="flex items-center gap-2 text-lg font-semibold text-ink">
               Gráficos do orçamento
               {vizLoading && <Spinner className="h-4 w-4 border-slate-500/40 border-t-slate-300" />}
             </h3>
@@ -325,7 +325,7 @@ export default function Dashboard({ onOpenCaixinha }) {
           {/* Evolução mensal */}
           <Card className="p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">Entradas × saídas · 6 meses</h3>
+              <h3 className="text-sm font-semibold text-ink">Entradas × saídas · 6 meses</h3>
               <Legend items={[{ name: "Recebido", color: "#10b981" }, { name: "Gasto", color: "#f43f5e" }]} />
             </div>
             <GroupedBars
@@ -340,7 +340,7 @@ export default function Dashboard({ onOpenCaixinha }) {
             {/* Sobra mensal — 12 meses (a janela do orçamento já traz esse histórico) */}
             <Card className="p-5">
               <div className="mb-4 flex items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold text-white">Sobra mensal</h3>
+                <h3 className="text-sm font-semibold text-ink">Sobra mensal</h3>
                 <span className="text-[11px] text-slate-500">recebido − gasto</span>
               </div>
               <SobraMensal points={serieSobra} destaque={ym} />
@@ -348,7 +348,7 @@ export default function Dashboard({ onOpenCaixinha }) {
 
             {/* Despesas por categoria */}
             <Card className="p-5">
-              <h3 className="mb-4 text-sm font-semibold text-white">Despesas por categoria</h3>
+              <h3 className="mb-4 text-sm font-semibold text-ink">Despesas por categoria</h3>
               {porCategoria.length === 0 ? (
                 <p className="py-10 text-center text-sm text-slate-500">Nenhuma despesa neste mês.</p>
               ) : (
@@ -371,19 +371,19 @@ export default function Dashboard({ onOpenCaixinha }) {
 
             {/* Top despesas fixas */}
             <Card className="p-5">
-              <h3 className="mb-4 text-sm font-semibold text-white">Maiores despesas fixas</h3>
+              <h3 className="mb-4 text-sm font-semibold text-ink">Maiores despesas fixas</h3>
               <HBars items={topFixas} empty="Nenhuma despesa fixa ativa." />
             </Card>
 
             {/* Cartões */}
             <Card className="p-5">
-              <h3 className="mb-4 text-sm font-semibold text-white">Uso dos cartões</h3>
+              <h3 className="mb-4 text-sm font-semibold text-ink">Uso dos cartões</h3>
               {cart.limite === 0 ? (
                 <p className="py-10 text-center text-sm text-slate-500">Nenhum cartão cadastrado.</p>
               ) : (
                 <div className="flex flex-col items-center gap-5 sm:flex-row">
                   <Donut size={150}
-                         segments={[{ value: cart.usado, color: "#fb7185" }, { value: Math.max(cart.disponivel, 0), color: "rgba(255,255,255,0.06)" }]}
+                         segments={[{ value: cart.usado, color: "#fb7185" }, { value: Math.max(cart.disponivel, 0), color: "var(--color-trilho)" }]}
                          centerSub="usado" centerLabel={`${Math.round(cart.pct * 100)}%`} />
                   <dl className="flex-1 space-y-2.5 self-stretch text-sm">
                     <KV label="Limite total" value={fmtMoney(cart.limite)} />
@@ -395,7 +395,7 @@ export default function Dashboard({ onOpenCaixinha }) {
             </Card>
             {/* Fixas × variáveis: mostra se o aperto é estrutural ou pontual */}
             <Card className="p-5 lg:col-span-2">
-              <h3 className="mb-4 text-sm font-semibold text-white">Fixas × variáveis · 6 meses</h3>
+              <h3 className="mb-4 text-sm font-semibold text-ink">Fixas × variáveis · 6 meses</h3>
               <StackedBars
                 destaque={ym}
                 series={[
@@ -413,7 +413,7 @@ export default function Dashboard({ onOpenCaixinha }) {
 
             {/* Categoria ao longo do tempo */}
             <Card className="p-5 lg:col-span-2">
-              <h3 className="mb-4 text-sm font-semibold text-white">Categorias · 6 meses</h3>
+              <h3 className="mb-4 text-sm font-semibold text-ink">Categorias · 6 meses</h3>
               <StackedBars
                 destaque={ym}
                 series={categoriaNoTempo.series}
@@ -424,7 +424,7 @@ export default function Dashboard({ onOpenCaixinha }) {
 
             {/* Gasto por página no mês (todas as páginas, não só a visualizada) */}
             <Card className="p-5 lg:col-span-2">
-              <h3 className="mb-1 text-sm font-semibold text-white">Gasto por página · {fmtMonthLabel(ym)}</h3>
+              <h3 className="mb-1 text-sm font-semibold text-ink">Gasto por página · {fmtMonthLabel(ym)}</h3>
               <p className="mb-4 text-xs text-slate-500">Fixas do mês + despesas lançadas, em todas as páginas.</p>
               {carregandoEspacos ? (
                 <SkeletonLines lines={3} />
@@ -472,7 +472,7 @@ function KV({ label, value, tone, strong }) {
   const color = tone === "rose" ? "text-rose-400" : tone === "emerald" ? "text-emerald-400" : "text-slate-200";
   return (
     <div className="flex items-center justify-between">
-      <dt className={strong ? "font-semibold text-white" : "text-slate-400"}>{label}</dt>
+      <dt className={strong ? "font-semibold text-ink" : "text-slate-400"}>{label}</dt>
       <dd className={`tnum ${strong ? "font-bold" : ""} ${color}`}>{value}</dd>
     </div>
   );
@@ -495,12 +495,12 @@ function TipoOpcao({ icon: Icon, tone, title, desc, onClick }) {
   const tones = { emerald: "text-emerald-400 bg-emerald-500/15", blue: "text-blue-400 bg-blue-500/15" };
   return (
     <button onClick={onClick}
-      className="flex w-full items-center gap-3.5 rounded-xl border border-[var(--color-line)] bg-white/[0.02] p-4 text-left hover:border-white/25 hover:bg-white/5 cursor-pointer transition-colors">
+      className="flex w-full items-center gap-3.5 rounded-xl border border-[var(--color-line)] bg-veu/[0.02] p-4 text-left hover:border-veu/25 hover:bg-veu/5 cursor-pointer transition-colors">
       <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tones[tone]}`}>
         <Icon size={19} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block font-semibold text-white">{title}</span>
+        <span className="block font-semibold text-ink">{title}</span>
         <span className="block text-xs text-slate-400">{desc}</span>
       </span>
       <ChevronRight size={18} className="shrink-0 text-slate-500" />

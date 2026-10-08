@@ -23,7 +23,7 @@ export default function BulkBar({ quantos, total, label, aviso, erro, onLimpar, 
         <div className="flex flex-wrap items-center gap-2">
           <div className="mr-auto flex items-center gap-2 pl-1">
             <button type="button" onClick={onLimpar} aria-label="Limpar seleção"
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer transition-colors">
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-veu/10 hover:text-ink cursor-pointer transition-colors">
               <X size={16} />
             </button>
             <p className="text-sm text-slate-200">
@@ -45,7 +45,7 @@ export function BulkAcao({ onClick, disabled, tone = "ghost", children }) {
   // nada): sem a pendência automática o segundo clique disparava o lote de novo.
   const [pendente, clique] = usePendenteDoClique(onClick);
   const tons = {
-    ghost: "bg-white/5 text-slate-200 hover:bg-white/10",
+    ghost: "bg-veu/5 text-slate-200 hover:bg-veu/10",
     primary: "bg-blue-600 text-white hover:bg-blue-500",
     growth: "bg-emerald-600 text-white hover:bg-emerald-500",
     danger: "bg-rose-600/90 text-white hover:bg-rose-600",

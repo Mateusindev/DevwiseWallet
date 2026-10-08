@@ -18,7 +18,7 @@ export default function Pessoas() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
           <Users size={20} /> Pessoas
         </h2>
         <MonthStepper value={ym} onValue={setYm} min={meses[0]} max={meses[meses.length - 1]} />

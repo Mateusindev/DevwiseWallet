@@ -21,6 +21,14 @@ export const metadata: Metadata = {
 // daqui a sequência era HTML vazio → baixa/hidrata o bundle → `me()` no
 // useEffect → só então `getState()`; dois round-trips que nem dava pra
 // prefetchar.
+// Tema aplicado ANTES da primeira pintura. Tem que ser script inline no <head>:
+// o valor mora no localStorage (não existe no servidor), então qualquer leitura
+// em efeito de React só aconteceria depois da hidratação — e o usuário de tema
+// claro veria um flash do fundo escuro a cada navegação com recarga.
+// `suppressHydrationWarning` no <html> porque é justamente este script que muda
+// o atributo entre o HTML do servidor e a hidratação.
+const TEMA_INLINE = `(function(){try{var t=localStorage.getItem("wallet:tema");if(t!=="claro"&&t!=="escuro"){t=window.matchMedia("(prefers-color-scheme: light)").matches?"claro":"escuro";}document.documentElement.dataset.tema=t;}catch(e){}})();`;
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const usuario = sessaoAtual().catch(() => null);
   // sem sessão (ou sem state:view) o boot resolve null e o cliente cai no fluxo
@@ -31,7 +39,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     .catch(() => null);
 
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TEMA_INLINE }} />
+      </head>
       <body>
         <Suspense fallback={<Carregando />}>
           <Boot usuarioPromise={usuario} estadoPromise={estado}>
