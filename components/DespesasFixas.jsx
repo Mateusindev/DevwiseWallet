@@ -75,12 +75,12 @@ function CartaoBadge({ d, cartoesMap, ym }) {
 }
 
 // Valor da linha: o efetivo (só a parte do dono quando abate o rateio) com o
-// cheio riscado de referência. Linha paga fica em cinza — o status já está no
-// botão de pagamento; pintar a linha inteira de verde era ruído.
+// cheio riscado de referência. Linha paga: a linha inteira fica verde (ver
+// `Linha`) e o valor acompanha, na tinta verde do tema.
 function ValorLinha({ d, quitada, sinal }) {
   return (
     <span className="flex flex-col items-end leading-tight">
-      <span className={`tnum text-[15px] font-semibold ${sinal === "+" ? "text-emerald-400" : quitada ? "text-slate-400" : "text-ink"}`}>
+      <span className={`tnum text-[15px] font-semibold ${sinal === "+" || quitada ? "text-emerald-300" : "text-ink"}`}>
         {sinal}{fmtMoney(sinal === "+" ? d.valor : valorEfetivoLinha(d))}
       </span>
       {/* abateShares: o total conta só a parte do dono; o cheio fica de referência */}
@@ -94,10 +94,18 @@ function ValorLinha({ d, quitada, sinal }) {
 // Linha de lista (receita, despesa do mês, fixa). No desktop é uma linha só:
 // seleção · texto · valor · ações. No celular o valor fica à direita do texto
 // e as ações descem pra uma faixa própria, alinhada à direita.
-function Linha({ selecionada, apagada, sel, children, valor, acoes }) {
+// `paga`: a linha inteira fica verde — quitar é o fim do trabalho com ela, e a
+// lista do mês vira um placar de quanto já foi resolvido. Seleção ganha da cor
+// (é o estado que está sendo mexido agora).
+function Linha({ selecionada, apagada, paga, sel, children, valor, acoes }) {
+  const fundo = selecionada
+    ? "bg-blue-500/[0.06]"
+    : paga
+      ? "bg-emerald-500/[0.13] hover:bg-emerald-500/[0.17]"
+      : "hover:bg-veu/[0.02]";
   return (
-    <li className={`flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-3.5 transition-colors sm:flex-nowrap sm:items-center sm:px-5 ${
-      selecionada ? "bg-blue-500/[0.06]" : "hover:bg-veu/[0.02]"} ${apagada ? "opacity-60" : ""}`}>
+    <li data-paga={paga || undefined}
+      className={`flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-3.5 transition-colors duration-300 sm:flex-nowrap sm:items-center sm:px-5 ${fundo} ${apagada ? "opacity-60" : ""}`}>
       {sel && <span className="flex h-6 items-center sm:h-auto">{sel}</span>}
       <div className="min-w-0 flex-1">{children}</div>
       <div className="flex shrink-0 justify-end sm:w-32">{valor}</div>
@@ -430,6 +438,7 @@ export default function DespesasFixas() {
                   return (
                     <Linha key={d.id}
                       selecionada={selMes.tem(d.id)}
+                      paga={pago}
                       sel={canOrc && (
                         <Checkbox checked={selMes.tem(d.id)} onChecked={() => {}}
                                   onClick={(e) => marcarMes(d.id, e.shiftKey)}
@@ -518,6 +527,7 @@ export default function DespesasFixas() {
                   return (
                     <Linha key={d.id}
                       selecionada={selFixas.tem(d.id)}
+                      paga={paga}
                       apagada={!d.ativa}
                       sel={canOrc && (
                         <Checkbox checked={selFixas.tem(d.id)} onChecked={() => {}}
@@ -1048,7 +1058,7 @@ function PagarControl({ valor, valorPago = 0, onSet }) {
     return (
       <button onClick={() => set(0)} disabled={busy} aria-pressed
         title="Desfazer pagamento"
-        className={`${base} bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25`}>
+        className={`${base} bg-emerald-500/25 text-emerald-300 hover:bg-emerald-500/35`}>
         {busy ? <Spinner className="h-3.5 w-3.5" /> : <Check size={14} strokeWidth={2.5} />}
         Paga
       </button>
