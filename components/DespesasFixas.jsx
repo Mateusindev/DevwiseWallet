@@ -770,8 +770,8 @@ export default function DespesasFixas() {
 // apareciam no hover, ou seja, inalcançáveis no toque.
 function EspacoTabs({ ym }) {
   const {
-    espacos, espacosOcultos, activeEspacoId, orcamentoStatus,
-    setActiveEspaco, ocultarEspacoMes, restaurarEspacoMes, removeEspaco,
+    espacos, espacosOcultos, activeEspacoId, orcamentoStatus, espacoPendente,
+    setActiveEspaco, prefetchEspaco, ocultarEspacoMes, restaurarEspacoMes, removeEspaco,
   } = useFinance();
   const [novoOpen, setNovoOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null); // espaço a ocultar do mês
@@ -809,17 +809,21 @@ function EspacoTabs({ ym }) {
       <div className="flex items-end gap-2 border-b border-[var(--color-line)]">
         <div role="tablist" aria-label="Páginas de despesa" className="-mb-px flex min-w-0 flex-1 gap-5 overflow-x-auto">
           {visiveis.map((e) => {
-            const active = e.id === activeEspacoId;
+            // A aba clicada acende NA HORA (o conteúdo fica esmaecido até o
+            // orçamento chegar); hover/foco já pré-carregam o orçamento dela.
+            const active = e.id === (espacoPendente ?? activeEspacoId);
+            const vem = () => prefetchEspaco(e.id);
             return (
               <div key={e.id} className="flex shrink-0 items-center gap-0.5">
-                <button role="tab" aria-selected={active} onClick={() => setActiveEspaco(e.id)} disabled={loading}
+                <button role="tab" aria-selected={active} onClick={() => setActiveEspaco(e.id).catch(() => {})}
+                  onPointerEnter={vem} onFocus={vem} onTouchStart={vem}
                   className={`relative inline-flex h-11 items-center gap-2 whitespace-nowrap border-b-2 text-sm transition-colors cursor-pointer disabled:cursor-not-allowed ${
                     active ? "border-ink font-semibold text-ink" : "border-transparent text-slate-400 hover:text-ink"}`}>
                   {e.emoji && <span>{e.emoji}</span>}
                   {e.nome}
                   {active && loading && <Spinner className="h-3.5 w-3.5" />}
                 </button>
-                {active && (podeExcluir || podeExcluirPerm) && (
+                {active && !loading && (podeExcluir || podeExcluirPerm) && (
                   <RPopover.Root>
                     <RPopover.Trigger asChild>
                       <IconButton className="h-7 w-7" aria-label={`Opções de ${e.nome}`} title="Opções da página">

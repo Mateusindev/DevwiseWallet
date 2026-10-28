@@ -1,7 +1,8 @@
-import { createContext, use, useContext, useCallback, useEffect, useReducer, useState } from "react";
+import { createContext, use, useContext, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import * as api from "../services/financeApi";
 import { useAuth } from "../components/AuthGate";
 import { currentMonthKey } from "../lib/format.js";
+import { leituraDiretaAtiva } from "../lib/supabase";
 
 // ── State shape ────────────────────────────────────────────────────────────
 // GLOBAL: caixinhas, movimentacoes (economias compartilhadas).
@@ -19,6 +20,7 @@ const initial = {
   espacosOcultos: [], // [{ espacoId, ym }] — páginas excluídas só num mês (reversível)
   activeEspacoId: null,
   orcamentoStatus: "ready", // troca de espaço (in-page): ready | loading
+  espacoPendente: null, // aba clicada cujo orçamento ainda está vindo
   // orçamento do espaço ativo
   despesasFixas: [],
   despesasMes: [],
@@ -58,9 +60,11 @@ function reducer(state, action) {
 
     // troca de espaço de despesa (não recarrega caixinhas)
     case "ORC_LOADING":
-      return { ...state, orcamentoStatus: "loading" };
+      return { ...state, orcamentoStatus: "loading", espacoPendente: action.id ?? null };
     case "SET_ORCAMENTO":
-      return { ...state, activeEspacoId: action.id, orcamentoStatus: "ready", ...action.orcamento };
+      return { ...state, activeEspacoId: action.id, orcamentoStatus: "ready", espacoPendente: null, ...action.orcamento };
+    case "ORC_FALHOU":
+      return { ...state, orcamentoStatus: "ready", espacoPendente: null };
 
     case "ADD_ESPACO":
       return { ...state, espacos: [...state.espacos, action.esp] };
@@ -271,6 +275,16 @@ const semear = (p) => (p ? reducer(initial, { type: "BOOT_OK", p }) : initial);
 // antes de o bundle existir e o React suspende aqui. Sem ela (ou com um estado
 // de outra sessão — logout e login com outra conta reaproveitariam a mesma
 // Promise) o provider volta a buscar no efeito, como antes.
+// Grava a página ativa num tique SEPARADO da troca. Server Action roda dentro
+// de uma transition do React; disparada no mesmo tique do `SET_ORCAMENTO`, a
+// atualização da tela ficava presa nela e só pintava quando a resposta da
+// escrita voltava (~uma volta de rede a mais, medido).
+function gravarAtivaDepois(id) {
+  setTimeout(() => {
+    api.setActiveEspaco(id).catch(() => { /* viewer: troca só local */ });
+  }, 0);
+}
+
 export function FinanceProvider({ children, estadoPromise }) {
   const { user } = useAuth();
   const doServidor = estadoPromise ? use(estadoPromise) : null;
@@ -328,6 +342,20 @@ export function FinanceProvider({ children, estadoPromise }) {
     }
   }, []);
 
+  // Com leitura direta (HTTP em paralelo, fora da fila das actions), as outras
+  // páginas visíveis já ficam no cache assim que a ativa está pronta — trocar
+  // de aba vira instantâneo. Pelas actions não: entraria na fila serial e
+  // atrasaria o próximo clique; aí só o hover na aba pré-carrega.
+  const alvoEspaco = useRef(null);
+  const outrasPaginas = state.espacos
+    .filter((e) => e.id !== esp && !state.espacosOcultos.some((o) => o.espacoId === e.id && o.ym === ym))
+    .map((e) => e.id)
+    .join(",");
+  useEffect(() => {
+    if (state.orcamentoStatus !== "ready" || !outrasPaginas || !leituraDiretaAtiva()) return;
+    for (const id of outrasPaginas.split(",")) api.getOrcamento(id, ym).catch(() => {});
+  }, [state.orcamentoStatus, outrasPaginas, ym]);
+
   const actions = {
     refresh: bootstrap,
     reloadCartoes,
@@ -365,13 +393,31 @@ export function FinanceProvider({ children, estadoPromise }) {
     },
 
     // ── Espaços de despesa ───────────────────────────────────────────────────
+    // Troca de página: LÊ primeiro e grava depois. Antes era o contrário — a
+    // tela esperava a escrita (validar dono + upsert, duas idas ao banco em
+    // série) só pra então pedir o orçamento. Gravar qual página está ativa é
+    // preferência, não dado: vai em segundo plano, e se falhar (sem
+    // espaco:manage → 403) a troca vale só nesta sessão, como antes.
+    // Cliques rápidos (A → B → C): só o último alvo aplica o resultado.
     async setActiveEspaco(id) {
-      if (id === esp) return;
-      dispatch({ type: "ORC_LOADING" });
-      // sem espaco:manage o PUT /active falha (403) — troca vira só local
-      try { await api.setActiveEspaco(id); } catch { /* viewer */ }
-      const orcamento = await api.getOrcamento(id, ym);
+      if (id === esp && !state.espacoPendente) return;
+      alvoEspaco.current = id;
+      dispatch({ type: "ORC_LOADING", id });
+      let orcamento;
+      try {
+        orcamento = await api.getOrcamento(id, ym);
+      } catch (e) {
+        if (alvoEspaco.current === id) dispatch({ type: "ORC_FALHOU" });
+        throw e;
+      }
+      if (alvoEspaco.current !== id) return;
       dispatch({ type: "SET_ORCAMENTO", id, orcamento });
+      gravarAtivaDepois(id);
+    },
+    // Pré-carrega o orçamento de uma página (hover/foco na aba): o clique
+    // seguinte sai do cache do `financeApi`.
+    prefetchEspaco(id) {
+      if (id && id !== esp) api.getOrcamento(id, ym).catch(() => {});
     },
     async addEspaco(dto) {
       const novo = await api.addEspaco(dto);
@@ -403,9 +449,9 @@ export function FinanceProvider({ children, estadoPromise }) {
         );
         const proxima = state.espacos.find((e) => !ocultosNoMes.has(e.id));
         if (proxima && proxima.id !== esp) {
-          await api.setActiveEspaco(proxima.id);
           const orcamento = await api.getOrcamento(proxima.id, ym);
           dispatch({ type: "SET_ORCAMENTO", id: proxima.id, orcamento });
+          gravarAtivaDepois(proxima.id);
         }
       }
     },

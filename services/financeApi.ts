@@ -183,6 +183,7 @@ function unwrapAction<T>(r: ActionResult<T>): T {
 // todas de uma vez), então a janela serve pra matar rajada de request, não pra
 // servir dado velho.
 const TTL_LEITURA_MS = 20_000;
+const TTL_ORCAMENTO_MS = 120_000;
 const leituras = new Map<string, { em: number; p: Promise<unknown> }>();
 
 export function invalidarLeituras() {
@@ -199,9 +200,9 @@ async function mutar<T>(p: Promise<ActionResult<T>>): Promise<T> {
   }
 }
 
-function ler<T>(chave: string, fn: () => Promise<T>): Promise<T> {
+function ler<T>(chave: string, fn: () => Promise<T>, ttl = TTL_LEITURA_MS): Promise<T> {
   const atual = leituras.get(chave);
-  if (atual && Date.now() - atual.em < TTL_LEITURA_MS) return atual.p as Promise<T>;
+  if (atual && Date.now() - atual.em < ttl) return atual.p as Promise<T>;
   // erro não fica em cache: a próxima tentativa tem que ir no servidor de novo
   const p = fn().catch((e) => {
     if (leituras.get(chave)?.p === p) leituras.delete(chave);
@@ -356,8 +357,12 @@ export async function getEspacos() {
   return unwrapAction(await listarEspacos());
 }
 
+// Exceção consciente ao `mutar`: gravar qual página está ativa não muda dado
+// nenhum que alguma leitura em cache carregue (o `getBootstrap`, que devolve
+// `activeEspacoId`, não passa pelo `ler`). Invalidar aqui jogava fora o
+// orçamento das outras páginas a cada troca — ir e voltar refazia tudo.
 export async function setActiveEspaco(id: string) {
-  return mutar(definirEspacoAtivo({ id }));
+  return unwrapAction(await definirEspacoAtivo({ id }));
 }
 
 export async function addEspaco(dto: z.input<typeof createEspacoSchema>) {
@@ -375,11 +380,16 @@ export async function removeEspaco(id: string) {
 // Traz o orçamento numa janela de meses ao redor de `ym` (o payload devolve
 // `janela` — quem consome refaz a busca quando o mês visto sai dela).
 export async function getOrcamento(espacoId: string, ym?: string) {
-  return ler(`orcamento:${espacoId}:${ym ?? ""}`, () =>
-    diretoOuAction(
-      () => getOrcamentoDireto(espacoId, ym),
-      async () => unwrapAction(await orcamentoDoEspaco(espacoId, ym))
-    )
+  return ler(
+    `orcamento:${espacoId}:${ym ?? ""}`,
+    () =>
+      diretoOuAction(
+        () => getOrcamentoDireto(espacoId, ym),
+        async () => unwrapAction(await orcamentoDoEspaco(espacoId, ym))
+      ),
+    // 2 min: é o que deixa a troca de página servir o que foi pré-carregado
+    // (toda mutação limpa o cache, então não serve dado velho do próprio app)
+    TTL_ORCAMENTO_MS
   );
 }
 

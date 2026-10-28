@@ -97,3 +97,10 @@ export function usuarioDoToken(): string | null {
     return null;
   }
 }
+
+// A leitura direta está valendo AGORA (token válido em mãos)? Quem pré-carrega
+// em segundo plano só faz isso quando o pedido é HTTP comum ao PostgREST —
+// pelas actions ele entraria na fila serial e atrasaria o clique do usuário.
+export function leituraDiretaAtiva(): boolean {
+  return disponivel === true && valido(atual);
+}
