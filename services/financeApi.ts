@@ -142,19 +142,26 @@ const client = hc<AppType>("/");
 // Corpo (json) esperado por um endpoint, inferido do próprio client.
 type Body<T> = InferRequestType<T> extends { json: infer J } ? J : never;
 
-// Erro de API com o que o back mandou: `status` e, no 422, os `issues` do zod
-// (é o que deixa o form marcar o campo culpado em vez de só mostrar
-// "Validação falhou"). Continua sendo um Error — `catch (e) { e.message }` segue
-// funcionando.
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly issues?: unknown[]
-  ) {
-    super(message);
-    this.name = "ApiError";
-  }
+// `ApiError` mora em arquivo próprio: a leitura direta (`leituraDireta.ts`)
+// também lança, e importar daqui fecharia ciclo.
+import { ApiError } from "./apiError";
+import {
+  getBootstrapDireto,
+  getOrcamentoDireto,
+  getResumoEspacosDireto,
+  getResumoCartoesDireto,
+  getCartoesDireto,
+  getParceladasDireto,
+  getFaturaLinhasDireto,
+} from "./leituraDireta";
+import { esquecerToken } from "@/lib/supabase";
+export { ApiError };
+
+// Leitura quente: direto do Supabase quando este ambiente/usuário permite
+// (`leituraDireta.ts` devolve null quando não), senão pela Server Action. O
+// shape é o mesmo nos dois caminhos — quem chama não sabe de onde veio.
+async function diretoOuAction<T>(direto: () => Promise<T | null>, action: () => Promise<T>): Promise<T> {
+  return (await direto()) ?? action();
 }
 
 // Server Function: o resultado é discriminado (não há status HTTP), então o
@@ -222,15 +229,19 @@ async function unwrap<
 // JWT fica em cookie httpOnly — o front nunca vê o token, só o AuthUser.
 export type AuthUser = Awaited<ReturnType<typeof login>>;
 
+// Token de leitura direta é por usuário: login novo nunca herda o anterior.
 export async function login(email: string, senha: string) {
+  esquecerToken();
   return mutar(entrar({ email, senha }));
 }
 
 export async function register(nome: string, email: string, senha: string) {
+  esquecerToken();
   return mutar(cadastrar({ nome, email, senha }));
 }
 
 export async function logout() {
+  esquecerToken();
   return mutar(sair());
 }
 
@@ -289,7 +300,10 @@ export async function listPermissions() {
 // `ym` centra a janela de histórico do orçamento que vem embutido. No boot
 // servido isso já vem pronto do RSC; aqui é o caminho do refresh.
 export async function getBootstrap(ym?: string) {
-  return unwrapAction(await estadoInicial(ym));
+  return diretoOuAction(
+    () => getBootstrapDireto(ym),
+    async () => unwrapAction(await estadoInicial(ym))
+  );
 }
 
 // ── Caixinhas / movimentações (da conta, não por espaço) ─────────────────────
@@ -361,12 +375,19 @@ export async function removeEspaco(id: string) {
 // Traz o orçamento numa janela de meses ao redor de `ym` (o payload devolve
 // `janela` — quem consome refaz a busca quando o mês visto sai dela).
 export async function getOrcamento(espacoId: string, ym?: string) {
-  return ler(`orcamento:${espacoId}:${ym ?? ""}`, async () => unwrapAction(await orcamentoDoEspaco(espacoId, ym)));
+  return ler(`orcamento:${espacoId}:${ym ?? ""}`, () =>
+    diretoOuAction(
+      () => getOrcamentoDireto(espacoId, ym),
+      async () => unwrapAction(await orcamentoDoEspaco(espacoId, ym))
+    )
+  );
 }
 
 // Gasto do mês por espaço — base do gráfico "por página" do Início.
 export async function getResumoEspacos(ym?: string) {
-  return ler(`resumoEspacos:${ym ?? ""}`, async () => unwrapAction(await resumoDoMes(ym)));
+  return ler(`resumoEspacos:${ym ?? ""}`, () =>
+    diretoOuAction(() => getResumoEspacosDireto(ym), async () => unwrapAction(await resumoDoMes(ym)))
+  );
 }
 
 // Oculta / restaura o espaço só no mês ym (exclusão reversível daquele mês).
@@ -380,7 +401,9 @@ export async function restaurarEspacoMes(id: string, ym: string) {
 
 // Resumo da fatura mês a mês (por cartão e por categoria) — base dos gráficos.
 export async function getResumoCartoes(de?: string, ate?: string) {
-  return ler(`resumoCartoes:${de ?? ""}:${ate ?? ""}`, async () => unwrapAction(await resumoDeCartoes(de, ate)));
+  return ler(`resumoCartoes:${de ?? ""}:${ate ?? ""}`, () =>
+    diretoOuAction(() => getResumoCartoesDireto(de, ate), async () => unwrapAction(await resumoDeCartoes(de, ate)))
+  );
 }
 
 // ── Despesas fixas (por espaço) ──────────────────────────────────────────────
@@ -487,7 +510,9 @@ export async function removeReceitaMes(espacoId: string, id: string) {
 
 // ── Cartões de crédito (da conta, não por espaço) ────────────────────────────
 export async function getCartoes(ym?: string) {
-  return ler(`cartoes:${ym ?? ""}`, async () => unwrapAction(await listarCartoes(ym)));
+  return ler(`cartoes:${ym ?? ""}`, () =>
+    diretoOuAction(() => getCartoesDireto(ym), async () => unwrapAction(await listarCartoes(ym)))
+  );
 }
 
 export async function addCartao(dto: z.input<typeof createCartaoSchema>) {
@@ -505,12 +530,19 @@ export async function removeCartao(id: string) {
 // Parceladas em aberto da conta (todos os espaços) + pagamentos do mês.
 // Base do painel de quitação na aba de cartões.
 export async function getParceladas(ym?: string) {
-  return ler(`parceladas:${ym ?? ""}`, async () => unwrapAction(await listarParceladas(ym)));
+  return ler(`parceladas:${ym ?? ""}`, () =>
+    diretoOuAction(() => getParceladasDireto(ym), async () => unwrapAction(await listarParceladas(ym)))
+  );
 }
 
 // Linhas da fatura de um cartão num mês (pra escolher qual compartilhar).
 export async function getFaturaLinhas(cartaoId: string, ym?: string) {
-  return ler(`faturaLinhas:${cartaoId}:${ym ?? ""}`, async () => unwrapAction(await linhasDaFatura(cartaoId, ym)));
+  return ler(`faturaLinhas:${cartaoId}:${ym ?? ""}`, () =>
+    diretoOuAction(
+      () => getFaturaLinhasDireto(cartaoId, ym),
+      async () => unwrapAction(await linhasDaFatura(cartaoId, ym))
+    )
+  );
 }
 
 // ── Compartilhamento (contatos + shares + convites + adoção) ─────────────────

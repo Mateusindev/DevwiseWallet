@@ -1,24 +1,14 @@
 import type { Caixinha } from "@prisma/client";
 import { caixinhaRepository } from "./caixinha.repository";
 import { NotFoundError } from "@/server/lib/errors";
-import { num, numOrNull, round } from "@/server/lib/serialize";
+import { round } from "@/server/lib/serialize";
 import type { CreateCaixinhaDTO, UpdateCaixinhaDTO } from "./caixinha.dto";
 
-// Caixinha serializada (formato do mock/front).
-export function toView(cx: Caixinha) {
-  return {
-    id: cx.id,
-    nome: cx.nome,
-    tipo: cx.tipo ?? null,
-    aporteMensal: num(cx.aporteMensal),
-    taxaJuros: num(cx.taxaJuros),
-    meta: numOrNull(cx.meta),
-    saldo: num(cx.saldo),
-    cor: cx.cor,
-    acumulaSobra: cx.acumulaSobra,
-    ordem: cx.ordem,
-  };
-}
+import { toView } from "./caixinha.view";
+
+// Caixinha serializada (formato do front) — em `caixinha.view.ts`, que o
+// navegador também usa.
+export { toView };
 
 export const caixinhaService = {
   async list(userId: string) {

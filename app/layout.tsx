@@ -1,14 +1,30 @@
 import { Suspense } from "react";
-import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import type { Metadata, Viewport } from "next";
+import { Manrope } from "next/font/google";
 import "./globals.css";
 import Boot from "./boot";
 import { sessaoAtual } from "@/server/next/session";
 import { getState } from "@/server/modules/bootstrap/bootstrap.service";
 import { authService } from "@/server/auth/auth.service";
+import { tokenDeLeitura } from "@/server/auth/supabase-token";
+
+// Manrope: grotesca de algarismos largos e tabulares — é ela que carrega o
+// saldo. Variável (200–800), então o peso "bold" do tema pode ser 650.
+const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Wallet",
   description: "finanças pessoais",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0c0d0f" },
+    { media: "(prefers-color-scheme: light)", color: "#f3f5f7" },
+  ],
 };
 
 // O boot mora no layout, não numa página: sessão + estado financeiro + casca
@@ -37,15 +53,23 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   const estado = usuario
     .then(async (u) => (u && (await authService.can(u, "state:view")) ? getState(u.id) : null))
     .catch(() => null);
+  // Barra lateral recolhida ou não: o `SidebarProvider` (shadcn) grava o
+  // cookie a cada troca; ler aqui é o que faz o SSR já sair na largura certa
+  // em vez de abrir e fechar na hidratação.
+  // Primeiro token de leitura direta no Supabase (null = desligada aqui): vem
+  // no mesmo stream do boot, então a primeira leitura do navegador não espera
+  // uma action só pra buscar token.
+  const tokenLeitura = usuario.then((u) => tokenDeLeitura(u)).catch(() => null);
+  const sidebarAberta = cookies().then((c) => c.get("sidebar_state")?.value !== "false");
 
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" className={manrope.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: TEMA_INLINE }} />
       </head>
       <body>
         <Suspense fallback={<Carregando />}>
-          <Boot usuarioPromise={usuario} estadoPromise={estado}>
+          <Boot usuarioPromise={usuario} estadoPromise={estado} sidebarAbertaPromise={sidebarAberta} tokenLeituraPromise={tokenLeitura}>
             {children}
           </Boot>
         </Suspense>
@@ -56,6 +80,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
 function Carregando() {
   return (
-    <div className="grid min-h-dvh place-items-center text-sm text-slate-500">Carregando…</div>
+    <div className="grid min-h-dvh place-items-center" role="status" aria-label="Carregando">
+      <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-300" />
+    </div>
   );
 }

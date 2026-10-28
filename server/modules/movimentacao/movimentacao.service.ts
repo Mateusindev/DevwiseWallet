@@ -1,20 +1,13 @@
-import type { Movimentacao } from "@prisma/client";
 import { movimentacaoRepository } from "./movimentacao.repository";
 import { caixinhaService, toView as caixinhaView } from "../caixinha/caixinha.service";
 import { NotFoundError } from "@/server/lib/errors";
-import { num, isoDate, parseDate, isoToday, round } from "@/server/lib/serialize";
+import { num, parseDate, isoToday, round } from "@/server/lib/serialize";
 import type { CreateMovimentacaoDTO } from "./movimentacao.dto";
 
-export function toView(mv: Movimentacao) {
-  return {
-    id: mv.id,
-    caixinhaId: mv.caixinhaId,
-    tipo: mv.tipo,
-    valor: num(mv.valor),
-    descricao: mv.descricao,
-    data: isoDate(mv.data),
-  };
-}
+import { toView } from "./movimentacao.view";
+
+// Movimentação serializada — em `movimentacao.view.ts`, que o navegador também usa.
+export { toView };
 
 export const movimentacaoService = {
   async list(userId: string) {

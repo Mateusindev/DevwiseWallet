@@ -3,9 +3,10 @@ import { categoriaRepository } from "./categoria.repository";
 import { NotFoundError } from "@/server/lib/errors";
 import type { CreateCategoriaDTO, UpdateCategoriaDTO } from "./categoria.dto";
 
-export function categoriaView(c: Categoria) {
-  return { id: c.id, nome: c.nome, cor: c.cor, ordem: c.ordem };
-}
+import { categoriaView } from "./categoria.view";
+
+// Categoria serializada — em `categoria.view.ts`, que o navegador também usa.
+export { categoriaView };
 
 // Categorias de gasto mais usadas — provisionadas numa base vazia.
 const DEFAULT_CATEGORIAS = [

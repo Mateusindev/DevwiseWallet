@@ -5,6 +5,8 @@ import AuthGate from "@/components/AuthGate";
 import AppShell from "@/components/AppShell";
 import { FinanceProvider } from "@/store/FinanceContext";
 import type { AuthUser } from "@/services/financeApi";
+import type { TokenLeitura } from "@/server/auth/supabase-token";
+import { adotarTokenInicial } from "@/lib/supabase";
 
 type EstadoInicial = { userId: string } | null;
 
@@ -17,18 +19,26 @@ type EstadoInicial = { userId: string } | null;
 export default function Boot({
   usuarioPromise,
   estadoPromise,
+  sidebarAbertaPromise,
+  tokenLeituraPromise,
   children,
 }: {
   usuarioPromise: Promise<AuthUser | null>;
   estadoPromise: Promise<EstadoInicial>;
+  sidebarAbertaPromise: Promise<boolean>;
+  tokenLeituraPromise: Promise<TokenLeitura | null>;
   children: ReactNode;
 }) {
   const usuario = use(usuarioPromise);
+  const sidebarAberta = use(sidebarAbertaPromise);
+  // Módulo, não estado: o cliente do Supabase lê daqui. Idempotente, então
+  // rodar no render (inclusive duas vezes no StrictMode) é inofensivo.
+  adotarTokenInicial(use(tokenLeituraPromise));
 
   return (
     <AuthGate usuarioInicial={usuario}>
       <FinanceProvider estadoPromise={estadoPromise}>
-        <AppShell>{children}</AppShell>
+        <AppShell sidebarAberta={sidebarAberta}>{children}</AppShell>
       </FinanceProvider>
     </AuthGate>
   );

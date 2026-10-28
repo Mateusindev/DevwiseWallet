@@ -2,6 +2,7 @@
 // espaço / última página do mês), ocultar por mês e o blob de orçamento.
 import { describe, expect, it, beforeEach } from "bun:test";
 import { account, resetDb, seedRoles, prisma, type Client } from "./harness";
+import { addMonths, currentMonth } from "@/server/lib/serialize";
 
 let api: Client;
 let userId: string;
@@ -299,7 +300,9 @@ describe("GET /api/despesas/resumo", () => {
     const esp = await criar("Casa");
     const pausada = (await api.post(`/despesas/espacos/${esp.id}/fixas`, { descricao: "Pausada", valor: 100 })).body.despesa;
     await api.patch(`/despesas/espacos/${esp.id}/fixas/${pausada.id}/toggle`);
-    // âncora em 2026-09 parcela 12/12 → em 2026-10 já quitou
+    // âncora no mês corrente (é o que o service grava) parcela 12/12 → no mês
+    // seguinte já quitou. Relativo ao relógio: com o mês fixo no texto o teste
+    // vencia sozinho na virada do mês.
     await api.post(`/despesas/espacos/${esp.id}/fixas`, {
       descricao: "Quitada",
       valor: 300,
@@ -308,8 +311,9 @@ describe("GET /api/despesas/resumo", () => {
       totalParcelas: 12,
     });
 
-    expect((await api.get("/despesas/resumo?ym=2026-09")).body.espacos[0].saiu).toBe(300);
-    const proximo = (await api.get("/despesas/resumo?ym=2026-10")).body.espacos[0];
+    const agora = currentMonth();
+    expect((await api.get(`/despesas/resumo?ym=${agora}`)).body.espacos[0].saiu).toBe(300);
+    const proximo = (await api.get(`/despesas/resumo?ym=${addMonths(agora, 1)}`)).body.espacos[0];
     expect(proximo.saiu).toBe(0);
   });
 

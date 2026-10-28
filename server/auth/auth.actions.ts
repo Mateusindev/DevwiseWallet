@@ -11,6 +11,7 @@ import { authService, AUTH_COOKIE, TOKEN_TTL_S } from "./auth.service";
 import { sessaoAtual } from "@/server/next/session";
 import { erroDaAction, type ActionResult } from "@/server/next/action";
 import type { AuthUser } from "./auth.service";
+import { tokenDeLeitura, type TokenLeitura } from "./supabase-token";
 
 const loginSchema = z.object({
   email: z.email(),
@@ -64,6 +65,18 @@ export async function sair(): Promise<ActionResult<{ ok: true }>> {
 export async function usuarioLogado(): Promise<ActionResult<AuthUser | null>> {
   try {
     return { ok: true, data: await sessaoAtual() };
+  } catch (err) {
+    return erroDaAction(err);
+  }
+}
+
+// Token curto de leitura direta no Supabase (ver `supabase-token.ts`). null =
+// leitura direta desligada neste ambiente, sem sessão ou sem `state:view` — o
+// front cai pras actions. O primeiro vem pronto no boot (RSC); esta é a
+// renovação.
+export async function tokenLeituraDireta(): Promise<ActionResult<TokenLeitura | null>> {
+  try {
+    return { ok: true, data: await tokenDeLeitura(await sessaoAtual()) };
   } catch (err) {
     return erroDaAction(err);
   }

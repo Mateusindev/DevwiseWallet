@@ -1,22 +1,34 @@
-import { Prisma } from "@prisma/client";
+// Só tipo: este módulo também roda no NAVEGADOR (montagem das leituras diretas
+// do Supabase), então não pode puxar o runtime do Prisma pro bundle.
+import type { Prisma } from "@prisma/client";
 
-type DecimalLike = Prisma.Decimal | number | null | undefined;
+// Decimal do Prisma no servidor; number (ou string, conforme o driver) quando a
+// linha vem do PostgREST.
+type DecimalLike = Prisma.Decimal | number | string | null | undefined;
+
+function decimal(v: Prisma.Decimal | number | string): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") return Number(v);
+  return v.toNumber();
+}
 
 // Decimal do Prisma -> number (JSON limpo pro front).
 export function num(v: DecimalLike): number {
   if (v == null) return 0;
-  return typeof v === "number" ? v : v.toNumber();
+  return decimal(v);
 }
 
 // Decimal opcional -> number | null (preserva "sem meta").
 export function numOrNull(v: DecimalLike): number | null {
   if (v == null) return null;
-  return typeof v === "number" ? v : v.toNumber();
+  return decimal(v);
 }
 
-// Date -> 'YYYY-MM-DD' (mesmo formato do mock).
-export function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+// Date -> 'YYYY-MM-DD' (mesmo formato do mock). Coluna `date` lida pelo
+// PostgREST já chega como 'YYYY-MM-DD'; timestamp chega ISO — os dois cortam
+// no mesmo lugar.
+export function isoDate(d: Date | string): string {
+  return typeof d === "string" ? d.slice(0, 10) : d.toISOString().slice(0, 10);
 }
 
 // 'YYYY-MM-DD' -> Date em UTC (evita drift de timezone).

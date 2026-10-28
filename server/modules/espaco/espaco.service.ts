@@ -1,114 +1,19 @@
 import type { Espaco } from "@prisma/client";
-import { espacoRepository, type EspacoComOrcamento } from "./espaco.repository";
+import { espacoRepository } from "./espaco.repository";
 import { AppError, NotFoundError } from "@/server/lib/errors";
-import {
-  num,
-  isoDate,
-  round,
-  parcelaView,
-  addMonths,
-  currentMonth,
-  parcelaAtivaNoMes,
-} from "@/server/lib/serialize";
-import { aplicaDivisao, CONTATO_INATIVO, type ShareLike } from "../cartao-share/rateio";
+import { round, addMonths, currentMonth } from "@/server/lib/serialize";
+import { espacoView, orcamentoView, resumoPorEspacoView, espacoAtivo } from "./espaco.view";
 import type { CreateEspacoDTO, UpdateEspacoDTO } from "./espaco.dto";
+
+// A montagem (orcamentoView, resumo, rateio por linha) mora em `espaco.view.ts`:
+// é a mesma que o navegador usa quando lê direto do Supabase.
+export { espacoView, orcamentoView };
 
 // Janela de histórico carregada por leitura de orçamento. 12/12 cobre com folga
 // a série de 6 meses do Início e o planejamento do ano; sair dela é o caso raro
-// que o front refaz.
-const JANELA_ATRAS = 12;
-const JANELA_FRENTE = 12;
-
-export function espacoView(esp: Espaco) {
-  return { id: esp.id, nome: esp.nome, tipo: esp.tipo, emoji: esp.emoji };
-}
-
-// Rateio da linha no formato que o front desenha (iniciais + valor efetivo).
-// Independe do mês de propósito: a parte de cada contato é sempre a mesma fatia
-// da linha; quem some no mês é a linha inteira (parcela encerrada), e disso o
-// front já cuida com `parcelaAtivaNoMes`.
-type ShareComContato = ShareLike & { contato: { id: string; nome: string; status: string } | null };
-
-// A base vem por parâmetro: aqui o share está aninhado DENTRO da despesa, então
-// ele não carrega `despesaFixa`/`despesaMes` pra `linhaBase` derivar sozinha.
-function rateioView(shares: ShareComContato[], base: number) {
-  return shares.map((s) => ({
-    shareId: s.id,
-    contatoId: s.contatoId,
-    nome: s.contato?.nome ?? "",
-    status: s.contato?.status ?? "local",
-    percentual: s.percentual != null ? num(s.percentual) : null,
-    valor: aplicaDivisao(base, s),
-  }));
-}
-
-// Quanto a linha pesa no orçamento do dono (espelha lib/calc.js#valorEfetivoLinha).
-// Contato `recusado` fica fora da soma: a recusa de um não faz o dono pagar menos.
-function valorEfetivo(valor: number, abateShares: boolean, shares: ShareComContato[]) {
-  if (!abateShares) return valor;
-  const soma = round(
-    shares
-      .filter((s) => (s.contato?.status ?? "local") !== CONTATO_INATIVO)
-      .reduce((t, s) => t + aplicaDivisao(valor, s), 0)
-  );
-  return round(Math.max(valor - soma, 0));
-}
-
-// Monta o blob de orçamento no formato que o front espera.
-export function orcamentoView(esp: EspacoComOrcamento) {
-  const rendasMensais: Record<string, number> = {};
-  for (const r of esp.rendasMensais) rendasMensais[r.ym] = num(r.valor);
-
-  return {
-    despesasFixas: esp.despesasFixas.map((d) => ({
-      id: d.id,
-      descricao: d.descricao,
-      valor: num(d.valor),
-      diaVencimento: d.diaVencimento,
-      ativa: d.ativa,
-      categoriaId: d.categoriaId,
-      nota: d.nota,
-      abateShares: d.abateShares,
-      rateio: rateioView(d.shares as ShareComContato[], num(d.valor)),
-      ...parcelaView(d),
-    })),
-    despesasMes: esp.despesasMes.map((d) => ({
-      id: d.id,
-      mes: d.mes,
-      descricao: d.descricao,
-      valor: num(d.valor),
-      data: isoDate(d.data),
-      paga: d.paga,
-      valorPago: num(d.valorPago),
-      cartaoId: d.cartaoId,
-      categoriaId: d.categoriaId,
-      nota: d.nota,
-      abateShares: d.abateShares,
-      rateio: rateioView(d.shares as ShareComContato[], num(d.valor)),
-      fitid: d.fitid, // o front usa pra marcar o que já veio de um OFX
-    })),
-    receitasMes: esp.receitasMes.map((r) => ({
-      id: r.id,
-      mes: r.mes,
-      descricao: r.descricao,
-      valor: num(r.valor),
-      data: isoDate(r.data),
-      recorrente: r.recorrente,
-      mesFim: r.mesFim,
-    })),
-    // mesmo formato de espacosOcultos/pagamentosFixas: lista plana de exceções
-    receitasSkips: esp.receitasMes.flatMap((r) =>
-      r.skips.map((s) => ({ receitaId: s.receitaId, ym: s.ym }))
-    ),
-    pagamentosFixas: esp.pagamentosFixas.map((p) => ({
-      despesaFixaId: p.despesaFixaId,
-      ym: p.ym,
-      valorPago: num(p.valorPago),
-    })),
-    rendasMensais,
-    config: { rendaMensal: num(esp.rendaMensal), moeda: esp.moeda },
-  };
-}
+// que o front refaz. O navegador usa a mesma janela (`leituraDireta.ts`).
+export const JANELA_ATRAS = 12;
+export const JANELA_FRENTE = 12;
 
 export const espacoService = {
   // Espaço padrão provisionado quando o usuário não tem nenhum: só "Meu"
@@ -142,12 +47,8 @@ export const espacoService = {
       espacoRepository.getActiveEspacoId(userId),
       espacoRepository.listOcultos(userId),
     ]);
-    let activeEspacoId = ativoGravado;
-    const exists = activeEspacoId && espacos.some((e) => e.id === activeEspacoId);
-    if (!exists) {
-      activeEspacoId = espacos[0]?.id ?? null;
-      await espacoRepository.setActiveEspacoId(userId, activeEspacoId);
-    }
+    const activeEspacoId = espacoAtivo(espacos, ativoGravado);
+    if (activeEspacoId !== ativoGravado) await espacoRepository.setActiveEspacoId(userId, activeEspacoId);
     const espacosOcultos = ocultos.map((o) => ({ espacoId: o.espacoId, ym: o.ym }));
     return { espacos: espacos.map(espacoView), activeEspacoId, espacosOcultos };
   },
@@ -196,26 +97,7 @@ export const espacoService = {
   // histórico inteiro só pra somar um mês).
   async resumoPorEspaco(userId: string, ym = currentMonth()) {
     const { espacos, fixas, avulsas } = await espacoRepository.resumoDoMes(userId, ym);
-    const saiu = new Map<string, number>();
-    const soma = (espacoId: string, v: number) => saiu.set(espacoId, (saiu.get(espacoId) ?? 0) + v);
-
-    for (const d of fixas) {
-      if (!parcelaAtivaNoMes(d, ym)) continue; // parcelada quitada sai sozinha
-      soma(d.espacoId, valorEfetivo(num(d.valor), d.abateShares, d.shares as ShareComContato[]));
-    }
-    for (const d of avulsas) {
-      soma(d.espacoId, valorEfetivo(num(d.valor), d.abateShares, d.shares as ShareComContato[]));
-    }
-
-    return {
-      ym,
-      espacos: espacos.map((e) => ({
-        espacoId: e.id,
-        nome: e.nome,
-        emoji: e.emoji,
-        saiu: round(saiu.get(e.id) ?? 0),
-      })),
-    };
+    return resumoPorEspacoView(ym, espacos, fixas, avulsas);
   },
 
   async setActive(userId: string, id: string) {
