@@ -25,7 +25,7 @@ function CartaoParcelaFields({ f, set, errors = {}, comParcela = true, onPickCar
   const { cartoes } = useFinance();
   return (
     <>
-      <Field label="Cartão de crédito" hint={cartoes.length ? "" : "Cadastre um cartão na página Cartões"}>
+      <Field label="Cartão de crédito" hint={cartoes.length ? "" : "Cadastre um cartão na página Cartões."}>
         <Select
           name="cartaoId"
           value={f.cartaoId || ""}
@@ -45,21 +45,21 @@ function CartaoParcelaFields({ f, set, errors = {}, comParcela = true, onPickCar
       {comParcela && f.cartaoId && (
         // Bloco destacado: no celular o checkbox solto passava despercebido
         // (aparece só depois de escolher o cartão, no fim do form).
-        <div className="rounded-xl border border-[var(--color-line)] bg-veu/[0.03] p-3">
+        <div className="rounded-xl border border-[var(--color-line)] bg-veu/[0.03] p-4">
           <CheckboxField
             label="Compra parcelada"
-            hint="Marque para lançar em parcelas na fatura"
+            hint="Lança em parcelas na fatura do cartão."
             checked={!!f.parcelado}
             onChecked={(parcelado) => set({ parcelado })}
           />
 
           {f.parcelado && (
-            <div className="mt-3 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
-              <Field label="Parcela atual" hint="ex: 3" error={errors.parcelaAtual}>
+            <div className="mt-4 grid grid-cols-1 gap-4 min-[380px]:grid-cols-2">
+              <Field label="Parcela atual" hint="Ex.: 3" error={errors.parcelaAtual}>
                 <NumberInput name="parcelaAtual" value={f.parcelaAtual} min={1} max={480}
                              onValue={(parcelaAtual) => set({ parcelaAtual })} />
               </Field>
-              <Field label="Total de parcelas" hint="ex: 10" error={errors.totalParcelas}>
+              <Field label="Total de parcelas" hint="Ex.: 10" error={errors.totalParcelas}>
                 <NumberInput name="totalParcelas" value={f.totalParcelas} min={1} max={480} allowEmpty
                              onValue={(totalParcelas) => set({ totalParcelas })} />
               </Field>
@@ -101,7 +101,7 @@ function CategoriaField({ f, set }) {
         {categorias.map((c) => (
           <SelectItem key={c.id} value={c.id}>
             <span className="inline-flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+              <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: acento(c.cor).dot }} />
               {c.nome}
             </span>
           </SelectItem>
@@ -128,22 +128,52 @@ function cartaoPayload(f) {
   };
 }
 
-// Rodapé padrão: cancelar + salvar.
+// Rodapé padrão: cancelar + salvar, à direita. No celular empilha com a ação
+// principal por cima (perto do polegar) e os dois ocupam a largura toda.
+// `variant="danger"` só pra confirmação destrutiva — salvar é sempre primário.
 function Acoes({ onCancel, submitting, variant = "primary", children }) {
   return (
-    <div className="flex gap-2 pt-1">
-      <Button type="button" variant="ghost" className="flex-1" onClick={onCancel}>Cancelar</Button>
-      <Button type="submit" variant={variant} className="flex-1" loading={submitting}>{children}</Button>
+    <div className="flex flex-col-reverse gap-2 border-t border-[var(--color-line)] pt-4 sm:flex-row sm:justify-end">
+      <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={onCancel}>Cancelar</Button>
+      <Button type="submit" variant={variant} className="w-full sm:w-auto sm:min-w-28" loading={submitting}>{children}</Button>
     </div>
   );
 }
+
+// Seletor de cor: grupo de opções exclusivas (radio), nome da cor como rótulo
+// acessível, selecionado marcado por anel de tinta — não por escala/opacidade.
+const NOME_COR = { emerald: "Verde", blue: "Azul", violet: "Violeta", amber: "Âmbar", rose: "Rosa", cyan: "Ciano" };
+function CorPicker({ cores, value, onValue, label = "Cor" }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2.5">
+      {cores.map((c) => {
+        const sel = value === c;
+        return (
+          <button key={c} type="button" role="radio" aria-checked={sel} aria-label={NOME_COR[c] ?? c}
+                  title={NOME_COR[c] ?? c} onClick={() => onValue(c)}
+                  className={`grid h-9 w-9 place-items-center rounded-full cursor-pointer transition-shadow ${
+                    sel ? "ring-2 ring-ink ring-offset-2 ring-offset-[var(--color-surface)]" : "hover:ring-2 hover:ring-veu/20 hover:ring-offset-2 hover:ring-offset-[var(--color-surface)]"
+                  }`}>
+            <span className="h-7 w-7 rounded-full" style={{ backgroundColor: acento(c).dot }} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Opção selecionável em linha (chip grande): borda, tinta quando escolhida.
+const opcaoClass = (sel) =>
+  `h-10 rounded-xl px-3.5 text-sm font-medium cursor-pointer transition-colors ${
+    sel ? "bg-ink text-[var(--color-on-ink)]" : "border border-[var(--color-line-strong)] text-slate-300 hover:bg-veu/[0.05] hover:text-ink"
+  }`;
 
 // Caixinha travada: o modal foi aberto a partir de um card, não há o que escolher.
 function CaixinhaFixa({ label, caixinha, sufixo }) {
   return (
     <Field label={label}>
-      <div className={`${inputBase} flex items-center gap-2 text-slate-300`}>
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: acento(caixinha.cor).dot }} />
+      <div className={`${inputBase} flex items-center gap-2 bg-veu/[0.03] text-slate-300`} aria-readonly="true">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: acento(caixinha.cor).dot }} />
         <span className="truncate">{caixinha.nome}{sufixo}</span>
       </div>
     </Field>
@@ -170,7 +200,7 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId, lockC
   function close() { reset(); onClose(); }
 
   return (
-    <Modal open={open} onClose={close} title="Registrar aporte">
+    <Modal open={open} onClose={close} title="Registrar aporte" description="Dinheiro que entra numa caixinha.">
       <form onSubmit={submit} className="space-y-4" noValidate>
         <FormError>{formError}</FormError>
         {lockCaixinha && cx ? (
@@ -181,7 +211,7 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId, lockC
               {caixinhas.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   <span className="inline-flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: acento(c.cor).dot }} />
                     {c.nome}
                   </span>
                 </SelectItem>
@@ -196,11 +226,11 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId, lockC
         </Field>
         {sugestao > 0 && f.valor !== sugestao && (
           <button type="button" onClick={() => set("valor", sugestao)}
-                  className="-mt-2 text-xs font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
+                  className="-mt-2 text-[13px] font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
             Usar valor planejado ({fmtMoney(sugestao)})
           </button>
         )}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Data" error={errors.data}>
             <DateInput name="data" value={f.data} onValue={(v) => set("data", v)} />
           </Field>
@@ -209,7 +239,7 @@ export function AporteModal({ open, onClose, caixinhas, defaultCaixinhaId, lockC
                        onChange={(e) => set("descricao", e.target.value)} />
           </Field>
         </div>
-        <Acoes onCancel={close} submitting={submitting} variant="growth">Adicionar</Acoes>
+        <Acoes onCancel={close} submitting={submitting}>Adicionar aporte</Acoes>
       </form>
     </Modal>
   );
@@ -234,7 +264,7 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
   function close() { reset(); onClose(); }
 
   return (
-    <Modal open={open} onClose={close} title="Registrar despesa">
+    <Modal open={open} onClose={close} title="Registrar despesa" description="Sai do saldo de uma caixinha.">
       <form onSubmit={submit} className="space-y-4" noValidate>
         <FormError>{formError}</FormError>
         {lockCaixinha && cx ? (
@@ -245,7 +275,7 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
               {caixinhas.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   <span className="inline-flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: acento(c.cor).dot }} />
                     {c.nome} — saldo {fmtMoney(c.saldo)}
                   </span>
                 </SelectItem>
@@ -259,11 +289,11 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
                       onBlur={() => touch("valor")} autoFocus />
         </Field>
         {insuficiente && (
-          <p className="-mt-2 text-xs text-amber-400">
-            ⚠ Valor maior que o saldo — a caixinha ficará negativa.
+          <p role="status" className="-mt-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-300">
+            Valor maior que o saldo: a caixinha vai ficar negativa.
           </p>
         )}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Data" error={errors.data}>
             <DateInput name="data" value={f.data} onValue={(v) => set("data", v)} />
           </Field>
@@ -272,7 +302,7 @@ export function DespesaVariavelModal({ open, onClose, caixinhas, defaultCaixinha
                        onChange={(e) => set("descricao", e.target.value)} />
           </Field>
         </div>
-        <Acoes onCancel={close} submitting={submitting} variant="danger">Registrar saída</Acoes>
+        <Acoes onCancel={close} submitting={submitting}>Registrar saída</Acoes>
       </form>
     </Modal>
   );
@@ -326,12 +356,12 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
           <TextInput name="descricao" value={f.descricao} placeholder="Aluguel, internet, jiu-jitsu…" autoFocus
                      onChange={(e) => set("descricao", e.target.value)} onBlur={() => touch("descricao")} />
         </Field>
-        <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={f.parcelado ? "Valor da parcela" : "Valor mensal"} required error={errors.valor}>
             <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} onBlur={() => touch("valor")} />
           </Field>
           <Field label="Dia do vencimento" required error={errors.diaVencimento}
-                 hint={vencimentoDoCartao ? `vence com a fatura do ${vencimentoDoCartao.nome}` : "1 a 31"}>
+                 hint={vencimentoDoCartao ? `Vence com a fatura do ${vencimentoDoCartao.nome}.` : "De 1 a 31."}>
             <DayInput name="diaVencimento" value={f.diaVencimento} onValue={(v) => set("diaVencimento", v)}
                       suggestion={cartaoSel?.diaVencimento ?? null} allowEmpty />
           </Field>
@@ -345,7 +375,7 @@ export function DespesaFixaModal({ open, onClose, despesa }) {
             }
           }}
         />
-        <Field label="Nota" hint="observação livre — opcional" error={errors.nota}>
+        <Field label="Nota" hint="Opcional." error={errors.nota}>
           <Textarea name="nota" value={f.nota} placeholder="Detalhes, lembrete, referência…"
                     onChange={(e) => set("nota", e.target.value)} />
         </Field>
@@ -389,7 +419,7 @@ export function DespesaMesModal({ open, onClose, mes, mesLabel, despesa }) {
           <TextInput name="descricao" value={f.descricao} placeholder="Mercado, transporte, geladeira…" autoFocus
                      onChange={(e) => set("descricao", e.target.value)} onBlur={() => touch("descricao")} />
         </Field>
-        <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Valor" required error={errors.valor}>
             <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} onBlur={() => touch("valor")} />
           </Field>
@@ -399,11 +429,11 @@ export function DespesaMesModal({ open, onClose, mes, mesLabel, despesa }) {
         </div>
         <CategoriaField f={f} set={set} />
         <CartaoParcelaFields f={f} set={patch} errors={errors} comParcela={false} />
-        <Field label="Nota" hint="observação livre — opcional" error={errors.nota}>
+        <Field label="Nota" hint="Opcional." error={errors.nota}>
           <Textarea name="nota" value={f.nota} placeholder="Detalhes, lembrete, referência…"
                     onChange={(e) => set("nota", e.target.value)} />
         </Field>
-        <Acoes onCancel={close} submitting={submitting} variant="danger">{editing ? "Salvar" : "Adicionar"}</Acoes>
+        <Acoes onCancel={close} submitting={submitting}>{editing ? "Salvar" : "Adicionar"}</Acoes>
       </form>
     </Modal>
   );
@@ -473,7 +503,7 @@ export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita, escopo 
           <TextInput name="descricao" value={f.descricao} placeholder="Freela, bônus, venda, presente…" autoFocus
                      onChange={(e) => set("descricao", e.target.value)} onBlur={() => touch("descricao")} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Valor" required error={errors.valor}>
             <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} onBlur={() => touch("valor")} />
           </Field>
@@ -484,23 +514,23 @@ export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita, escopo 
 
         {/* "só neste mês" cria uma avulsa: não faz sentido oferecer recorrência */}
         {escopo !== "mes" && (
-          <div className="rounded-xl border border-[var(--color-line)] bg-veu/[0.03] p-3">
+          <div className="rounded-xl border border-[var(--color-line)] bg-veu/[0.03] p-4">
             <CheckboxField
               label="Repete todo mês"
-              hint="aparece automaticamente nos meses seguintes"
+              hint="Aparece sozinha nos meses seguintes."
               checked={!!f.recorrente}
               onChecked={(recorrente) => patch({ recorrente, ...(recorrente ? {} : { mesFim: null }) })}
             />
             {f.recorrente && (
-              <div className="mt-3">
-                <Field label="Até (opcional)" hint={f.mesFim ? `última vez em ${fmtMonthLabel(f.mesFim)}` : "sem data de fim"}
+              <div className="mt-4">
+                <Field label="Até (opcional)" hint={f.mesFim ? `Última vez em ${fmtMonthLabel(f.mesFim)}.` : "Sem data de fim."}
                        error={errors.mesFim}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <MonthSelect value={f.mesFim || addMonths(mes, 11)} onValue={(v) => set("mesFim", v)} min={mes} />
                     {f.mesFim && (
                       <button type="button" onClick={() => set("mesFim", null)}
-                              className="text-xs font-medium text-slate-400 hover:text-slate-200 cursor-pointer">
-                        sem fim
+                              className="h-10 rounded-lg px-2 text-[13px] font-medium text-slate-400 hover:text-ink cursor-pointer">
+                        Sem fim
                       </button>
                     )}
                   </div>
@@ -511,14 +541,14 @@ export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita, escopo 
         )}
 
         {recorrenteEditada && (
-          <p className="text-xs text-slate-500">
+          <p className="text-[13px] text-slate-500">
             {escopo === "mes"
               ? "A recorrente segue valendo nos outros meses."
               : "A recorrente atual é encerrada no mês anterior e recomeça aqui com os valores novos."}
           </p>
         )}
 
-        <Acoes onCancel={close} submitting={submitting} variant="growth">{editing ? "Salvar" : "Adicionar"}</Acoes>
+        <Acoes onCancel={close} submitting={submitting}>{editing ? "Salvar" : "Adicionar"}</Acoes>
       </form>
     </Modal>
   );
@@ -558,29 +588,24 @@ export function CaixinhaModal({ open, onClose, caixinha }) {
           <TextInput name="nome" value={f.nome} placeholder="Reserva de Sonhos, Crédito…" autoFocus
                      onChange={(e) => set("nome", e.target.value)} onBlur={() => touch("nome")} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Aporte mensal">
             <MoneyInput name="aporteMensal" value={f.aporteMensal} onValue={(v) => set("aporteMensal", v)} />
           </Field>
-          <Field label="Meta" hint="Deixe 0 se não houver" error={errors.meta}>
+          <Field label="Meta" hint="Deixe 0 se não houver." error={errors.meta}>
             <MoneyInput name="meta" value={f.meta} onValue={(v) => set("meta", v)} />
           </Field>
         </div>
         <Field label="Rendimento" error={errors.taxaJuros}
-               hint="Juros compostos usados só na previsão da meta — o saldo continua vindo das movimentações">
+               hint="Juros compostos usados só na previsão da meta. O saldo continua vindo das movimentações.">
           <PercentInput name="taxaJuros" value={f.taxaJuros} onValue={(v) => set("taxaJuros", v)} />
         </Field>
-        <Field label="Cor">
-          <div className="flex gap-2">
-            {CORES.map((c) => (
-              <button key={c} type="button" onClick={() => set("cor", c)}
-                      aria-label={c}
-                      style={{ backgroundColor: acento(c).dot }}
-                      className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-ink scale-110" : "opacity-60 hover:opacity-100"}`} />
-            ))}
-          </div>
-        </Field>
-        <CheckboxField label="Acumula o que sobrar no mês" checked={f.acumulaSobra}
+        <div>
+          <p className="mb-2 text-sm font-medium text-slate-200">Cor</p>
+          <CorPicker cores={CORES} value={f.cor} onValue={(c) => set("cor", c)} label="Cor da caixinha" />
+        </div>
+        <CheckboxField label="Acumula o que sobrar no mês" hint="A sobra do orçamento entra aqui no fim do mês."
+                       checked={f.acumulaSobra}
                        onChecked={(v) => set("acumulaSobra", v)} />
         <Acoes onCancel={close} submitting={submitting}>{editing ? "Salvar" : "Criar caixinha"}</Acoes>
       </form>
@@ -636,43 +661,42 @@ export function ReservaEmergenciaModal({ open, onClose, caixinha, onCreated }) {
     <Modal open={open} onClose={close} title={editing ? "Configurar reserva de emergência" : "Nova reserva de emergência"}>
       <form onSubmit={submit} className="space-y-4" noValidate>
         <FormError>{formError}</FormError>
-        <Field label="Meses de segurança" hint="Quantos meses de gasto quer ter guardados" error={errors.meses}>
+        <Field label="Meses de segurança" hint="Quantos meses de gasto você quer ter guardados." error={errors.meses}>
           <div className="flex flex-wrap items-center gap-2">
             {MESES_SUGERIDOS.map((m) => (
-              <button key={m} type="button" onClick={() => set("meses", m)}
-                      className={`rounded-xl px-3.5 py-2 text-sm font-semibold cursor-pointer transition-colors ${f.meses === m ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-500/40" : "bg-veu/5 text-slate-300 hover:bg-veu/10"}`}>
+              <button key={m} type="button" onClick={() => set("meses", m)} aria-pressed={f.meses === m}
+                      className={opcaoClass(f.meses === m)}>
                 {m} meses
               </button>
             ))}
-            <NumberInput name="meses" value={f.meses} min={1} max={120}
-                         onValue={(v) => set("meses", v)} className="w-20" />
+            <NumberInput name="meses" value={f.meses} min={1} max={120} aria-label="Outro número de meses"
+                         onValue={(v) => set("meses", v)} className="!w-20" />
           </div>
         </Field>
-        <Field label="Gasto por mês" hint="Quanto você gasta em média por mês" error={errors.gasto}>
+        <Field label="Gasto por mês" hint="Quanto você gasta, em média, num mês." error={errors.gasto}>
           <MoneyInput name="gasto" value={f.gasto} onValue={(v) => set("gasto", v)} onBlur={() => touch("gasto")} />
         </Field>
 
-        <div className="rounded-xl bg-emerald-500/10 px-3.5 py-3 text-sm ring-1 ring-emerald-500/20">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-300">Meta da reserva</span>
-            <span className="tnum text-lg font-bold text-emerald-200">{fmtMoney(meta)}</span>
+        {/* o resultado das respostas, à vista: é ele que vira a meta */}
+        <div className="flex items-end justify-between gap-3 rounded-xl bg-emerald-500/10 px-4 py-3.5">
+          <div>
+            <p className="text-[13px] text-emerald-300">Meta da reserva</p>
+            <p className="tnum text-[13px] text-slate-400">{f.meses || 0} meses × {fmtMoney(f.gasto || 0)}</p>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
-            {f.meses || 0} meses × {fmtMoney(f.gasto || 0)}
-          </p>
+          <p className="tnum text-xl font-semibold tracking-[-0.01em] text-ink">{fmtMoney(meta)}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Já tenho guardado" hint="Saldo inicial">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Já tenho guardado" hint="Saldo inicial.">
             <MoneyInput name="saldo" value={f.saldo} onValue={(v) => set("saldo", v)} />
           </Field>
-          <Field label="Guardar por mês" hint="Aporte mensal">
+          <Field label="Guardar por mês" hint="Aporte mensal.">
             <MoneyInput name="aporte" value={f.aporte} onValue={(v) => set("aporte", v)} />
           </Field>
         </div>
         {mesesAteMeta != null && falta > 0 && (
-          <p className="text-xs text-slate-400">
-            Nesse ritmo você completa a reserva em cerca de <span className="text-slate-200">{mesesAteMeta} meses</span>.
+          <p className="text-[13px] text-slate-400">
+            Nesse ritmo você completa a reserva em cerca de <span className="tnum font-medium text-ink">{mesesAteMeta} meses</span>.
           </p>
         )}
 
@@ -699,29 +723,29 @@ export function EspacoModal({ open, onClose, onCreated }) {
   function close() { reset(); onClose(); }
 
   return (
-    <Modal open={open} onClose={close} title="Novo espaço de despesa">
+    <Modal open={open} onClose={close} title="Nova página de despesas"
+           description="Só o orçamento é separado: fixas, despesas do mês e renda próprias. As caixinhas valem pra todas.">
       <form onSubmit={submit} className="space-y-4" noValidate>
         <FormError>{formError}</FormError>
         <Field label="Nome" required error={errors.nome}>
           <TextInput name="nome" value={f.nome} placeholder="Nosso, Meu, Viagem…" autoFocus
                      onChange={(e) => set("nome", e.target.value)} onBlur={() => touch("nome")} />
         </Field>
-        <Field label="Ícone">
-          <div className="flex flex-wrap gap-2">
+        <div>
+          <p className="mb-2 text-sm font-medium text-slate-200">Ícone</p>
+          <div role="radiogroup" aria-label="Ícone da página" className="flex flex-wrap gap-2">
             {EMOJIS.map((em) => (
-              <button key={em} type="button" onClick={() => set("emoji", em)}
+              <button key={em} type="button" role="radio" aria-checked={f.emoji === em} onClick={() => set("emoji", em)}
                       aria-label={`Ícone ${em}`}
-                      className={`grid h-10 w-10 place-items-center rounded-xl text-lg cursor-pointer transition-colors ${f.emoji === em ? "bg-blue-500/20 ring-2 ring-blue-500/60" : "bg-veu/5 hover:bg-veu/10"}`}>
+                      className={`grid h-10 w-10 place-items-center rounded-xl text-lg cursor-pointer transition-colors ${
+                        f.emoji === em ? "bg-veu/[0.08] ring-2 ring-ink" : "border border-[var(--color-line-strong)] hover:bg-veu/[0.05]"
+                      }`}>
                 {em}
               </button>
             ))}
           </div>
-        </Field>
-        <p className="rounded-xl bg-veu/4 px-3.5 py-3 text-xs text-slate-400">
-          Só o orçamento é separado — despesas fixas, despesas do mês e renda próprias.
-          As caixinhas (economias) são compartilhadas entre todos os espaços.
-        </p>
-        <Acoes onCancel={close} submitting={submitting}>Criar espaço</Acoes>
+        </div>
+        <Acoes onCancel={close} submitting={submitting}>Criar página</Acoes>
       </form>
     </Modal>
   );
@@ -787,12 +811,12 @@ export function CartaoModal({ open, onClose, cartao }) {
     <Modal open={open} onClose={close} title={editing ? "Editar cartão" : "Novo cartão"}>
       <form onSubmit={submit} className="space-y-4" noValidate>
         <FormError>{formError}</FormError>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nome" required error={errors.nome}>
             <TextInput name="nome" value={f.nome} placeholder="Nubank, Inter…" autoFocus
                        onChange={(e) => set("nome", e.target.value)} onBlur={() => touch("nome")} />
           </Field>
-          <Field label="Bandeira" hint="opcional">
+          <Field label="Bandeira" hint="Opcional.">
             <TextInput name="bandeira" value={f.bandeira} placeholder="Visa, Master…"
                        onChange={(e) => set("bandeira", e.target.value)} />
           </Field>
@@ -800,27 +824,22 @@ export function CartaoModal({ open, onClose, cartao }) {
         <Field label="Limite" error={errors.limite}>
           <MoneyInput name="limite" value={f.limite} onValue={(v) => set("limite", v)} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Dia do fechamento" error={errors.diaFechamento}
-                 hint={fechamentoSugerido ? "sugerido: 7 dias antes do vencimento — pode mudar" : "opcional"}>
+                 hint={fechamentoSugerido ? "Sugerido: 7 dias antes do vencimento." : "Opcional."}>
             <DayInput name="diaFechamento" value={f.diaFechamento} onValue={mudaFechamento}
                       suggestion={sugestaoFechamento} allowEmpty />
           </Field>
           <Field label="Dia do vencimento" required error={errors.diaVencimento}
-                 hint={vencimentoSugerido ? "sugerido: 7 dias após o fechamento — pode mudar" : "1 a 31"}>
+                 hint={vencimentoSugerido ? "Sugerido: 7 dias após o fechamento." : "De 1 a 31."}>
             <DayInput name="diaVencimento" value={f.diaVencimento} onValue={mudaVencimento}
                       suggestion={sugestaoVencimento} allowEmpty />
           </Field>
         </div>
-        <Field label="Cor">
-          <div className="flex gap-2">
-            {CORES_CARTAO.map((c) => (
-              <button key={c} type="button" onClick={() => set("cor", c)} aria-label={c}
-                      style={{ backgroundColor: acento(c).dot }}
-                      className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-ink scale-110" : "opacity-60 hover:opacity-100"}`} />
-            ))}
-          </div>
-        </Field>
+        <div>
+          <p className="mb-2 text-sm font-medium text-slate-200">Cor</p>
+          <CorPicker cores={CORES_CARTAO} value={f.cor} onValue={(c) => set("cor", c)} label="Cor do cartão" />
+        </div>
         <Acoes onCancel={close} submitting={submitting}>{editing ? "Salvar" : "Criar cartão"}</Acoes>
       </form>
     </Modal>
@@ -853,15 +872,10 @@ export function CategoriaModal({ open, onClose, categoria, onCreated }) {
           <TextInput name="nome" value={f.nome} placeholder="Moradia, Alimentação, Lazer…" autoFocus
                      onChange={(e) => set("nome", e.target.value)} onBlur={() => touch("nome")} />
         </Field>
-        <Field label="Cor">
-          <div className="flex gap-2">
-            {CORES_CATEGORIA.map((c) => (
-              <button key={c} type="button" onClick={() => set("cor", c)} aria-label={c}
-                      style={{ backgroundColor: acento(c).dot }}
-                      className={`h-9 w-9 rounded-full cursor-pointer transition-transform ${f.cor === c ? "ring-2 ring-ink scale-110" : "opacity-60 hover:opacity-100"}`} />
-            ))}
-          </div>
-        </Field>
+        <div>
+          <p className="mb-2 text-sm font-medium text-slate-200">Cor</p>
+          <CorPicker cores={CORES_CATEGORIA} value={f.cor} onValue={(c) => set("cor", c)} label="Cor da categoria" />
+        </div>
         <Acoes onCancel={close} submitting={submitting}>{editing ? "Salvar" : "Criar categoria"}</Acoes>
       </form>
     </Modal>

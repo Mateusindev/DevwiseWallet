@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { ShieldCheck, Users, KeyRound, Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 // primitives são .jsx sem tipos — TS inferiria todas as props como obrigatórias
 import * as P from "./ui/primitives.jsx";
-const { Card, Button, IconButton, Modal, Field, TextInput, Badge, Skeleton, SkeletonList } =
+const { Card, Button, IconButton, Modal, Field, TextInput, Badge, Skeleton, SkeletonList, PageHeader, EmptyState } =
   P as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
 import * as F from "./ui/fields.jsx";
 const { CheckboxField, FormError } = F as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
@@ -44,25 +44,23 @@ export default function Admin() {
   useEffect(() => { reload(); }, [reload]);
 
   return (
-    <section className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
-            <ShieldCheck size={20} /> Administração
-          </h2>
-          <p className="text-sm text-slate-400">Usuários, roles e permissions.</p>
-        </div>
-        <div className="flex gap-1.5 rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)] p-1.5">
-          {can("user:view") && (
-            <TabButton active={tab === "users"} onClick={() => setTab("users")} icon={Users} label="Usuários" />
-          )}
-          {can("role:view") && (
-            <TabButton active={tab === "roles"} onClick={() => setTab("roles")} icon={KeyRound} label="Roles" />
-          )}
-        </div>
-      </header>
+    <section className="space-y-8">
+      <PageHeader
+        title="Admin"
+        description="Quem acessa a conta e o que cada papel pode fazer."
+        actions={
+          <div role="tablist" aria-label="Área do admin" className="flex gap-1 rounded-xl bg-veu/[0.05] p-1">
+            {can("user:view") && (
+              <TabButton active={tab === "users"} onClick={() => setTab("users")} label="Usuários" />
+            )}
+            {can("role:view") && (
+              <TabButton active={tab === "roles"} onClick={() => setTab("roles")} label="Roles" />
+            )}
+          </div>
+        }
+      />
 
-      {error && <p className="text-sm text-rose-400">{error}</p>}
+      {error && <FormError>{error}</FormError>}
 
       {tab === "users" && (
         <UsersTab users={users} roles={roles} meId={me.id} canManage={can("user:manage")} onChanged={reload} />
@@ -74,18 +72,26 @@ export default function Admin() {
   );
 }
 
-function TabButton({ active, onClick, icon: Icon, label }: {
-  active: boolean; onClick: () => void; icon: typeof Users; label: string;
-}) {
+// Trilho segmentado: a aba ativa é uma pílula de superfície, não um acento.
+function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
-    <button onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-        active ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "text-slate-400 hover:bg-veu/5 hover:text-slate-200"
+    <button onClick={onClick} role="tab" aria-selected={active}
+      className={`h-8 rounded-lg px-3.5 text-sm font-medium whitespace-nowrap transition-colors cursor-pointer ${
+        active ? "bg-[var(--color-surface)] text-ink shadow-[0_0_0_1px_var(--color-line)]" : "text-slate-400 hover:text-ink"
       }`}>
-      <Icon size={15} /> {label}
+      {label}
     </button>
   );
 }
+
+function iniciais(nome: string) {
+  const p = nome.trim().split(/\s+/).filter(Boolean);
+  return ((p[0]?.[0] ?? "?") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase();
+}
+
+// Mesmas colunas no cabeçalho e nas linhas (a partir de sm). Abaixo disso a
+// linha vira duas: nome/email em cima, papéis embaixo — nada rola de lado.
+const COLS_USUARIO = "sm:grid sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_5.5rem_4.5rem] sm:items-center sm:gap-4";
 
 // ── Usuários ──────────────────────────────────────────────────────────────────
 
@@ -103,44 +109,50 @@ function UsersTab({ users, roles, meId, canManage, onChanged }: {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">{users.length} usuário{users.length === 1 ? "" : "s"}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold leading-7 text-ink">Usuários</h2>
+          <p className="tnum text-[13px] text-slate-500">
+            {users.length} {users.length === 1 ? "usuário" : "usuários"} · {users.filter((u) => u.ativo).length} ativos
+          </p>
+        </div>
         {canManage && <Button onClick={() => setNovoOpen(true)}><Plus size={16} /> Novo usuário</Button>}
       </div>
 
-      <Card className="overflow-hidden">
-        <ul className="divide-y divide-[var(--color-line)]">
+      <Card className="px-5 py-2 sm:px-6">
+        {/* cabeçalho: cinza, sentence case, sem faixa */}
+        <div className={`hidden py-2.5 text-[13px] text-slate-500 ${COLS_USUARIO}`}>
+          <span>Nome</span><span>Roles</span><span>Status</span><span className="sr-only">Ações</span>
+        </div>
+        <ul className="divide-y divide-[var(--color-line)] sm:border-t sm:border-[var(--color-line)]">
           {users.map((u) => (
-            <li key={u.id} className={`group flex items-center gap-3 px-5 py-3.5 ${!u.ativo ? "opacity-50" : ""}`}>
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-500/15 text-sm font-bold text-blue-300">
-                {u.nome.slice(0, 1).toUpperCase()}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-slate-200">
-                  {u.nome}
-                  {u.id === meId && <span className="ml-2 text-[11px] text-slate-500">(você)</span>}
-                  {!u.ativo && <span className="ml-2 rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-rose-400">inativo</span>}
-                </p>
-                <p className="truncate text-xs text-slate-500">{u.email}</p>
+            <li key={u.id} className={`flex flex-col gap-2 py-3.5 ${COLS_USUARIO}`}>
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-500/15 text-xs font-semibold text-blue-300">
+                  {iniciais(u.nome)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">
+                    <span className="truncate">{u.nome}</span>
+                    {u.id === meId && <Badge tone="neutral">você</Badge>}
+                  </p>
+                  <p className="truncate text-[13px] text-slate-500">{u.email}</p>
+                </div>
+                {/* no celular as ações ficam na própria linha do nome */}
+                {canManage && <AcoesUsuario u={u} meId={meId} onEdit={() => setEditing(u)} onChanged={onChanged} className="flex sm:hidden" />}
               </div>
-              <div className="hidden flex-wrap justify-end gap-1 sm:flex">
-                {u.roles.map((r) => <Badge key={r.id} className="bg-veu/5 text-slate-300">{r.nome}</Badge>)}
+              <div className="flex min-w-0 flex-wrap gap-1.5 pl-11 sm:pl-0">
+                {u.roles.length === 0
+                  ? <span className="text-[13px] text-slate-500">—</span>
+                  : u.roles.map((r) => <Badge key={r.id} tone="neutral">{r.nome}</Badge>)}
+                {!u.ativo && <Badge tone="neg" className="sm:hidden">Inativo</Badge>}
               </div>
-              {canManage && (
-                <>
-                  <IconButton onClick={() => setEditing(u)} aria-label={`Editar ${u.nome}`}>
-                    <Pencil size={15} />
-                  </IconButton>
-                  {u.id !== meId && (
-                    <IconButton
-                      tone="danger"
-                      onClick={async () => { await deleteUser(u.id); await onChanged(); }}
-                      aria-label={`Excluir ${u.nome}`}>
-                      <Trash2 size={15} />
-                    </IconButton>
-                  )}
-                </>
-              )}
+              <div className="hidden sm:block">
+                {u.ativo ? <Badge tone="pos">Ativo</Badge> : <Badge tone="neg">Inativo</Badge>}
+              </div>
+              {canManage
+                ? <AcoesUsuario u={u} meId={meId} onEdit={() => setEditing(u)} onChanged={onChanged} className="hidden sm:flex" />
+                : <span className="hidden sm:block" />}
             </li>
           ))}
         </ul>
@@ -148,6 +160,36 @@ function UsersTab({ users, roles, meId, canManage, onChanged }: {
 
       <UserModal open={novoOpen} onClose={() => setNovoOpen(false)} roles={roles ?? []} onSaved={onChanged} />
       <UserModal open={!!editing} user={editing} meId={meId} onClose={() => setEditing(null)} roles={roles ?? []} onSaved={onChanged} />
+    </div>
+  );
+}
+
+function AcoesUsuario({ u, meId, onEdit, onChanged, className = "" }: {
+  u: AdminUserView; meId: string; onEdit: () => void; onChanged: () => Promise<void>; className?: string;
+}) {
+  return (
+    <div className={`shrink-0 items-center justify-end gap-1 ${className}`}>
+      <IconButton onClick={onEdit} aria-label={`Editar ${u.nome}`}>
+        <Pencil size={15} />
+      </IconButton>
+      {u.id !== meId && (
+        <IconButton
+          tone="danger"
+          onClick={async () => { await deleteUser(u.id); await onChanged(); }}
+          aria-label={`Excluir ${u.nome}`}>
+          <Trash2 size={15} />
+        </IconButton>
+      )}
+    </div>
+  );
+}
+
+// Rodapé dos modais: ações à direita, empilhadas (principal por cima) no celular.
+function Rodape({ busy, onCancel, children }: { busy: boolean; onCancel: () => void; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col-reverse gap-2 border-t border-[var(--color-line)] pt-4 sm:flex-row sm:justify-end">
+      <Button variant="ghost" type="button" className="w-full sm:w-auto" disabled={busy} onClick={onCancel}>Cancelar</Button>
+      <Button type="submit" className="w-full sm:w-auto sm:min-w-28" loading={busy}>{children}</Button>
     </div>
   );
 }
@@ -233,37 +275,36 @@ function UserModal({ open, onClose, user, meId, roles, onSaved }: {
         <Field label="Email" required error={errors.email}>
           <TextInput type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
         </Field>
-        <Field label={editing ? "Nova senha" : "Senha"} hint={editing ? "deixe vazio pra manter" : "mínimo 6 caracteres"}
+        <Field label={editing ? "Nova senha" : "Senha"} hint={editing ? "Deixe vazio pra manter a atual." : "Mínimo de 6 caracteres."}
                required={!editing} error={errors.senha}>
           <TextInput type="password" value={senha} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSenha(e.target.value)}
             autoComplete="new-password" />
         </Field>
 
-        <Field label="Roles" hint="usuário pode ter mais de uma">
-          <div className="flex flex-wrap gap-1.5">
+        <div>
+          <p className="mb-2 text-sm font-medium text-slate-200">Roles</p>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Roles do usuário">
             {roles.map((r) => {
               const on = roleIds.includes(r.id);
               return (
-                <button key={r.id} type="button"
+                <button key={r.id} type="button" aria-pressed={on}
                   onClick={() => setRoleIds(on ? roleIds.filter((id) => id !== r.id) : [...roleIds, r.id])}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-                    on ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "bg-veu/5 text-slate-400 hover:bg-veu/10"
+                  className={`h-9 rounded-lg px-3 text-[13px] font-medium transition-colors cursor-pointer ${
+                    on ? "bg-ink text-[var(--color-on-ink)]" : "border border-[var(--color-line-strong)] text-slate-300 hover:bg-veu/[0.05] hover:text-ink"
                   }`}>
                   {r.nome}
                 </button>
               );
             })}
           </div>
-        </Field>
+          <p className="mt-1.5 text-[13px] text-slate-500">Um usuário pode ter mais de uma.</p>
+        </div>
 
         {editing && user && user.id !== meId && (
           <CheckboxField label="Conta ativa" checked={ativo} onChecked={setAtivo} />
         )}
 
-        <div className="flex gap-2 pt-1">
-          <Button variant="ghost" type="button" className="flex-1" disabled={busy} onClick={onClose}>Cancelar</Button>
-          <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar"}</Button>
-        </div>
+        <Rodape busy={busy} onCancel={onClose}>{editing ? "Salvar" : "Criar usuário"}</Rodape>
       </form>
     </Modal>
   );
@@ -284,19 +325,23 @@ function RolesTab({ roles, permissions, canManage, onChanged }: {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">{roles.length} role{roles.length === 1 ? "" : "s"}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold leading-7 text-ink">Roles</h2>
+          <p className="tnum text-[13px] text-slate-500">{roles.length} {roles.length === 1 ? "papel" : "papéis"} · autorização sempre por permission</p>
+        </div>
         {canManage && <Button onClick={() => setNovoOpen(true)}><Plus size={16} /> Nova role</Button>}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {roles.length === 0 && <EmptyState title="Nenhuma role cadastrada" description="Crie um papel e escolha as permissions dele." />}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {roles.map((r) => (
-          <Card key={r.id} className="p-5">
-            <div className="mb-3 flex items-start justify-between gap-2">
+          <Card key={r.id} className="flex flex-col p-5 sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-semibold text-ink">{r.nome}</p>
-                <p className="text-xs text-slate-500">
-                  {r.descricao || "sem descrição"} · {r.usuarios} usuário{r.usuarios === 1 ? "" : "s"}
+                <h3 className="text-[15px] font-semibold text-ink">{r.nome}</h3>
+                <p className="text-[13px] text-slate-500">
+                  {r.descricao || "Sem descrição"} · <span className="tnum">{r.usuarios}</span> {r.usuarios === 1 ? "usuário" : "usuários"}
                 </p>
               </div>
               {canManage && (
@@ -315,11 +360,10 @@ function RolesTab({ roles, permissions, canManage, onChanged }: {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {r.permissions.length === 0
-                ? <span className="text-xs text-slate-500">nenhuma permission</span>
+                ? <span className="text-[13px] text-slate-500">Nenhuma permission.</span>
                 : r.permissions.map((p) => (
-                  <Badge key={p} className={p === "*" ? "bg-amber-500/15 text-amber-300" : "bg-veu/5 text-slate-300"}>
-                    {p}
-                  </Badge>
+                  // wildcard total é o único que merece cor: é o que dá tudo
+                  <Badge key={p} tone={p === "*" ? "warn" : "neutral"}>{p}</Badge>
                 ))}
             </div>
           </Card>
@@ -394,12 +438,12 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
           <TextInput value={descricao} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDescricao(e.target.value)} />
         </Field>
 
-        <Field label="Permissions" hint="wildcard: recurso:* cobre todas as ações do recurso; * cobre tudo">
-          <div className="max-h-64 space-y-3 overflow-y-auto rounded-xl border border-[var(--color-line)] p-3">
+        <Field label="Permissions" hint="recurso:* cobre todas as ações do recurso; * cobre tudo.">
+          <div className="max-h-72 space-y-4 overflow-y-auto rounded-xl border border-[var(--color-line-strong)] p-3.5">
             <PermChip p="*" on={perms.includes("*")} onToggle={() => toggle("*")} destaque />
             {grupos.map(([recurso, ps]) => (
               <div key={recurso}>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{recurso}</p>
+                <p className="mb-2 text-[13px] font-medium text-slate-400">{recurso}</p>
                 <div className="flex flex-wrap gap-1.5">
                   <PermChip p={`${recurso}:*`} on={perms.includes(`${recurso}:*`)} onToggle={() => toggle(`${recurso}:*`)} destaque />
                   {ps.map((p) => (
@@ -411,10 +455,7 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
           </div>
         </Field>
 
-        <div className="flex gap-2 pt-1">
-          <Button variant="ghost" type="button" className="flex-1" disabled={busy} onClick={onClose}>Cancelar</Button>
-          <Button type="submit" className="flex-1" loading={busy}>{editing ? "Salvar" : "Criar"}</Button>
-        </div>
+        <Rodape busy={busy} onCancel={onClose}>{editing ? "Salvar" : "Criar role"}</Rodape>
       </form>
     </Modal>
   );
@@ -422,11 +463,11 @@ function RoleModal({ open, onClose, role, permissions, onSaved }: {
 
 function PermChip({ p, on, onToggle, destaque }: { p: string; on: boolean; onToggle: () => void; destaque?: boolean }) {
   return (
-    <button type="button" onClick={onToggle}
-      className={`rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
+    <button type="button" onClick={onToggle} aria-pressed={on}
+      className={`h-8 rounded-lg px-2.5 text-xs font-medium transition-colors cursor-pointer ${
         on
-          ? destaque ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40" : "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40"
-          : "bg-veu/5 text-slate-400 hover:bg-veu/10"
+          ? destaque ? "bg-amber-500/20 text-amber-300 ring-1 ring-inset ring-amber-400/40" : "bg-ink text-[var(--color-on-ink)]"
+          : "border border-[var(--color-line-strong)] text-slate-400 hover:bg-veu/[0.05] hover:text-ink"
       }`}>
       {p}
     </button>
@@ -438,7 +479,7 @@ function PermChip({ p, on, onToggle, destaque }: { p: string; on: boolean; onTog
 function Loading() {
   return (
     <div className="space-y-4">
-      <Skeleton className="h-4 w-28" />
+      <Skeleton className="h-6 w-32" />
       <Card className="p-4">
         <SkeletonList rows={4} height="h-14" label="Carregando" />
       </Card>

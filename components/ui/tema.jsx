@@ -50,6 +50,7 @@ export function useTema() {
   return [tema, troca];
 }
 
+/** @param {{ className?: string }} props */
 export function BotaoTema({ className }) {
   const [tema, troca] = useTema();
   const claro = tema === "claro";
@@ -61,7 +62,7 @@ export function BotaoTema({ className }) {
       title={rotulo}
       aria-label={rotulo}
       className={[
-        "shrink-0 rounded-lg p-2 text-slate-500 transition-colors cursor-pointer hover:bg-veu/10 hover:text-slate-200",
+        "relative grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-500 transition-colors cursor-pointer hover:bg-veu/[0.08] hover:text-ink before:absolute before:-inset-1 before:content-['']",
         className,
       ]
         .filter(Boolean)

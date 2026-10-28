@@ -127,18 +127,18 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
         {passo === "arquivo" && (
           <>
             {/* input nativo escondido: só o label estilizado aparece */}
-            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed border-[var(--color-line)] bg-veu/[0.02] px-5 py-10 text-center transition-colors hover:border-veu/30 hover:bg-veu/5">
+            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--color-line-strong)] px-5 py-10 text-center transition-colors hover:border-veu/35 hover:bg-veu/[0.03] focus-within:border-blue-500">
               <input type="file" accept=".ofx,.qfx,application/x-ofx" className="sr-only" onChange={escolher} />
-              <Upload size={22} className="text-slate-400" />
+              <Upload size={22} strokeWidth={1.75} className="text-slate-500" />
               <span className="text-sm font-semibold text-ink">Escolher arquivo .ofx</span>
-              <span className="text-xs text-slate-500">Extrato ou fatura baixada do banco (.ofx / .qfx)</span>
+              <span className="text-[13px] text-slate-500">Extrato ou fatura baixada do banco (.ofx / .qfx)</span>
             </label>
             {arquivo && (
-              <p className="flex items-center gap-2 text-xs text-slate-400">
+              <p className="flex items-center gap-2 text-[13px] text-slate-400">
                 <FileText size={14} /> {arquivo.name} · {(arquivo.size / 1024).toFixed(0)} KB
               </p>
             )}
-            <p className="rounded-xl bg-veu/4 px-3.5 py-3 text-xs text-slate-400">
+            <p className="rounded-xl bg-veu/[0.04] px-3.5 py-3 text-[13px] text-slate-400">
               As transações entram como despesas de <b className="text-slate-300">{mesLabel}</b>. O arquivo não sai do
               seu navegador — a leitura é local.
             </p>
@@ -148,21 +148,21 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
         {passo === "conferir" && (
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-sm text-slate-300">
-                <b>{marcadas.length}</b> de {linhas.length} transações ·{" "}
+              <p className="text-sm text-slate-400">
+                <b className="font-semibold text-ink">{marcadas.length}</b> de {linhas.length} transações ·{" "}
                 <span className="tnum font-semibold text-ink">{fmtMoney(total)}</span>
               </p>
-              <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+              <label className="flex items-center gap-2 text-[13px] text-slate-400 cursor-pointer">
                 <Checkbox
                   checked={marcadas.length === linhas.length - duplicadas && marcadas.length > 0}
                   onChecked={(v) => todas(v)}
                   aria-label="Marcar todas"
                 />
-                todas
+                Todas
               </label>
             </div>
             {(duplicadas > 0 || fora.credito > 0 || fora.mes > 0) && (
-              <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+              <p className="rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-[13px] text-amber-300">
                 {[
                   duplicadas > 0 && `${duplicadas} já importada${duplicadas > 1 ? "s" : ""}`,
                   fora.credito > 0 && `${fora.credito} crédito${fora.credito > 1 ? "s" : ""} (pagamento/estorno)`,
@@ -174,7 +174,7 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
               </p>
             )}
 
-            <Field label="Cartão" hint="vale para todas as linhas importadas">
+            <Field label="Cartão" hint="Vale para todas as linhas importadas.">
               <Select value={cartao} onValue={setCartao}>
                 <SelectItem value="">Sem cartão (à vista / débito)</SelectItem>
                 {cartoes.map((c) => (
@@ -183,13 +183,13 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
               </Select>
             </Field>
 
-            <Field label="Aplicar categoria nas marcadas" hint="a sugestão automática vem das despesas anteriores">
+            <Field label="Aplicar categoria nas marcadas" hint="A sugestão automática vem das despesas anteriores.">
               <Select value={aplicarCat} onValue={aplicarNasMarcadas} placeholder="Escolher…">
                 <SelectItem value="">Sem categoria</SelectItem>
                 {categorias.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     <span className="inline-flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+                      <span className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: acento(c.cor).dot }} />
                       {c.nome}
                     </span>
                   </SelectItem>
@@ -199,25 +199,25 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
 
             <ul className="max-h-72 divide-y divide-[var(--color-line)] overflow-y-auto rounded-xl border border-[var(--color-line)]">
               {linhas.map((l) => (
-                <li key={l.key} className={`space-y-2 px-3 py-2.5 ${l.duplicada ? "opacity-50" : ""}`}>
-                  <div className="flex items-start gap-2.5">
+                <li key={l.key} className={`space-y-2.5 px-3.5 py-3 ${l.duplicada ? "opacity-50" : ""}`}>
+                  <div className="flex items-start gap-3">
                     <Checkbox checked={l.marcada && !l.duplicada} disabled={l.duplicada}
                               onChecked={() => alterna(l.key)} aria-label={`Importar ${l.descricao}`} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-200">{l.descricao}</p>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="truncate text-sm font-medium text-ink">{l.descricao}</p>
+                      <p className="tnum text-xs text-slate-500">
                         {fmtDate(l.data)}{l.duplicada ? " · já importada" : ""}
                       </p>
                     </div>
-                    <span className="tnum shrink-0 text-sm font-semibold text-slate-200">{fmtMoney(l.valor)}</span>
+                    <span className="tnum shrink-0 text-sm font-semibold text-ink">{fmtMoney(l.valor)}</span>
                   </div>
                   {!l.duplicada && (
-                    <Select value={l.categoriaId} onValue={(v) => setCategoria(l.key, v)} className="py-1.5 text-sm">
+                    <Select value={l.categoriaId} onValue={(v) => setCategoria(l.key, v)} className="h-9 sm:text-[13px]" aria-label={`Categoria de ${l.descricao}`}>
                       <SelectItem value="">Sem categoria</SelectItem>
                       {categorias.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           <span className="inline-flex items-center gap-2">
-                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
+                            <span className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: acento(c.cor).dot }} />
                             {c.nome}
                           </span>
                         </SelectItem>
@@ -242,8 +242,8 @@ export default function ImportOfxModal({ open, onClose, mes, mesLabel, cartaoId:
         {passo === "resultado" && resultado && (
           <>
             <div className="flex flex-col items-center gap-2 py-6 text-center">
-              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/15 text-emerald-400">
-                <Check size={24} />
+              <span className="grid h-11 w-11 place-items-center rounded-full bg-emerald-500/15 text-emerald-300">
+                <Check size={22} strokeWidth={2.5} />
               </span>
               <p className="text-lg font-semibold text-ink">
                 {resultado.criadas} {resultado.criadas === 1 ? "despesa criada" : "despesas criadas"}

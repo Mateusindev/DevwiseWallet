@@ -1,9 +1,13 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-/* ── Design tokens (semantic) ───────────────────────────────────────────
-   Dois temas, UM conjunto de classes. O tema escuro (OLED — trust blue +
-   profit green) mora no `@theme`; o claro é só uma segunda definição das
-   MESMAS variáveis em `html[data-tema="claro"]`.
+/* `dark:` dos componentes shadcn segue o tema da app (o atributo no <html>),
+   não o `prefers-color-scheme`. */
+@custom-variant dark (&:where(html:not([data-tema="claro"]), html:not([data-tema="claro"]) *));
+
+/* ── Design tokens (semânticos) ─────────────────────────────────────────
+   Dois temas, UM conjunto de classes. O escuro mora no `@theme`; o claro é
+   só uma segunda definição das MESMAS variáveis em `html[data-tema="claro"]`.
 
    Por que por variável e não por `dark:` em cada classe: as telas usam a
    paleta slate do Tailwind direto (`text-slate-400` e cia., ~400 ocorrências).
@@ -11,89 +15,220 @@
    redefinir a escala no seletor do tema vira a app inteira sem tocar em
    componente — e sem o risco de alguém esquecer o `dark:` numa tela nova.
 
+   Direção visual (redesign 2026-10):
+     · neutros de verdade — o slate azulado do Tailwind é substituído por uma
+       escala cinza quase neutra nos DOIS temas (escuro não é mais navy);
+     · cor vai no dado, não no cromo: o acento cobalto (`blue-*`) marca série
+       principal, seleção e foco; a ação primária é tinta (`bg-ink`);
+     · categorias, caixinhas, cartões e pessoas são codificados por tons
+       pálidos com a tinta escura do MESMO matiz (no claro) / tinta clara do
+       mesmo matiz sobre véu (no escuro) — é o mesmo `bg-x-500/15 text-x-300`
+       nos dois temas, porque a escala dos acentos também inverte;
+     · superfícies chapadas: borda de 1px OU degrau de tom, sem sombra em
+       repouso. Sombra só no que flutua (menu, popover, diálogo).
+
    Os dois tokens próprios existem porque "branco" tinha dois papéis:
      --color-ink  texto forte  (era `text-white`)
      --color-veu  sobreposição (era `bg-white/10`, `border-white/15`)
-   `text-white` continua literal onde o fundo é colorido (botão azul). */
+   `text-white` continua literal onde o fundo é colorido (botão de perigo). */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-manrope), "Inter", ui-sans-serif, system-ui, sans-serif;
 
-  --color-bg: #0b1120;        /* app background (deeper than slate-900) */
-  --color-surface: #0f172a;   /* card base        (slate-900) */
-  --color-surface-2: #131d33; /* raised surface */
-  --color-line: rgba(255, 255, 255, 0.07);
+  /* raio bimodal: cartão 20 · controle 10 · interno 8 · chip 6 */
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 1.25rem;
 
-  --color-ink: #f8fafc;       /* texto forte (títulos, valores) */
+  /* Manrope é variável: o "bold" do app inteiro desce pra 650 — número de
+     dinheiro continua pesado, título deixa de gritar. */
+  --font-weight-bold: 650;
+
+  --color-bg: #0c0d0f;        /* chão do app */
+  --color-surface: #141518;   /* cartão */
+  --color-surface-2: #1b1d21; /* camada que flutua (menu, diálogo) e poços */
+  --color-input: #0f1012;     /* fundo de campo: um degrau abaixo do cartão */
+  --color-line: rgba(255, 255, 255, 0.075);        /* borda de cartão / régua */
+  --color-line-strong: rgba(255, 255, 255, 0.14);  /* borda de controle */
+
+  --color-ink: #f4f5f7;       /* texto forte (títulos, valores) */
   --color-veu: #ffffff;       /* véu das sobreposições (sempre com /opacidade) */
+  --color-on-ink: #0c0d0f;    /* texto sobre fundo `bg-ink` (botão primário) */
 
-  --color-brand: #3b82f6;     /* secondary blue, used as interactive */
-  --color-brand-strong: #1e40af;
-  --color-growth: #10b981;    /* profit green */
-  --color-warn: #f59e0b;
-  --color-danger: #ef4444;
+  --color-brand: #5b8cff;     /* cobalto: dado principal, seleção, foco */
+  --color-growth: #3fc07a;
+  --color-warn: #e0a23a;
+  --color-danger: #f0606f;
+
+  /* neutros: cinza quase neutro (o slate original puxava pro azul) */
+  --color-slate-50: #f7f8f9;
+  --color-slate-100: #eef0f2;
+  --color-slate-200: #dfe1e5;
+  --color-slate-300: #c4c7cd;
+  --color-slate-400: #a2a6ae;
+  --color-slate-500: #868a93;
+  --color-slate-600: #5a5e66;
+  --color-slate-700: #383b41;
+  --color-slate-800: #25272b;
+  --color-slate-900: #18191c;
+  --color-slate-950: #0f1012;
+
+  /* cobalto no lugar do azul padrão (que puxava pro índigo no 600) */
+  --color-blue-200: #c9d8ff;
+  --color-blue-300: #9dbbff;
+  --color-blue-400: #7aa2ff;
+  --color-blue-500: #5b8cff;
+  --color-blue-600: #3f72ec;
+  --color-blue-700: #2f5bc8;
 }
 
-/* Não-cores do tema (sombra, trilho vazio do donut, scrollbar, skeleton).
-   Ficam fora do `@theme` de propósito: não viram utilitária, só são lidas
-   por `var()` em pontos específicos. */
+/* Não-cores do tema (trilho vazio, scrollbar, skeleton). Ficam fora do
+   `@theme` de propósito: não viram utilitária, só são lidas por `var()`. */
 :root {
-  --sombra-card: 0 1px 0 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6);
-  --color-trilho: rgba(255, 255, 255, 0.06); /* fatia vazia de donut/anel */
-  --skel-base: rgba(255, 255, 255, 0.055);
-  --skel-brilho: rgba(255, 255, 255, 0.06);
-  --skel-brilho-forte: rgba(255, 255, 255, 0.09);
-  --scrollbar: #1e293b;
+  --sombra-flutua: 0 12px 32px -8px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --color-trilho: rgba(255, 255, 255, 0.07); /* fatia vazia de barra/anel */
+  --color-grade: rgba(255, 255, 255, 0.06);  /* linhas de grade dos gráficos */
+  --skel-base: rgba(255, 255, 255, 0.06);
+  --scrollbar: #2a2c31;
+
+  /* cor de dado das entidades que o usuário colore (caixinha, categoria,
+     cartão) — ver `ACENTO` em lib/calc.js */
+  --acento-emerald: #3fc07a;
+  --acento-blue: #6b97ff;
+  --acento-violet: #a58bff;
+  --acento-amber: #e5a53a;
+  --acento-rose: #f2697a;
+  --acento-cyan: #3fc4d6;
+  --acento-neutro: #6b6f77;
 }
 
 /* ── Tema claro ─────────────────────────────────────────────────────────
    Só redefinição de variável. A escala slate é INVERTIDA (o 400 que era
    texto secundário claro vira um cinza escuro de mesmo contraste), e os
-   tons 200/300/400 dos acentos descem pros 600/700 — emerald-400 em fundo
-   branco não passa de 2:1. */
+   tons 200/300/400 dos acentos descem pros escuros do mesmo matiz — é o que
+   faz `bg-emerald-500/15 text-emerald-300` virar "verde pálido com tinta
+   verde-escura" sem tocar em componente. */
 html[data-tema="claro"] {
-  --color-bg: #f5f7fa;
+  --color-bg: #f3f5f7;
   --color-surface: #ffffff;
-  --color-surface-2: #eef2f7;
-  --color-line: rgba(15, 23, 42, 0.1);
+  --color-surface-2: #f6f7f9;
+  --color-input: #ffffff;     /* campo fica branco mesmo em painel cinza */
+  --color-line: rgba(17, 19, 22, 0.09);
+  --color-line-strong: rgba(17, 19, 22, 0.17);
 
-  --color-ink: #0f172a;
-  --color-veu: #0f172a;
+  --color-ink: #1b1d1f;
+  --color-veu: #1b1d1f;
+  --color-on-ink: #ffffff;
 
-  --sombra-card: 0 1px 2px 0 rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.28);
-  --color-trilho: rgba(15, 23, 42, 0.08);
-  --skel-base: rgba(15, 23, 42, 0.06);
-  --skel-brilho: rgba(15, 23, 42, 0.05);
-  --skel-brilho-forte: rgba(15, 23, 42, 0.08);
-  --scrollbar: #cbd5e1;
+  --color-brand: #1d5fd6;
+  --color-growth: #2f7a45;
+  --color-warn: #92400e;
+  --color-danger: #c41c29;
 
-  /* neutros: espelho da escala (100↔900) */
-  --color-slate-100: #0f172a;
-  --color-slate-200: #1e293b;
-  --color-slate-300: #334155;
-  --color-slate-400: #475569;
-  --color-slate-500: #64748b;
-  --color-slate-600: #334155; /* usado como texto forte, não como fundo */
-  --color-slate-900: #e2e8f0;
+  --sombra-flutua: 0 12px 32px -10px rgba(17, 19, 22, 0.22), 0 2px 6px rgba(17, 19, 22, 0.06);
+  --color-trilho: rgba(17, 19, 22, 0.07);
+  --color-grade: rgba(17, 19, 22, 0.07);
+  --skel-base: rgba(17, 19, 22, 0.06);
+  --scrollbar: #c9ccd1;
 
-  /* acentos: tons claros viram escuros pra manter contraste em fundo branco */
-  --color-blue-200: #1e40af;
-  --color-blue-300: #1d4ed8;
-  --color-blue-400: #2563eb;
-  --color-emerald-200: #065f46;
-  --color-emerald-300: #047857;
-  --color-emerald-400: #059669;
-  --color-rose-200: #9f1239;
-  --color-rose-300: #be123c;
-  --color-rose-400: #e11d48;
+  --acento-emerald: #2f8a52;
+  --acento-blue: #1d5fd6;
+  --acento-violet: #7048d8;
+  --acento-amber: #b45309;
+  --acento-rose: #d4313f;
+  --acento-cyan: #12808f;
+  --acento-neutro: #8a8e94;
+
+  /* neutros: espelho da escala (100↔900). 400 e 500 passam 4.5:1 no branco. */
+  --color-slate-50: #111316;
+  --color-slate-100: #1b1d1f;
+  --color-slate-200: #26292c;
+  --color-slate-300: #383b3f;
+  --color-slate-400: #565a5f;
+  --color-slate-500: #686c72;
+  --color-slate-600: #3a3d41;
+  --color-slate-700: #c4c7cc;
+  --color-slate-800: #dfe2e6;
+  --color-slate-900: #eceef1;
+  --color-slate-950: #f6f7f9;
+
+  /* acentos: tons claros viram escuros (tinta) pra manter contraste no branco */
+  --color-blue-200: #0a3a80;
+  --color-blue-300: #0f4aa6;
+  --color-blue-400: #1d5fd6;
+  --color-blue-500: #1d5fd6;
+  --color-blue-600: #1a55c0;
+  --color-blue-700: #154aa8;
+  --color-emerald-200: #04250e;
+  --color-emerald-300: #1f5c33;
+  --color-emerald-400: #2f7a45;
+  --color-rose-200: #831c1e;
+  --color-rose-300: #9f1d27;
+  --color-rose-400: #c41c29;
   --color-amber-200: #78350f;
-  --color-amber-300: #92400e;
-  --color-amber-400: #b45309;
+  --color-amber-300: #8a3c0c;
+  --color-amber-400: #92400e;
+  --color-violet-300: #5b2bb5;
+  --color-violet-400: #6d3fd1;
+  --color-cyan-300: #0e5f6e;
+  --color-cyan-400: #12707f;
   --color-sky-300: #0369a1;
+}
+
+/* ── Ponte shadcn/ui ────────────────────────────────────────────────────
+   Os componentes de `components/ui/*.tsx` (copiados pelo CLI do shadcn) falam
+   os nomes semânticos dele: background, card, primary, muted, accent,
+   sidebar… Em vez de um segundo conjunto de valores, cada nome APONTA pra uma
+   variável que já existe — então o tema claro/escuro continua sendo uma
+   redefinição só (`html[data-tema="claro"]`) e shadcn e telas antigas nunca
+   divergem. `inline` faz a utilitária ler a variável de origem direto.
+
+   Atenção ao nome: "accent" do shadcn é o realce de hover/foco de item de
+   menu, NÃO o `acento(cor)` das entidades coloridas pelo usuário. */
+@theme inline {
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-ink);
+  --color-primary-foreground: var(--color-on-ink);
+  --color-secondary: var(--color-surface-2);
+  --color-secondary-foreground: var(--color-ink);
+  --color-muted: var(--color-surface-2);
+  --color-muted-foreground: var(--color-slate-500);
+  --color-accent: var(--realce);
+  --color-accent-foreground: var(--color-ink);
+  --color-destructive: var(--color-danger);
+  --color-border: var(--color-line);
+  --color-ring: var(--color-brand);
+
+  --color-sidebar: var(--color-bg);
+  --color-sidebar-foreground: var(--color-slate-400);
+  --color-sidebar-primary: var(--color-ink);
+  --color-sidebar-primary-foreground: var(--color-on-ink);
+  --color-sidebar-accent: var(--realce);
+  --color-sidebar-accent-foreground: var(--color-ink);
+  --color-sidebar-border: var(--color-line);
+  --color-sidebar-ring: var(--color-brand);
+}
+
+/* Realce neutro (hover de item, pílula da navegação ativa): véu sobre o chão,
+   nunca o cobalto — cor fica pro dado. */
+:root { --realce: rgba(255, 255, 255, 0.065); }
+html[data-tema="claro"] { --realce: rgba(17, 19, 22, 0.055); }
+
+/* shadcn: borda sem cor explícita é a régua do tema (no v4 o padrão seria
+   `currentColor`, que acendia toda `border` solta). */
+@layer base {
+  *, ::after, ::before { border-color: var(--color-line); }
 }
 
 html {
   color-scheme: dark;
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 html[data-tema="claro"] { color-scheme: light; }
 
@@ -103,47 +238,49 @@ body {
   background: var(--color-bg);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: "tnum" 1; /* tabular figures for money columns */
+  font-feature-settings: "tnum" 1; /* algarismos tabulares: colunas de dinheiro alinham */
+  overflow-x: clip; /* nenhuma tela rola de lado; quem precisa rola no próprio quadro */
 }
 
 /* tabular numerals helper */
 .tnum { font-variant-numeric: tabular-nums; }
 
-/* ── Skeleton ───────────────────────────────────────────────────────────
-   Brilho varrendo em vez de só pulsar: pulse sozinho parece um bloco
-   desenhado, o sweep lê como "está vindo". `prefers-reduced-motion` já
-   desliga toda animação mais abaixo. */
-.skel {
-  position: relative;
-  overflow: hidden;
-  background: var(--skel-base);
-}
-.skel::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--skel-brilho) 45%,
-    var(--skel-brilho-forte) 55%,
-    transparent
-  );
-  animation: skel-sweep 1.35s ease-in-out infinite;
-}
-@keyframes skel-sweep {
-  100% { transform: translateX(100%); }
+/* Foco visível e único no app inteiro: anel cobalto, só no teclado. */
+/* Itens de menu/lista do Radix ficam de fora: o realce de fundo deles já é o
+   foco (anel em cada linha do menu seria ruído). */
+:where(a, button, [role="button"], [tabindex]):not([role^="menuitem"], [role="option"]):focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
 }
 
-/* Feedback de navegação: a barra fina no topo enquanto a rota carrega. */
+::selection { background: color-mix(in srgb, var(--color-brand) 30%, transparent); }
+
+/* ── Skeleton ───────────────────────────────────────────────────────────
+   Bloco chapado no tamanho real do valor que está vindo, pulsando devagar.
+   O brilho varrendo (gradiente) saiu: num app aberto todo dia ele cansa, e
+   o formato do bloco já diz o que vem. `prefers-reduced-motion` desliga. */
+.skel {
+  background: var(--skel-base);
+  animation: skel-pulso 1.6s ease-in-out infinite;
+}
+@keyframes skel-pulso {
+  50% { opacity: 0.55; }
+}
+
+/* Feedback de navegação: a barra fina sob o link enquanto a rota carrega. */
 @keyframes rota-progresso {
   0%   { transform: translateX(-100%) scaleX(0.35); }
   55%  { transform: translateX(-15%) scaleX(0.7); }
   100% { transform: translateX(0) scaleX(1); }
 }
 
-/* thin scrollbar */
+/* Entrada de camadas que flutuam (diálogo, folha no celular). */
+@keyframes surge { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes sobe { from { transform: translateY(16px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@keyframes esmaece { from { opacity: 0; } to { opacity: 1; } }
+
+/* scrollbar fina */
 * { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 8px; }

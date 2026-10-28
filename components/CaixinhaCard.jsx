@@ -1,10 +1,18 @@
 import { useState } from "react";
-import { Plus, Minus, Target, TrendingUp, Infinity as InfinityIcon, LifeBuoy, SlidersHorizontal } from "lucide-react";
-import { Card, ProgressBar, Badge } from "./ui/primitives.jsx";
+import { Plus, Minus, SlidersHorizontal, ChevronRight } from "lucide-react";
+import { Card, ProgressBar, Badge, Button } from "./ui/primitives.jsx";
 import { fmtMoney, fmtMeses } from "../lib/format.js";
 import { progresso, mesesParaMeta, faltaParaMeta, acento } from "../lib/calc.js";
 import { ReservaEmergenciaModal } from "./forms.jsx";
 import { useAuth } from "./AuthGate";
+
+// Tipo da caixinha em palavras (a etiqueta leva o tom da própria caixinha).
+function tipoDe(c) {
+  if (c.tipo === "emergencia") return "Reserva";
+  if (c.meta != null) return "Com meta";
+  if (c.acumulaSobra) return "Acumula sobra";
+  return "Livre";
+}
 
 export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) {
   const { can } = useAuth();
@@ -18,81 +26,55 @@ export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) 
   const [configOpen, setConfigOpen] = useState(false);
 
   return (
-    <Card className="flex flex-col p-5 transition-colors hover:border-veu/15">
-      {/* header */}
-      <button onClick={onOpen}
-              className="group flex items-start justify-between text-left cursor-pointer"
-              aria-label={`Abrir ${caixinha.nome}`}>
-        <div className="flex items-center gap-3">
-          <span className={`grid h-10 w-10 place-items-center rounded-xl ${a.soft}`}>
-            {isEmergencia ? <LifeBuoy size={18} className={a.text} />
-              : temMeta ? <Target size={18} className={a.text} />
-              : caixinha.acumulaSobra ? <TrendingUp size={18} className={a.text} />
-              : <InfinityIcon size={18} className={a.text} />}
-          </span>
-          <div>
-            <h3 className="font-semibold text-ink group-hover:underline decoration-veu/30 underline-offset-4">
-              {caixinha.nome}
-            </h3>
-            <p className="text-xs text-slate-400">
-              {caixinha.aporteMensal > 0 ? `${fmtMoney(caixinha.aporteMensal)}/mês` : "Sem aporte fixo"}
-            </p>
-          </div>
-        </div>
-        {caixinha.acumulaSobra && (
-          <Badge className="bg-veu/5 text-slate-300">acumula sobra</Badge>
-        )}
-      </button>
-
-      {/* saldo */}
-      <div className="mt-5">
-        <p className="text-xs uppercase tracking-wide text-slate-500">Saldo</p>
-        <p className={`tnum text-2xl font-bold ${caixinha.saldo < 0 ? "text-rose-400" : "text-ink"}`}>
-          {fmtMoney(caixinha.saldo)}
-        </p>
+    <Card className="group/card flex flex-col p-5 transition-colors hover:border-[var(--color-line-strong)]">
+      {/* cabeçalho: o nome abre o detalhe */}
+      <div className="flex items-start justify-between gap-3">
+        <button onClick={onOpen}
+                className="group flex min-w-0 items-center gap-2 text-left cursor-pointer"
+                aria-label={`Abrir ${caixinha.nome}`}>
+          <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: a.dot }} />
+          <h3 className="truncate text-[15px] font-semibold text-ink group-hover:underline decoration-veu/30 underline-offset-4">
+            {caixinha.nome}
+          </h3>
+          <ChevronRight size={15} className="shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5" />
+        </button>
+        <Badge className={a.chip}>{tipoDe(caixinha)}</Badge>
       </div>
 
-      {/* progress / meta */}
-      <div className="mt-4 min-h-[58px]">
+      {/* saldo */}
+      <p className={`tnum mt-4 text-2xl font-semibold tracking-[-0.01em] ${caixinha.saldo < 0 ? "text-rose-400" : "text-ink"}`}>
+        {fmtMoney(caixinha.saldo)}
+      </p>
+      <p className="tnum text-[13px] text-slate-500">
+        {caixinha.aporteMensal > 0 ? `${fmtMoney(caixinha.aporteMensal)} por mês` : "Sem aporte fixo"}
+      </p>
+
+      {/* progresso / meta */}
+      <div className="mt-5 flex-1">
         {temMeta ? (
           <>
-            <div className="mb-1.5 flex items-center justify-between text-xs">
-              <span className="text-slate-400">Meta {fmtMoney(caixinha.meta)}</span>
-              <span className={`tnum font-semibold ${a.text}`}>{Math.round((prog || 0) * 100)}%</span>
-            </div>
-            <ProgressBar value={prog} fromClass={a.from} toClass="to-veu/70" />
-            <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-400">
-              <span>
-                {falta > 0
-                  ? <>Faltam <span className="tnum text-slate-200">{fmtMoney(falta)}</span> · <span className="text-slate-200">{fmtMeses(meses)}</span></>
-                  : <span className="text-emerald-400">✓ Meta atingida</span>}
-              </span>
-              {isEmergencia && podeConfig && (
-                <button onClick={() => setConfigOpen(true)}
-                        className="inline-flex shrink-0 items-center gap-1 text-slate-400 hover:text-slate-200 cursor-pointer">
-                  <SlidersHorizontal size={12} /> Ajustar
-                </button>
-              )}
-            </div>
+            <ProgressBar value={prog} color={a.dot} label={`Progresso da meta de ${caixinha.nome}`} />
+            <p className="tnum mt-2.5 text-[13px] text-slate-400">
+              <span className="font-medium text-ink">{Math.round((prog || 0) * 100)}%</span> de {fmtMoney(caixinha.meta)}
+            </p>
+            <p className="tnum mt-0.5 text-[13px] text-slate-500">
+              {falta > 0 ? <>Faltam {fmtMoney(falta)} · {fmtMeses(meses)}</> : <span className="text-emerald-400">Meta atingida</span>}
+            </p>
           </>
         ) : isEmergencia ? (
           podeConfig ? (
-            <button onClick={() => setConfigOpen(true)}
-                    className={`flex h-full w-full items-center justify-between gap-2 rounded-xl px-3.5 py-3 text-sm font-semibold cursor-pointer transition-colors ${a.soft} ${a.text} hover:brightness-110`}>
-              <span>Configurar reserva</span>
-              <span aria-hidden>→</span>
-            </button>
+            <Button variant="secondary" size="sm" className="w-full justify-between" onClick={() => setConfigOpen(true)}>
+              Configurar reserva <ChevronRight size={15} />
+            </Button>
           ) : (
-            <div className="flex h-full items-center rounded-xl bg-veu/4 px-3 py-3 text-xs text-slate-400">
-              Reserva ainda não configurada.
-            </div>
+            <p className="text-[13px] text-slate-500">Reserva ainda não configurada.</p>
           )
         ) : (
-          <div className="flex h-full items-center rounded-xl bg-veu/4 px-3 py-3 text-xs text-slate-400">
+          <p className="text-[13px] text-slate-500">
             {caixinha.acumulaSobra
-              ? "Cofre flexível — recebe o que sobra no mês."
-              : "Sem meta definida. Acumulando livremente."}
-          </div>
+              ? "Cofre flexível: recebe o que sobra no mês."
+              : "Sem meta definida, acumulando livremente."}
+          </p>
         )}
       </div>
 
@@ -100,18 +82,21 @@ export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) 
         <ReservaEmergenciaModal open={configOpen} onClose={() => setConfigOpen(false)} caixinha={caixinha} />
       )}
 
-      {/* actions */}
-      {can("movimentacao:manage") && (
-      <div className="mt-4 flex gap-2">
-        <button onClick={onAporte}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500/15 py-2 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25 cursor-pointer">
-          <Plus size={15} /> Aporte
-        </button>
-        <button onClick={onDespesa}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-veu/5 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-veu/10 cursor-pointer">
-          <Minus size={15} /> Despesa
-        </button>
-      </div>
+      {/* ações */}
+      {(can("movimentacao:manage") || (isEmergencia && temMeta && podeConfig)) && (
+        <div className="mt-5 flex items-center gap-2 border-t border-[var(--color-line)] pt-4">
+          {can("movimentacao:manage") && (
+            <>
+              <Button variant="growth" size="sm" onClick={onAporte}><Plus size={15} /> Aporte</Button>
+              <Button variant="secondary" size="sm" onClick={onDespesa}><Minus size={15} /> Despesa</Button>
+            </>
+          )}
+          {isEmergencia && temMeta && podeConfig && (
+            <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setConfigOpen(true)}>
+              <SlidersHorizontal size={14} /> Ajustar
+            </Button>
+          )}
+        </div>
       )}
     </Card>
   );

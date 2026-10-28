@@ -1,27 +1,53 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Users, Trash2, Plus, HandCoins, Link2, Check, X, Mail, UserPlus,
-  RefreshCw, EyeOff, CalendarCheck, Split, AlertTriangle,
+  RefreshCw, EyeOff, CalendarCheck, Split, AlertTriangle, Copy,
 } from "lucide-react";
 import {
-  Card, Button, IconButton, Modal, Field, TextInput, MoneyInput, Badge,
-  Spinner, SkeletonList,
+  Card, CardHeader, Button, IconButton, Modal, Field, TextInput, MoneyInput, Badge,
+  Spinner, SkeletonList, EmptyState, usePendenteDoClique,
 } from "./ui/primitives.jsx";
+import { BarraComposicao } from "./ui/charts.jsx";
 import { Select, SelectItem, NumberInput, FormError, CheckboxField } from "./ui/fields.jsx";
 import { useFormState } from "./ui/useFormState.js";
 import { useAsync } from "./ui/useAsync.js";
 import { emailValido, texto } from "../lib/formErrors.js";
-import { fmtMoney } from "../lib/format.js";
+import { fmtMoney, fmtMonthLabel } from "../lib/format.js";
 import { acento, iniciais } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import * as api from "../services/financeApi";
 
+// Status do contato: tom da pílula (pálido + tinta do mesmo matiz).
 const STATUS = {
-  local: { label: "Só na agenda", tone: "text-slate-400" },
-  convidado: { label: "Convite enviado", tone: "text-amber-400" },
-  ativo: { label: "Aceitou", tone: "text-emerald-400" },
-  recusado: { label: "Recusou", tone: "text-rose-400" },
+  local: { label: "Só na agenda", tone: "neutral" },
+  convidado: { label: "Convite enviado", tone: "warn" },
+  ativo: { label: "Aceitou", tone: "pos" },
+  recusado: { label: "Recusou", tone: "neg" },
 };
+
+// ── Tom de cada pessoa ───────────────────────────────────────────────────────
+// Cada pessoa tem UM matiz estável, derivado do nome (o mesmo nome cai sempre no
+// mesmo tom — na agenda, nas iniciais da linha dividida e no modal de rateio).
+// A ordem alterna matizes distantes (azul → âmbar → verde → violeta → rosa →
+// ciano) pra pessoas vizinhas raramente caírem em tons parecidos. É identidade,
+// não dado: fica pálido e fora das legendas.
+const TONS_PESSOA = ["blue", "amber", "emerald", "violet", "rose", "cyan"];
+export function tomDaPessoa(nome) {
+  const k = String(nome || "").trim().toLowerCase();
+  let h = 0;
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  return acento(TONS_PESSOA[h % TONS_PESSOA.length]);
+}
+
+const TAM_AVATAR = { xs: "h-6 w-6 text-[11px]", sm: "h-7 w-7 text-[11px]", md: "h-9 w-9 text-xs" };
+export function Avatar({ nome, size = "md", className = "" }) {
+  return (
+    <span aria-hidden
+      className={`grid shrink-0 place-items-center rounded-full font-semibold ${TAM_AVATAR[size]} ${tomDaPessoa(nome).chip} ${className}`}>
+      {iniciais(nome)}
+    </span>
+  );
+}
 
 function erroDe(e) {
   return e?.message || "Não deu pra completar essa ação.";
@@ -34,17 +60,17 @@ export function RateioChips({ d, className = "" }) {
   const rateio = d?.rateio ?? [];
   if (rateio.length === 0) return null;
   return (
-    <span className={`inline-flex items-center gap-1 ${className}`} title={rateio.map((r) => `${r.nome}: ${fmtMoney(r.valor)}`).join(" · ")}>
-      <Split size={11} className="text-slate-500" />
-      {rateio.map((r) => (
-        <span key={r.shareId}
-          className={`grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold ${
-            r.status === "recusado" ? "bg-rose-500/15 text-rose-400 line-through" :
-            r.status === "ativo" ? "bg-emerald-500/15 text-emerald-300" : "bg-veu/8 text-slate-300"
-          }`}>
-          {iniciais(r.nome)}
-        </span>
-      ))}
+    <span className={`inline-flex items-center gap-1.5 ${className}`}
+          title={rateio.map((r) => `${r.nome}: ${fmtMoney(r.valor)}${r.status === "recusado" ? " (recusou)" : ""}`).join(" · ")}>
+      <Split size={12} className="text-slate-500" aria-hidden />
+      <span className="sr-only">Dividida com {rateio.map((r) => r.nome).join(", ")}</span>
+      {/* iniciais encavaladas no tom de cada pessoa; quem recusou fica apagado */}
+      <span className="flex -space-x-1.5">
+        {rateio.map((r) => (
+          <Avatar key={r.shareId} nome={r.nome} size="xs"
+            className={`ring-2 ring-[var(--color-surface)] ${r.status === "recusado" ? "opacity-40 line-through" : ""}`} />
+        ))}
+      </span>
     </span>
   );
 }
@@ -156,76 +182,94 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
   if (!linha) return null;
   const nomeDe = (id) => contatos.find((c) => c.id === id)?.nome ?? "—";
 
+  // Fatias da barra: uma por pessoa (no tom dela), e o que sobra pro dono em
+  // cinza. Estourou → tudo vermelho: a barra inteira vira o aviso.
+  const fatias = [
+    ...itens.map((i, idx) => ({
+      key: i.contatoId,
+      label: nomeDe(i.contatoId),
+      value: partes[idx],
+      color: estourou ? "var(--color-danger)" : tomDaPessoa(nomeDe(i.contatoId)).dot,
+    })),
+    ...(sobra > 0 ? [{ key: "__dono", label: "Você", value: sobra, color: "var(--color-trilho)" }] : []),
+  ];
+
   return (
-    <Modal open={open} onClose={onClose} title={`Dividir · ${linha.descricao}`}>
-      <div className="space-y-5">
+    <Modal open={open} onClose={onClose} title={`Dividir ${linha.descricao}`}
+           description="Cada pessoa paga uma parte; o que sobra fica com você.">
+      <div className="space-y-6">
         <FormError>{erro}</FormError>
 
         <div>
-          <div className="mb-1.5 flex items-baseline justify-between text-xs">
-            <span className="text-slate-500">Valor da linha</span>
-            <span className="tnum font-semibold text-slate-200">{fmtMoney(base)}</span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[13px] text-slate-500">Valor da linha</span>
+            <span className="tnum text-xl font-semibold text-ink">{fmtMoney(base)}</span>
           </div>
           {/* barra de rateio: cada fatia + o que sobra pro dono */}
-          <div className="flex h-2.5 overflow-hidden rounded-full bg-veu/8">
-            {partes.map((v, i) => (
-              <div key={itens[i].contatoId}
-                style={{ width: `${base ? Math.min((v / base) * 100, 100) : 0}%` }}
-                className={estourou ? "bg-rose-500" : "bg-blue-500"} />
-            ))}
-            {sobra > 0 && <div style={{ width: `${base ? (sobra / base) * 100 : 0}%` }} className="bg-emerald-500/60" />}
-          </div>
-          <div className="mt-1.5 flex justify-between text-[11px]">
-            <span className={estourou ? "text-rose-400" : "text-slate-400"}>
-              dividido: <span className="tnum">{fmtMoney(soma)}</span>
-            </span>
-            <span className={sobra < 0 ? "text-rose-400" : "text-emerald-400"}>
-              sobra pra você: <span className="tnum">{fmtMoney(sobra)}</span>
-            </span>
-          </div>
+          <BarraComposicao className="mt-3" partes={fatias} label="Divisão da linha entre as pessoas" />
+          <dl className="mt-2.5 flex justify-between text-[13px]">
+            <div className="flex gap-1.5">
+              <dt className="text-slate-500">Dividido</dt>
+              <dd className={`tnum font-medium ${estourou ? "text-rose-400" : "text-ink"}`}>{fmtMoney(soma)}</dd>
+            </div>
+            <div className="flex gap-1.5">
+              <dt className="text-slate-500">Fica com você</dt>
+              <dd className={`tnum font-medium ${sobra < 0 ? "text-rose-400" : "text-ink"}`}>{fmtMoney(sobra)}</dd>
+            </div>
+          </dl>
           {estourou && (
-            <p className="mt-1.5 text-xs text-rose-400">A soma passa do valor da linha — ajuste antes de salvar.</p>
+            <p role="alert" className="mt-2 text-[13px] text-rose-400">A soma passa do valor da linha. Ajuste antes de salvar.</p>
           )}
         </div>
 
-        <div className="space-y-2">
-          {carregando && <SkeletonList rows={2} height="h-20" label="Carregando a divisão" />}
+        <section aria-label="Pessoas na divisão">
+          {carregando && <SkeletonList rows={2} height="h-24" label="Carregando a divisão" />}
           {!carregando && itens.length === 0 && (
-            <p className="text-sm text-slate-500">Ninguém dividindo essa linha ainda.</p>
+            <EmptyState compact title="Ninguém dividindo essa linha ainda"
+              description="Escolha alguém da agenda ou cadastre uma pessoa nova abaixo." />
           )}
-          {itens.map((i, idx) => (
-            <div key={i.contatoId} className="rounded-xl bg-veu/4 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="truncate text-sm font-medium text-slate-200">{nomeDe(i.contatoId)}</p>
-                <div className="flex items-center gap-2">
-                  <span className="tnum text-xs text-slate-400">{fmtMoney(partes[idx])}</span>
-                  <button onClick={() => setItens((v) => v.filter((_, n) => n !== idx))} aria-label={`Tirar ${nomeDe(i.contatoId)}`}
-                    className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Select name={`modo-${idx}`} value={i.modo} onValue={(v) => patchItem(idx, { modo: v })}>
-                  <SelectItem value="percentual">Percentual</SelectItem>
-                  <SelectItem value="valor">Valor fixo</SelectItem>
-                  <SelectItem value="inteira">Linha inteira</SelectItem>
-                </Select>
-                {i.modo === "percentual" && (
-                  <NumberInput name={`pct-${idx}`} value={i.percentual} min={1} max={100}
-                    onValue={(v) => patchItem(idx, { percentual: v })} />
-                )}
-                {i.modo === "valor" && (
-                  <MoneyInput name={`val-${idx}`} value={i.valor} onValue={(v) => patchItem(idx, { valor: v })} />
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+          {itens.length > 0 && (
+            <ul className="divide-y divide-[var(--color-line)] rounded-xl border border-[var(--color-line)]">
+              {itens.map((i, idx) => (
+                <li key={i.contatoId} className="p-3.5">
+                  <div className="mb-3 flex items-center gap-2.5">
+                    <Avatar nome={nomeDe(i.contatoId)} size="sm" />
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{nomeDe(i.contatoId)}</p>
+                    <span className="tnum text-sm font-medium text-ink">{fmtMoney(partes[idx])}</span>
+                    <IconButton tone="danger" onClick={() => setItens((v) => v.filter((_, n) => n !== idx))}
+                                aria-label={`Tirar ${nomeDe(i.contatoId)} da divisão`}>
+                      <Trash2 size={15} />
+                    </IconButton>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select name={`modo-${idx}`} value={i.modo} onValue={(v) => patchItem(idx, { modo: v })}
+                            aria-label={`Como ${nomeDe(i.contatoId)} paga`}>
+                      <SelectItem value="percentual">Percentual</SelectItem>
+                      <SelectItem value="valor">Valor fixo</SelectItem>
+                      <SelectItem value="inteira">Linha inteira</SelectItem>
+                    </Select>
+                    {i.modo === "percentual" && (
+                      <div className="relative">
+                        <NumberInput name={`pct-${idx}`} value={i.percentual} min={1} max={100} className="pr-9"
+                          aria-label={`Percentual de ${nomeDe(i.contatoId)}`}
+                          onValue={(v) => patchItem(idx, { percentual: v })} />
+                        <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-500">%</span>
+                      </div>
+                    )}
+                    {i.modo === "valor" && (
+                      <MoneyInput name={`val-${idx}`} value={i.valor} onValue={(v) => patchItem(idx, { valor: v })}
+                        aria-label={`Valor de ${nomeDe(i.contatoId)}`} />
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         {disponiveis.length > 0 && (
-          <Field label="Adicionar pessoa">
-            <Select name="addPessoa" value="" onValue={addPessoa} placeholder="Escolher da agenda…">
+          <Field label="Adicionar da agenda">
+            <Select name="addPessoa" value="" onValue={addPessoa} placeholder="Escolher pessoa…">
               {disponiveis.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nome} · {STATUS[c.status]?.label ?? c.status}
@@ -235,18 +279,23 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
           </Field>
         )}
 
-        <div className="rounded-xl bg-veu/4 p-3">
-          <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">Nova pessoa</p>
-          <div className="grid grid-cols-2 gap-2">
-            <TextInput name="novoNome" value={novo.nome} placeholder="Nome"
-              onChange={(e) => setNovo((v) => ({ ...v, nome: e.target.value }))} />
-            <TextInput name="novoEmail" value={novo.email} placeholder="email (opcional)"
-              onChange={(e) => setNovo((v) => ({ ...v, email: e.target.value }))} />
+        <fieldset className="space-y-3 rounded-xl bg-veu/[0.035] p-4">
+          <legend className="sr-only">Cadastrar pessoa nova</legend>
+          <p className="text-sm font-medium text-ink">Pessoa nova</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Nome">
+              <TextInput name="novoNome" value={novo.nome} placeholder="Maria"
+                onChange={(e) => setNovo((v) => ({ ...v, nome: e.target.value }))} />
+            </Field>
+            <Field label="Email" hint="Opcional, pra convidar depois">
+              <TextInput name="novoEmail" type="email" value={novo.email} placeholder="maria@email.com"
+                onChange={(e) => setNovo((v) => ({ ...v, email: e.target.value }))} />
+            </Field>
           </div>
-          <Button variant="ghost" className="mt-2 w-full" onClick={criarContato}>
+          <Button variant="secondary" size="sm" onClick={criarContato}>
             <UserPlus size={15} /> Cadastrar e adicionar
           </Button>
-        </div>
+        </fieldset>
 
         <CheckboxField
           label="Abater da minha despesa"
@@ -255,9 +304,12 @@ export function RatearModal({ open, onClose, linha, campo, onSaved }) {
           onChecked={setAbate}
         />
 
-        <Button className="w-full" onClick={salvar} loading={salvando} disabled={estourou}>
-          <Check size={16} /> Salvar divisão
-        </Button>
+        <div className="flex flex-col-reverse gap-2 border-t border-[var(--color-line)] pt-4 sm:flex-row sm:justify-end">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={salvar} loading={salvando} disabled={estourou}>
+            <Check size={16} /> Salvar divisão
+          </Button>
+        </div>
       </div>
     </Modal>
   );
@@ -327,69 +379,72 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
 
   return (
     <>
-      <Modal open={open && !rateando} onClose={onClose} title={`Compartilhar · ${cartao.nome}`}>
-        <div className="space-y-5">
+      <Modal open={open && !rateando} onClose={onClose} title={`Compartilhar ${cartao.nome}`}
+             description="Divida linhas da fatura ou combine um valor fixo com alguém.">
+        <div className="space-y-6">
           {/* linhas da fatura: cada uma pode ser dividida com N pessoas */}
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Linhas da fatura</p>
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-ink">Linhas da fatura</h3>
             {linhas.length === 0 ? (
-              <p className="text-sm text-slate-500">Nada nesta fatura em {ym}.</p>
+              <p className="text-[13px] text-slate-500">Nada nesta fatura em {ym}.</p>
             ) : (
-              linhas.map((l) => {
-                const divisao = porLinha(l);
-                return (
-                  <div key={`${l.tipo}:${l.id}`} className="flex items-center justify-between gap-2 rounded-xl bg-veu/4 px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-slate-200">{l.descricao}</p>
-                      <p className="text-xs text-slate-500">
-                        {fmtMoney(l.valor)}
-                        {l.parcelado ? ` · ${l.parcelaAtual}/${l.totalParcelas}` : ""}
-                        {divisao.length > 0
-                          ? ` · dividida com ${divisao.map((s) => s.contatoNome).join(", ")}`
-                          : ""}
-                      </p>
-                    </div>
-                    <Button variant="ghost" onClick={() => setRateando({ linha: l, campo: l.tipo })}>
-                      <Split size={15} /> Dividir
-                    </Button>
-                  </div>
-                );
-              })
+              <ul className="divide-y divide-[var(--color-line)] rounded-xl border border-[var(--color-line)]">
+                {linhas.map((l) => {
+                  const divisao = porLinha(l);
+                  return (
+                    <li key={`${l.tipo}:${l.id}`} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-ink">{l.descricao}</p>
+                        <p className="tnum text-xs text-slate-500">
+                          {fmtMoney(l.valor)}
+                          {l.parcelado ? ` · ${l.parcelaAtual}/${l.totalParcelas}` : ""}
+                          {divisao.length > 0
+                            ? ` · dividida com ${divisao.map((s) => s.contatoNome).join(", ")}`
+                            : ""}
+                        </p>
+                      </div>
+                      <Button variant="secondary" size="sm" onClick={() => setRateando({ linha: l, campo: l.tipo })}>
+                        <Split size={14} /> Dividir
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-          </div>
-
-          <div className="border-t border-[var(--color-line)]" />
+          </section>
 
           {/* valor avulso da fatura (não amarra numa linha) */}
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Valores combinados</p>
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-ink">Valores combinados</h3>
             {avulsos.length === 0 ? (
-              <p className="text-sm text-slate-500">Nenhum valor avulso.</p>
+              <p className="text-[13px] text-slate-500">Nenhum valor avulso combinado.</p>
             ) : (
-              avulsos.map((s) => (
-                <div key={s.id} className="flex items-center justify-between rounded-xl bg-veu/4 px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-slate-200">
-                      {s.contatoNome} · <span className="text-slate-400">{s.mesRef ? `só ${s.mesRef}` : "todo mês"}</span>
-                    </p>
-                    <p className="tnum text-xs text-slate-500">{fmtMoney(s.valorMes)}</p>
-                  </div>
-                  <button onClick={() => remove(s.id)} aria-label="Remover"
-                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer">
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              ))
+              <ul className="divide-y divide-[var(--color-line)] rounded-xl border border-[var(--color-line)]">
+                {avulsos.map((s) => (
+                  <li key={s.id} className="flex items-center gap-3 px-3.5 py-2.5">
+                    <Avatar nome={s.contatoNome} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-ink">{s.contatoNome}</p>
+                      <p className="text-xs text-slate-500">{s.mesRef ? `Só em ${s.mesRef}` : "Todo mês"}</p>
+                    </div>
+                    <span className="tnum text-sm font-medium text-ink">{fmtMoney(s.valorMes)}</span>
+                    <IconButton tone="danger" onClick={() => remove(s.id)} aria-label={`Remover valor de ${s.contatoNome}`}>
+                      <Trash2 size={15} />
+                    </IconButton>
+                  </li>
+                ))}
+              </ul>
             )}
-          </div>
+          </section>
 
-          <form onSubmit={submit} className="space-y-4" noValidate>
+          <form onSubmit={submit} className="space-y-4 border-t border-[var(--color-line)] pt-5" noValidate>
+            <h3 className="text-sm font-semibold text-ink">Combinar valor</h3>
             <FormError>{formError}</FormError>
             <Field label="Pessoa" required error={errors.contatoId}>
               <Select name="contatoId" value={f.contatoId} onValue={(v) => set("contatoId", v)} placeholder="Selecione…">
                 {contatos.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.nome}{c.status === "ativo" ? " ✓" : ""}
+                    {c.nome}{c.status === "ativo" ? " · aceitou" : ""}
                   </SelectItem>
                 ))}
                 <SelectItem value={NOVA_PESSOA}>+ Nova pessoa</SelectItem>
@@ -397,29 +452,31 @@ export function CompartilharModal({ open, onClose, cartao, ym }) {
             </Field>
 
             {f.contatoId === NOVA_PESSOA && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Nome" required error={errors.novoNome}>
                   <TextInput name="novoNome" value={f.novoNome} placeholder="Maria"
                     onChange={(e) => set("novoNome", e.target.value)} />
                 </Field>
-                <Field label="Email" hint="p/ convidar depois" error={errors.novoEmail}>
+                <Field label="Email" hint="Opcional, pra convidar depois" error={errors.novoEmail}>
                   <TextInput name="novoEmail" value={f.novoEmail} placeholder="maria@email.com"
                     onChange={(e) => set("novoEmail", e.target.value)} />
                 </Field>
               </div>
             )}
 
-            <Field label="Valor" required error={errors.valor}>
-              <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} />
-            </Field>
-            <Field label="Recorrência">
-              <Select name="recorrencia" value={f.recorrencia} onValue={(v) => set("recorrencia", v)}>
-                <SelectItem value="recorrente">Todo mês</SelectItem>
-                <SelectItem value="pontual">Só neste mês ({ym})</SelectItem>
-              </Select>
-            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Valor" required error={errors.valor}>
+                <MoneyInput name="valor" value={f.valor} onValue={(v) => set("valor", v)} />
+              </Field>
+              <Field label="Recorrência">
+                <Select name="recorrencia" value={f.recorrencia} onValue={(v) => set("recorrencia", v)}>
+                  <SelectItem value="recorrente">Todo mês</SelectItem>
+                  <SelectItem value="pontual">Só neste mês ({ym})</SelectItem>
+                </Select>
+              </Field>
+            </div>
 
-            <Button type="submit" className="w-full" loading={submitting}>
+            <Button type="submit" className="w-full sm:w-auto" loading={submitting}>
               <Plus size={16} /> Combinar valor
             </Button>
           </form>
@@ -461,34 +518,41 @@ export function ConvitesBanner({ onRespondido }) {
   // o que fazia o "aceitar" ir duas vezes e a segunda voltar 422.
   if (convites.length === 0) return null;
 
+  // Aviso, não alarme: superfície âmbar pálida com borda, tinta normal.
   return (
-    <Card className="border-amber-500/30 bg-amber-500/[0.06] p-4 sm:p-5">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-300">
-        <Mail size={16} /> {convites.length === 1 ? "Um convite esperando você" : `${convites.length} convites esperando você`}
-      </h3>
+    <section aria-label="Convites recebidos"
+             className="rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-4 sm:p-5">
+      <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+        <Mail size={16} className="text-amber-400" aria-hidden />
+        {convites.length === 1 ? "Um convite esperando você" : `${convites.length} convites esperando você`}
+      </h2>
+      <p className="mt-0.5 text-[13px] text-slate-400">Aceitando, você passa a ver o que essa pessoa dividiu com você.</p>
       <FormError>{erro}</FormError>
-      <div className="space-y-2">
+      <ul className="mt-3 divide-y divide-amber-500/15">
         {convites.map((cv) => (
-          <div key={cv.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-veu/4 px-3 py-2">
-            <div className="min-w-0">
-              <p className="truncate text-sm text-slate-200">
-                <span className="font-medium">{cv.dono.nome}</span> quer dividir despesas com você
+          <li key={cv.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 first:pt-1 last:pb-0">
+            <Avatar nome={cv.dono.nome} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-ink">
+                <span className="font-semibold">{cv.dono.nome}</span> quer dividir despesas com você
               </p>
-              <p className="text-xs text-slate-500">te chamou de “{cv.comoMeChamou}”</p>
+              <p className="text-[13px] text-slate-500">Te chamou de “{cv.comoMeChamou}”</p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => responder(cv.id, true)}><Check size={15} /> Aceitar</Button>
-              <Button variant="ghost" onClick={() => responder(cv.id, false)}><X size={15} /> Recusar</Button>
+              <Button variant="ghost" size="sm" onClick={() => responder(cv.id, false)}><X size={15} /> Recusar</Button>
+              <Button size="sm" onClick={() => responder(cv.id, true)}><Check size={15} /> Aceitar</Button>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </Card>
+      </ul>
+    </section>
   );
 }
 
 // ── Agenda de contatos (dono) ────────────────────────────────────────────────
-export function Contatos() {
+// `onResumo` (opcional) recebe a contagem da agenda — a tela Pessoas usa pra
+// escrever a frase do título sem fazer uma segunda leitura.
+export function Contatos({ onResumo }) {
   const {
     dado: contatos,
     carregando,
@@ -498,11 +562,21 @@ export function Contatos() {
   } = useAsync(() => api.getContatos(), "contatos", { inicial: [] });
   const [erro, setErro] = useState("");
   const [linkDe, setLinkDe] = useState(null); // { contatoId, link }
+  const [copiado, setCopiado] = useState(false);
   const [novo, setNovo] = useState({ nome: "", email: "" });
   // O submit do form não passa pelo onClick do Button (quem submete é o form),
   // então a pendência do "Adicionar" é explícita. Sem isso o Enter/clique
   // repetido criava a mesma pessoa N vezes — era o bug mais visível da aba.
   const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    if (carregando) return;
+    onResumo?.({
+      total: contatos.length,
+      convidados: contatos.filter((c) => c.status === "convidado").length,
+      ativos: contatos.filter((c) => c.status === "ativo").length,
+    });
+  }, [carregando, contatos, onResumo]);
 
   async function criar(e) {
     e.preventDefault();
@@ -526,10 +600,20 @@ export function Contatos() {
     setErro("");
     try {
       const cv = await api.criarConvite(c.id, {});
+      setCopiado(false);
       setLinkDe({ contatoId: c.id, link: `${window.location.origin}${cv.link}` });
       recarregar();
     } catch (e) {
       setErro(erroDe(e));
+    }
+  }
+
+  async function copiar() {
+    try {
+      await navigator.clipboard?.writeText(linkDe.link);
+      setCopiado(true);
+    } catch {
+      // clipboard bloqueado: o campo segue selecionável pra copiar à mão
     }
   }
 
@@ -545,70 +629,89 @@ export function Contatos() {
 
   return (
     <Card className="p-5 sm:p-6">
-      <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink">
-        <Users size={18} /> Pessoas
-        {revalidandoContatos && <Spinner className="h-3.5 w-3.5 border-slate-500/40 border-t-slate-300" />}
-      </h3>
-      <FormError>{erro || erroCarga}</FormError>
+      <CardHeader
+        as="h2"
+        title="Agenda"
+        description="Quem divide despesas com você. Só quem aceitou o convite enxerga o que foi dividido."
+        action={revalidandoContatos && <Spinner className="h-3.5 w-3.5 text-slate-500" />}
+      />
+      <div className="mt-4 space-y-3">
+        <FormError>{erro || erroCarga}</FormError>
 
-      <div className="space-y-2">
         {carregando ? (
-          <SkeletonList rows={3} height="h-16" label="Carregando a agenda" />
+          <SkeletonList rows={3} height="h-14" label="Carregando a agenda" />
+        ) : contatos.length === 0 ? (
+          <EmptyState compact title="Ninguém na agenda ainda"
+            description="Adicione quem divide contas com você. O email é opcional: dá pra convidar depois." />
         ) : (
-          contatos.length === 0 && <p className="text-sm text-slate-500">Nenhuma pessoa na agenda ainda.</p>
-        )}
-        {!carregando && contatos.map((c) => {
-          const st = STATUS[c.status] ?? STATUS.local;
-          return (
-            <div key={c.id} className="rounded-xl bg-veu/4 px-3 py-2.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="flex items-center gap-2 truncate text-sm font-medium text-slate-200">
-                    {c.nome}
-                    {c.reciproco && <Badge className="text-[10px]">recíproco</Badge>}
-                  </p>
-                  <p className="truncate text-xs text-slate-500">
-                    {c.email || "sem email"} · <span className={st.tone}>{st.label}</span>
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {c.status !== "ativo" && (
-                    <Button variant="ghost" onClick={() => convidar(c)}>
-                      <Mail size={15} /> {c.status === "convidado" ? "Reenviar" : "Convidar"}
-                    </Button>
+          <ul className="divide-y divide-[var(--color-line)]">
+            {contatos.map((c) => {
+              const st = STATUS[c.status] ?? STATUS.local;
+              return (
+                <li key={c.id} className="py-3 first:pt-1">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <Avatar nome={c.nome} />
+                    <div className="min-w-0 flex-1">
+                      <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-ink">
+                        <span className="truncate">{c.nome}</span>
+                        {c.reciproco && <Badge tone="neutral">Recíproco</Badge>}
+                      </p>
+                      <p className="truncate text-[13px] text-slate-500">{c.email || "Sem email"}</p>
+                    </div>
+                    {/* no celular status + ações descem pra uma 2ª linha, alinhada ao nome */}
+                    <div className="flex basis-full items-center gap-2 pl-12 sm:basis-auto sm:pl-0">
+                      <Badge tone={st.tone}>{st.label}</Badge>
+                      <span className="flex-1 sm:hidden" />
+                      {c.status !== "ativo" && (
+                        <Button variant="secondary" size="sm" onClick={() => convidar(c)}>
+                          <Mail size={14} /> {c.status === "convidado" ? "Reenviar" : "Convidar"}
+                        </Button>
+                      )}
+                      <IconButton tone="danger" onClick={() => remover(c.id)} aria-label={`Remover ${c.nome}`}>
+                        <Trash2 size={15} />
+                      </IconButton>
+                    </div>
+                  </div>
+                  {linkDe?.contatoId === c.id && (
+                    // não existe envio de email no projeto: o link é copiado à mão
+                    <div className="mt-3 sm:pl-12">
+                      <div className="flex">
+                        <label className="relative flex min-w-0 flex-1 items-center">
+                          <span className="sr-only">Link do convite de {c.nome}</span>
+                          <Link2 size={14} className="pointer-events-none absolute left-3 text-slate-500" aria-hidden />
+                          <input readOnly value={linkDe.link} onFocus={(e) => e.target.select()}
+                            className="h-9 w-full min-w-0 rounded-l-xl border border-r-0 border-[var(--color-line-strong)] bg-[var(--color-bg)] pl-9 pr-3 text-[13px] text-slate-300 outline-none focus:border-blue-500" />
+                        </label>
+                        <button type="button" onClick={copiar}
+                          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-r-xl border border-[var(--color-line-strong)] px-3 text-[13px] font-medium text-ink transition-colors hover:bg-veu/[0.06] cursor-pointer">
+                          {copiado ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar</>}
+                        </button>
+                      </div>
+                      <p className="mt-1.5 text-xs text-slate-500">Mande esse link pra {c.nome}. Não enviamos email.</p>
+                    </div>
                   )}
-                  <IconButton tone="danger" onClick={() => remover(c.id)} aria-label={`Remover ${c.nome}`}>
-                    <Trash2 size={15} />
-                  </IconButton>
-                </div>
-              </div>
-              {linkDe?.contatoId === c.id && (
-                // não existe envio de email no projeto: o link é copiado à mão
-                <div className="mt-2 flex items-center gap-2 rounded-lg bg-veu/10 px-2 py-1.5">
-                  <Link2 size={13} className="shrink-0 text-slate-500" />
-                  <input readOnly value={linkDe.link} onFocus={(e) => e.target.select()}
-                    className="min-w-0 flex-1 bg-transparent text-xs text-slate-300 outline-none" />
-                  <button onClick={() => navigator.clipboard?.writeText(linkDe.link)}
-                    className="shrink-0 rounded-md bg-veu/8 px-2 py-1 text-[11px] text-slate-200 cursor-pointer hover:bg-veu/15">
-                    copiar
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
-      <form onSubmit={criar} className="mt-4 space-y-2 border-t border-[var(--color-line)] pt-4">
-        <div className="grid grid-cols-2 gap-2">
-          <TextInput name="nome" value={novo.nome} placeholder="Nome"
-            onChange={(e) => setNovo((v) => ({ ...v, nome: e.target.value }))} />
-          <TextInput name="email" value={novo.email} placeholder="email (opcional)"
-            onChange={(e) => setNovo((v) => ({ ...v, email: e.target.value }))} />
+      <form onSubmit={criar} className="mt-4 border-t border-[var(--color-line)] pt-5" noValidate>
+        <p className="mb-3 text-sm font-medium text-ink">Adicionar pessoa</p>
+        <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <Field label="Nome">
+            <TextInput name="nome" value={novo.nome} placeholder="Maria" autoComplete="off"
+              onChange={(e) => setNovo((v) => ({ ...v, nome: e.target.value }))} />
+          </Field>
+          <Field label="Email (opcional)">
+            <TextInput name="email" type="email" value={novo.email} placeholder="maria@email.com" autoComplete="off"
+              onChange={(e) => setNovo((v) => ({ ...v, email: e.target.value }))} />
+          </Field>
+          <Button type="submit" loading={salvando}>
+            {salvando ? "Adicionando…" : <><UserPlus size={15} /> Adicionar</>}
+          </Button>
         </div>
-        <Button type="submit" variant="ghost" className="w-full" loading={salvando}>
-          {salvando ? "Adicionando…" : <><UserPlus size={15} /> Adicionar</>}
-        </Button>
       </form>
     </Card>
   );
@@ -617,7 +720,10 @@ export function Contatos() {
 // ── Painel "O que devo" ──────────────────────────────────────────────────────
 const SEM_DEVIDO = { donos: [], orfas: [] };
 
-export function MeusCompartilhamentos({ ym }) {
+// `onTotal` (opcional): devolve o total devido no mês pra frase do título da
+// tela Pessoas. `vazio` decide o que mostrar quando não há dívida: no Início e
+// em Despesas o painel some (null); em Pessoas ele mantém o quadro.
+export function MeusCompartilhamentos({ ym, onTotal, vazio = null }) {
   const { espacos, refresh } = useFinance();
   const {
     dado: dados,
@@ -628,6 +734,11 @@ export function MeusCompartilhamentos({ ym }) {
   } = useAsync(() => api.getMeusCompartilhamentos(ym), ["devido", ym], { inicial: SEM_DEVIDO });
   const [erro, setErro] = useState("");
   const [acao, setAcao] = useState(null); // { linha, modo: "adotar"|"adiantar" }
+
+  const total = dados.donos.reduce((t, d) => t + (d.devidoMes || 0), 0);
+  useEffect(() => {
+    if (!carregando) onTotal?.(total);
+  }, [carregando, total, onTotal]);
 
   async function roda(fn) {
     setErro("");
@@ -640,120 +751,140 @@ export function MeusCompartilhamentos({ ym }) {
     }
   }
 
+  const titulo = "O que devo";
+  const subtitulo = `Divisões que outras pessoas fizeram com você em ${fmtMonthLabel(ym).toLowerCase()}`;
+
   // Este painel é a leitura mais cara do app (cruza contatos, shares, adoções e
   // adiantamentos). Sem skeleton ele ficava indistinguível de "não devo nada"
   // por vários segundos e depois aparecia empurrando a página.
   if (carregando) {
     return (
       <Card className="p-5 sm:p-6">
-        <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink">
-          <HandCoins size={18} /> O que devo
-        </h3>
-        <SkeletonList rows={2} height="h-20" label="Carregando o que você deve" />
+        <CardHeader as="h2" title={titulo} description={subtitulo} />
+        <SkeletonList className="mt-4" rows={2} height="h-20" label="Carregando o que você deve" />
       </Card>
     );
   }
   if (erroCarga && dados.donos.length === 0 && dados.orfas.length === 0) {
     return (
       <Card className="p-5 sm:p-6">
-        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-ink">
-          <HandCoins size={18} /> O que devo
-        </h3>
-        <FormError>{erroCarga}</FormError>
-        <Button variant="ghost" onClick={recarregar}><RefreshCw size={15} /> Tentar de novo</Button>
+        <CardHeader as="h2" title={titulo} description={subtitulo} />
+        <div className="mt-4 space-y-3">
+          <FormError>{erroCarga}</FormError>
+          <Button variant="secondary" size="sm" onClick={recarregar}><RefreshCw size={14} /> Tentar de novo</Button>
+        </div>
       </Card>
     );
   }
-  if (dados.donos.length === 0 && dados.orfas.length === 0) return null;
+  if (dados.donos.length === 0 && dados.orfas.length === 0) {
+    if (!vazio) return null;
+    return (
+      <Card className="p-5 sm:p-6">
+        <CardHeader as="h2" title={titulo} description={subtitulo} />
+        <EmptyState compact className="mt-4" title={vazio}
+          description="Quando alguém dividir uma despesa com você e você aceitar o convite, ela aparece aqui." />
+      </Card>
+    );
+  }
 
   return (
     <Card className="p-5 sm:p-6">
-      <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink">
-        <HandCoins size={18} /> O que devo
-        {revalidando && <Spinner className="h-3.5 w-3.5 border-slate-500/40 border-t-slate-300" />}
-      </h3>
+      <CardHeader
+        as="h2"
+        title={titulo}
+        description={subtitulo}
+        action={
+          <span className="flex items-center gap-2">
+            {revalidando && <Spinner className="h-3.5 w-3.5 text-slate-500" />}
+            <span className="text-right">
+              <span className="block text-xs text-slate-500">Total no mês</span>
+              <span className="tnum block text-xl font-semibold text-ink">{fmtMoney(total)}</span>
+            </span>
+          </span>
+        }
+      />
       <FormError>{erro}</FormError>
 
-      <div className="space-y-5">
+      <div className="mt-5 space-y-6">
         {dados.donos.map((d) => (
-          <div key={d.dono.id}>
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              <p className="truncate font-semibold text-ink">{d.dono.nome}</p>
-              <p className="tnum text-sm font-bold text-rose-400">{fmtMoney(d.devidoMes)}</p>
+          <section key={d.dono.id} aria-label={`O que devo a ${d.dono.nome}`}>
+            <div className="flex items-center gap-3">
+              <Avatar nome={d.dono.nome} />
+              <p className="min-w-0 flex-1 truncate font-semibold text-ink">{d.dono.nome}</p>
+              <p className="tnum font-semibold text-ink">{fmtMoney(d.devidoMes)}</p>
             </div>
 
-            <div className="space-y-3">
+            <div className="mt-3 space-y-3 sm:pl-12">
               {d.grupos.map((g) => {
                 const a = acento(g.cartao?.cor ?? "slate");
                 return (
-                  <div key={g.chave} className="rounded-xl bg-veu/4 p-4">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="truncate text-sm font-medium" style={g.cartao ? { color: a.dot } : undefined}>
-                        {g.titulo}
+                  <div key={g.chave} className="rounded-xl border border-[var(--color-line)]">
+                    <div className="flex items-center justify-between gap-2 border-b border-[var(--color-line)] px-3.5 py-2.5">
+                      <p className="flex min-w-0 items-center gap-2 text-[13px] font-medium text-slate-300">
+                        {g.cartao && <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ backgroundColor: a.dot }} />}
+                        <span className="truncate">{g.titulo}</span>
                       </p>
-                      <p className="tnum text-xs text-slate-400">{fmtMoney(g.devidoMes)}</p>
+                      <p className="tnum text-[13px] text-slate-400">{fmtMoney(g.devidoMes)}</p>
                     </div>
 
-                    <ul className="space-y-2">
+                    <ul className="divide-y divide-[var(--color-line)]">
                       {g.linhas.map((l) => (
-                        <li key={l.id} className={`rounded-lg px-2 py-1.5 ${l.ignorado ? "opacity-45" : ""} ${l.divergente ? "bg-amber-500/[0.08]" : ""}`}>
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="min-w-0 truncate text-xs text-slate-300">
-                              {l.linhaDescricao ?? (l.tipo === "valor" ? "Valor combinado" : "Linha")}
-                              {l.parcela ? ` · ${l.parcela.parcelaAtual}/${l.parcela.totalParcelas}` : ""}
-                            </span>
-                            <span className="tnum shrink-0 text-xs text-slate-200">
+                        <li key={l.id} className={`px-3.5 py-3 ${l.divergente ? "bg-amber-500/[0.06]" : ""}`}>
+                          <div className={`flex items-start justify-between gap-3 ${l.ignorado ? "opacity-50" : ""}`}>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm text-ink">
+                                {l.linhaDescricao ?? (l.tipo === "valor" ? "Valor combinado" : "Linha")}
+                                {l.parcela && (
+                                  <span className="tnum text-slate-500"> · {l.parcela.parcelaAtual}/{l.parcela.totalParcelas}</span>
+                                )}
+                              </p>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                                {l.adocao && l.adocao.modo !== "ignorado" && <Badge tone="pos">No seu orçamento</Badge>}
+                                {l.ignorado && <Badge tone="neutral">Ignorado</Badge>}
+                                {l.quitadoAte && <span className="text-emerald-400">Pago até {l.quitadoAte}</span>}
+                                {l.comprometido > 0 && (
+                                  <span className="tnum">Parcelas futuras {fmtMoney(l.comprometido)}</span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="tnum shrink-0 text-sm font-medium text-ink">
                               {l.valorMes === 0 && l.valorCheio > 0 ? (
-                                <span className="text-emerald-400">adiantado</span>
+                                <span className="text-emerald-400">Adiantado</span>
                               ) : (
                                 fmtMoney(l.valorMes)
                               )}
                             </span>
                           </div>
 
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                            {l.adocao && l.adocao.modo !== "ignorado" && (
-                              <Badge className="text-[10px] text-emerald-300">no seu orçamento</Badge>
-                            )}
-                            {l.ignorado && <Badge className="text-[10px]">ignorado</Badge>}
-                            {l.quitadoAte && (
-                              <span className="text-[10px] text-emerald-400">pago até {l.quitadoAte}</span>
-                            )}
-                            {l.comprometido > 0 && (
-                              <span className="text-[10px] text-slate-500">futuro {fmtMoney(l.comprometido)}</span>
-                            )}
-                          </div>
-
                           {l.divergente && (
-                            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-amber-300">
-                              <AlertTriangle size={12} />
-                              o valor virou {fmtMoney(l.valorCheio)}
-                              <button onClick={() => roda(() => api.sincronizarShare(l.id, ym))}
-                                className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-amber-200 cursor-pointer hover:bg-amber-500/25">
-                                <RefreshCw size={11} /> atualizar
-                              </button>
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-amber-300">
+                              <AlertTriangle size={14} aria-hidden />
+                              O valor mudou pra <span className="tnum font-medium">{fmtMoney(l.valorCheio)}</span>
+                              <AcaoMini icon={RefreshCw} onClick={() => roda(() => api.sincronizarShare(l.id, ym))}>
+                                Atualizar
+                              </AcaoMini>
                             </div>
                           )}
 
-                          <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
+                          <div className="-ml-2 mt-1.5 flex flex-wrap gap-0.5">
                             {!l.adocao && (
                               <>
                                 <AcaoMini icon={CalendarCheck} onClick={() => setAcao({ linha: l, modo: "adotar" })}>
-                                  virar despesa
+                                  Virar despesa
                                 </AcaoMini>
                                 <AcaoMini icon={EyeOff} onClick={() => roda(() => api.ignorarShare(l.id, ym))}>
-                                  ignorar
+                                  Ignorar
                                 </AcaoMini>
                               </>
                             )}
                             {l.adocao && (
                               <AcaoMini icon={Trash2} onClick={() => roda(() => api.desfazerAdocao(l.id, false))}>
-                                desfazer
+                                Desfazer
                               </AcaoMini>
                             )}
                             {l.parcela && l.parcela.restantes > 0 && (
                               <AcaoMini icon={HandCoins} onClick={() => setAcao({ linha: l, modo: "adiantar" })}>
-                                adiantar
+                                Adiantar
                               </AcaoMini>
                             )}
                           </div>
@@ -762,36 +893,35 @@ export function MeusCompartilhamentos({ ym }) {
                     </ul>
 
                     {g.comprometido > 0 && (
-                      <p className="mt-2 text-[11px] text-slate-500">
-                        <Users size={11} className="mr-1 inline" />
-                        parcelas futuras: {fmtMoney(g.comprometido)}
+                      <p className="tnum flex items-center gap-1.5 border-t border-[var(--color-line)] px-3.5 py-2 text-xs text-slate-500">
+                        <Users size={13} aria-hidden /> Parcelas futuras: {fmtMoney(g.comprometido)}
                       </p>
                     )}
                   </div>
                 );
               })}
             </div>
-          </div>
+          </section>
         ))}
 
         {dados.orfas.length > 0 && (
-          <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-4">
-            <p className="mb-2 flex items-center gap-2 text-sm font-medium text-amber-300">
-              <AlertTriangle size={15} /> Compartilhamento removido pelo dono
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.07] p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <AlertTriangle size={15} className="text-amber-400" aria-hidden /> Compartilhamento removido pelo dono
             </p>
-            <p className="mb-2 text-xs text-slate-400">
-              A despesa continua na sua conta — ela é sua. Apague se não valer mais.
+            <p className="mt-0.5 text-[13px] text-slate-400">
+              A despesa continua na sua conta, porque ela é sua. Apague se não valer mais.
             </p>
-            <ul className="space-y-1.5">
+            <ul className="mt-3 divide-y divide-amber-500/15">
               {dados.orfas.map((o) => (
-                <li key={o.shareId} className="flex items-center justify-between gap-2 text-xs text-slate-300">
-                  <span className="truncate">{o.descricao ?? "Despesa adotada"}</span>
-                  <div className="flex shrink-0 gap-1.5">
+                <li key={o.shareId} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm text-ink">
+                  <span className="min-w-0 truncate">{o.descricao ?? "Despesa adotada"}</span>
+                  <div className="flex shrink-0 gap-0.5">
                     <AcaoMini icon={Trash2} onClick={() => roda(() => api.desfazerAdocao(o.shareId, true))}>
-                      excluir despesa
+                      Excluir despesa
                     </AcaoMini>
                     <AcaoMini icon={X} onClick={() => roda(() => api.desfazerAdocao(o.shareId, false))}>
-                      só dispensar
+                      Só dispensar
                     </AcaoMini>
                   </div>
                 </li>
@@ -807,7 +937,7 @@ export function MeusCompartilhamentos({ ym }) {
           linha={acao.linha}
           espacos={espacos}
           ym={ym}
-          onDone={() => { setAcao(null); carregar(); refresh(); }}
+          onDone={() => { setAcao(null); recarregar(); refresh(); }}
         />
       )}
       {acao?.modo === "adiantar" && (
@@ -815,18 +945,21 @@ export function MeusCompartilhamentos({ ym }) {
           onClose={() => setAcao(null)}
           linha={acao.linha}
           ym={ym}
-          onDone={() => { setAcao(null); carregar(); refresh(); }}
+          onDone={() => { setAcao(null); recarregar(); refresh(); }}
         />
       )}
     </Card>
   );
 }
 
+// Ação de texto da linha: pequena, mas com área de toque de botão. Fica em
+// tinta (não cinza apagado) — é o que a linha pede pra fazer.
 function AcaoMini({ icon: Icon, children, onClick }) {
+  const [pendente, clique] = usePendenteDoClique(onClick);
   return (
-    <button onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-md bg-veu/6 px-1.5 py-0.5 text-slate-300 transition-colors cursor-pointer hover:bg-veu/12 hover:text-ink">
-      <Icon size={11} /> {children}
+    <button type="button" onClick={clique} disabled={pendente} aria-busy={pendente ? true : undefined}
+      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-slate-300 transition-colors cursor-pointer hover:bg-veu/[0.07] hover:text-ink disabled:opacity-50">
+      {pendente ? <Spinner className="h-3.5 w-3.5" /> : <Icon size={14} aria-hidden />} {children}
     </button>
   );
 }
@@ -855,7 +988,8 @@ function AdotarModal({ onClose, linha, espacos, ym, onDone }) {
 
   if (!linha) return null;
   return (
-    <Modal open onClose={onClose} title="Virar despesa minha">
+    <Modal open onClose={onClose} title="Virar despesa minha"
+           description="A linha entra no seu orçamento e some sozinha na última parcela.">
       <div className="space-y-4">
         <FormError>{erro}</FormError>
         <p className="text-sm text-slate-400">
@@ -877,9 +1011,12 @@ function AdotarModal({ onClose, linha, espacos, ym, onDone }) {
             ))}
           </Select>
         </Field>
-        <Button className="w-full" onClick={salvar} loading={salvando}>
-          <CalendarCheck size={16} /> Lançar na minha conta
-        </Button>
+        <div className="flex flex-col-reverse gap-2 border-t border-[var(--color-line)] pt-4 sm:flex-row sm:justify-end">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={salvar} loading={salvando}>
+            <CalendarCheck size={16} /> Lançar na minha conta
+          </Button>
+        </div>
       </div>
     </Modal>
   );
@@ -908,19 +1045,23 @@ function AdiantarModal({ onClose, linha, ym, onDone }) {
   if (!linha) return null;
   const max = linha.parcela?.restantes ? linha.parcela.restantes + 1 : 12;
   return (
-    <Modal open onClose={onClose} title="Adiantar parcelas">
+    <Modal open onClose={onClose} title="Adiantar parcelas"
+           description="Zera o devido nos meses que você cobrir.">
       <div className="space-y-4">
         <FormError>{erro}</FormError>
         <p className="text-sm text-slate-400">
           {linha.linhaDescricao ?? "Valor combinado"} · <span className="tnum">{fmtMoney(linha.valorCheio)}</span> por mês
           {linha.parcela ? ` · faltam ${linha.parcela.restantes}` : ""}
         </p>
-        <Field label="Quantas parcelas" hint={`total ${fmtMoney(linha.valorCheio * (parcelas || 0))}`}>
+        <Field label="Quantas parcelas" hint={`Total de ${fmtMoney(linha.valorCheio * (parcelas || 0))}`}>
           <NumberInput name="parcelas" value={parcelas} min={1} max={max} onValue={setParcelas} />
         </Field>
-        <Button className="w-full" onClick={salvar} loading={salvando}>
-          <HandCoins size={16} /> Adiantar
-        </Button>
+        <div className="flex flex-col-reverse gap-2 border-t border-[var(--color-line)] pt-4 sm:flex-row sm:justify-end">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={salvar} loading={salvando}>
+            <HandCoins size={16} /> Adiantar
+          </Button>
+        </div>
       </div>
     </Modal>
   );

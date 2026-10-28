@@ -1,59 +1,155 @@
-// Lightweight SVG/flex charts — no external lib. Dark-theme tuned.
+// Lightweight SVG/flex charts — no external lib. Cores lidas dos tokens do
+// tema (`app/globals.css`), então valem no claro e no escuro.
+//
+// Regras que todos seguem: uma pergunta por gráfico, grade horizontal fraca com
+// 3–4 marcas redondas acima do máximo (nunca gráfico sem escala), barra de
+// canto reto na base, rótulo de eixo nunca maior que o dado, tooltip numa
+// caixa simples dentro da área do gráfico.
 import { fmtMoneyCompact } from "../../lib/format.js";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 
-// ── Grouped vertical bars (compara séries por período) ──────────────────────
-// data: [{ label, bars: [{ value, color, name }] }]
-export function GroupedBars({ data, height = 168, format = fmtMoneyCompact }) {
-  const max = Math.max(1, ...data.flatMap((d) => d.bars.map((b) => b.value)));
+const tooltipClass =
+  "pointer-events-none absolute z-30 whitespace-nowrap rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-slate-300 opacity-0 shadow-[var(--sombra-flutua)] transition-opacity group-hover:opacity-100";
+
+// Passo "redondo" (1, 2, 2.5, 5 × 10^n) que cobre o máximo em `n` faixas.
+export function escalaRedonda(max, n = 4) {
+  if (!(max > 0)) return { topo: 1, marcas: [0, 1] };
+  const bruto = max / n;
+  const mag = 10 ** Math.floor(Math.log10(bruto));
+  const passo = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((p) => p >= bruto) ?? 10 * mag;
+  const faixas = Math.ceil(max / passo);
+  const topo = faixas * passo;
+  return { topo, marcas: Array.from({ length: faixas + 1 }, (_, i) => i * passo) };
+}
+
+// R$ 1.500 → "1,5 mil"; o rótulo de eixo é o menor texto do gráfico.
+const fmtEixo = (v) =>
+  v >= 1000
+    ? `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`
+    : v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+
+// Grade + rótulos do eixo Y numa faixa própria à esquerda (rótulo nunca em
+// cima da barra).
+function Grade({ marcas, topo, height }) {
   return (
-    <div className="flex items-end gap-2 sm:gap-3" style={{ height: height + 26 }}>
-      {data.map((d) => (
-        <div key={d.label} className="flex flex-1 flex-col items-center gap-1.5">
-          <div className="flex w-full items-end justify-center gap-1" style={{ height }}>
-            {d.bars.map((b, i) => {
-              const h = Math.max((b.value / max) * height, b.value > 0 ? 3 : 0);
-              return (
-                <div key={i} className="group relative flex w-full max-w-[22px] flex-col justify-end" style={{ height }}>
-                  <div className="pointer-events-none absolute -top-0.5 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 ring-1 ring-veu/10 transition-opacity group-hover:opacity-100">
-                    {b.name}: {format(b.value)}
-                  </div>
-                  <div className="w-full rounded-t-md transition-all" style={{ height: h, backgroundColor: b.color }} />
-                </div>
-              );
-            })}
-          </div>
-          <span className="text-[10px] text-slate-500">{d.label}</span>
+    <div aria-hidden className="pointer-events-none absolute inset-0">
+      {marcas.map((m) => (
+        <div key={m} className="absolute inset-x-0 flex items-center" style={{ bottom: (m / topo) * height - 0.5 }}>
+          <span className="tnum w-11 shrink-0 pr-2 text-right text-[11px] leading-none text-slate-500">{fmtEixo(m)}</span>
+          <span className={cx("h-px flex-1", m === 0 ? "bg-veu/20" : "bg-[var(--color-grade)]")} />
         </div>
       ))}
     </div>
   );
 }
 
-// ── Ranked horizontal bars ──────────────────────────────────────────────────
-// items: [{ label, value, color, sub }]
-export function HBars({ items, format = fmtMoneyCompact, empty = "Sem dados." }) {
-  if (!items.length) return <p className="py-6 text-center text-sm text-slate-500">{empty}</p>;
-  const max = Math.max(1, ...items.map((i) => i.value));
+export function Legenda({ items, className }) {
   return (
-    <ul className="space-y-3">
+    <ul className={cx("flex flex-wrap gap-x-4 gap-y-1.5", className)}>
       {items.map((it) => (
-        <li key={it.label}>
-          <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
-            <span className="flex min-w-0 items-center gap-2 text-slate-300">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: it.color }} />
-              <span className="truncate">{it.label}</span>
-            </span>
-            <span className="tnum shrink-0 font-medium text-slate-200">{format(it.value)}</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-veu/5">
-            <div className="h-full rounded-full transition-all" style={{ width: `${(it.value / max) * 100}%`, backgroundColor: it.color }} />
-          </div>
-          {it.sub && <p className="mt-0.5 text-[11px] text-slate-500">{it.sub}</p>}
+        <li key={it.name} className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+          <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ backgroundColor: it.color }} /> {it.name}
         </li>
       ))}
     </ul>
+  );
+}
+
+// ── Grouped vertical bars (compara séries por período) ──────────────────────
+// data: [{ label, key?, bars: [{ value, color, name }] }]
+export function GroupedBars({ data, height = 168, format = fmtMoneyCompact, destaque }) {
+  const max = Math.max(0, ...data.flatMap((d) => d.bars.map((b) => b.value)));
+  const { topo, marcas } = escalaRedonda(max);
+  return (
+    <div>
+      <div className="relative [overflow-x:clip]" style={{ height }}>
+        <Grade marcas={marcas} topo={topo} height={height} />
+        <div className="absolute inset-y-0 left-11 right-0 flex items-end gap-2 sm:gap-4">
+          {data.map((d, i) => {
+            const ancora = i === 0 ? "left-0" : i === data.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2";
+            return (
+              <div key={d.key ?? d.label} className="group relative flex h-full flex-1 items-end justify-center gap-[3px]">
+                {d.bars.map((b, j) => (
+                  <div key={j} className="w-full max-w-[18px] rounded-t-[3px] transition-opacity group-hover:opacity-90"
+                       style={{ height: b.value > 0 ? Math.max((b.value / topo) * height, 2) : 0, backgroundColor: b.color }} />
+                ))}
+                <div className={cx(tooltipClass, "top-0", ancora)}>
+                  <p className="mb-0.5 font-semibold text-ink">{d.label}</p>
+                  {d.bars.map((b) => (
+                    <p key={b.name} className="tnum flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: b.color }} />
+                      {b.name} <span className="ml-auto pl-3 text-ink">{format(b.value)}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="ml-11 mt-2 flex gap-2 sm:gap-4">
+        {data.map((d) => (
+          <span key={d.key ?? d.label}
+                className={cx("flex-1 text-center text-[11px]", destaque != null && (d.key ?? d.label) === destaque ? "font-semibold text-ink" : "text-slate-500")}>
+            {d.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Ranked horizontal bars ──────────────────────────────────────────────────
+// items: [{ label, value, color, sub, extra }] — ordenados pelo chamador.
+// O valor fica na linha do rótulo, a barra (fina) embaixo: a lista se lê como
+// lista, e o comprimento confirma a ordem.
+export function HBars({ items, format = fmtMoneyCompact, empty = "Sem dados.", total }) {
+  if (!items.length) return <p className="py-8 text-center text-sm text-slate-500">{empty}</p>;
+  const max = Math.max(1, ...items.map((i) => i.value));
+  const soma = total ?? items.reduce((s, i) => s + i.value, 0);
+  return (
+    <ul className="space-y-3.5">
+      {items.map((it) => (
+        <li key={it.label}>
+          <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+            <span className="flex min-w-0 items-center gap-2 text-slate-200">
+              <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ backgroundColor: it.color }} />
+              <span className="truncate">{it.label}</span>
+            </span>
+            <span className="flex shrink-0 items-baseline gap-2.5">
+              {soma > 0 && (
+                <span className="tnum w-9 text-right text-xs text-slate-500">{Math.round((it.value / soma) * 100)}%</span>
+              )}
+              <span className="tnum font-medium text-ink">{format(it.value)}</span>
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-trilho)]">
+            <div className="h-full rounded-full" style={{ width: `${(it.value / max) * 100}%`, backgroundColor: it.color }} />
+          </div>
+          {it.sub && <p className="mt-1 text-xs text-slate-500">{it.sub}</p>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ── Barra 100% (composição de um todo) ──────────────────────────────────────
+// partes: [{ key, value, color, label }]. Emendas de 2px entre as partes.
+export function BarraComposicao({ partes, height = 10, className, label }) {
+  const total = partes.reduce((s, p) => s + Math.max(p.value, 0), 0);
+  return (
+    <div className={cx("flex w-full gap-[2px] overflow-hidden rounded-full", className)} style={{ height }}
+         role="img" aria-label={label}>
+      {total <= 0 ? (
+        <span className="h-full w-full bg-[var(--color-trilho)]" />
+      ) : (
+        partes.filter((p) => p.value > 0).map((p) => (
+          <span key={p.key ?? p.label} className="h-full" title={p.label}
+                style={{ flexGrow: p.value, flexBasis: 0, backgroundColor: p.color }} />
+        ))
+      )}
+    </div>
   );
 }
 
@@ -73,7 +169,7 @@ export function HBars({ items, format = fmtMoneyCompact, empty = "Sem dados." })
 //     aparece no hover, senão viram doze rótulos brigando;
 //   · a escala é simétrica quando há vermelho, pra que -300 e +300 tenham o
 //     mesmo tamanho e a comparação seja honesta.
-export function SobraMensal({ points, height = 200, format = fmtMoneyCompact, destaque }) {
+export function SobraMensal({ points, height = 184, format = fmtMoneyCompact, destaque }) {
   if (!points || points.length === 0) {
     return <p className="py-10 text-center text-sm text-slate-500">Sem histórico ainda.</p>;
   }
@@ -101,134 +197,130 @@ export function SobraMensal({ points, height = 200, format = fmtMoneyCompact, de
   const negativos = vals.filter((v) => v < 0).length;
   const atual = points.find((p) => (p.key ?? p.label) === destaque) ?? points[points.length - 1];
   const topoMedia = media >= 0 ? topoZero - px(media) : topoZero + px(media);
+  const diff = (atual?.sobrou ?? 0) - media;
 
   return (
     <div>
       {/* o número antes do desenho: o gráfico contextualiza, não informa */}
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-slate-500">
-            Sobrou em {atual?.label ?? "—"}
-          </p>
-          <p className={cx("tnum text-2xl font-bold", (atual?.sobrou ?? 0) < 0 ? "text-rose-400" : "text-emerald-400")}>
+          <p className="text-[13px] text-slate-500">Sobrou em {atual?.label ?? "—"}</p>
+          <p className={cx("tnum text-2xl font-semibold tracking-[-0.01em]", (atual?.sobrou ?? 0) < 0 ? "text-rose-400" : "text-ink")}>
             {format(atual?.sobrou ?? 0)}
           </p>
+          <p className="tnum mt-0.5 text-[13px] text-slate-500">
+            {Math.abs(diff) < 1 ? "na média dos últimos meses"
+              : <><span className={diff < 0 ? "text-rose-400" : "text-emerald-400"}>{diff > 0 ? "+" : "−"}{format(Math.abs(diff))}</span> contra a média de {points.length} meses</>}
+          </p>
         </div>
-        <dl className="flex gap-5 text-right">
+        <dl className="flex gap-6 text-right">
           <div>
-            <dt className="text-[11px] text-slate-500">média {points.length}m</dt>
-            <dd className={cx("tnum text-sm font-semibold", media < 0 ? "text-rose-400" : "text-slate-200")}>
+            <dt className="text-[13px] text-slate-500">Média {points.length} meses</dt>
+            <dd className={cx("tnum text-sm font-semibold", media < 0 ? "text-rose-400" : "text-ink")}>
               {format(media)}
             </dd>
           </div>
           <div>
-            <dt className="text-[11px] text-slate-500">no vermelho</dt>
-            <dd className={cx("tnum text-sm font-semibold", negativos > 0 ? "text-rose-400" : "text-slate-200")}>
-              {negativos}/{points.length}
+            <dt className="text-[13px] text-slate-500">Meses no vermelho</dt>
+            <dd className={cx("tnum text-sm font-semibold", negativos > 0 ? "text-rose-400" : "text-ink")}>
+              {negativos} de {points.length}
             </dd>
           </div>
         </dl>
       </div>
 
-      <div className="overflow-x-auto pb-1">
-        <div className="relative min-w-[300px]" style={{ height }}
-             role="img"
-             aria-label={"Sobra mensal: " + points.map((p) => p.label + " " + format(p.sobrou)).join(", ")}>
-          {/* zero: a referência que faltava na linha antiga */}
-          <div className="pointer-events-none absolute inset-x-0 z-0 border-t border-veu/20" style={{ top: topoZero }} />
+      <div className="relative [overflow-x:clip]" style={{ height }}
+           role="img"
+           aria-label={"Sobra mensal: " + points.map((p) => p.label + " " + format(p.sobrou)).join(", ")}>
+        {/* zero: a referência que faltava na linha antiga */}
+        <div className="pointer-events-none absolute inset-x-0 z-0 h-px bg-veu/20" style={{ top: topoZero }} />
 
-          <div className="relative z-10 flex h-full items-stretch gap-1 sm:gap-1.5">
-            {points.map((p, i) => {
-              const k = p.key ?? p.label;
-              const destacado = k === destaque;
-              const neg = p.sobrou < 0;
-              const h = Math.max(px(p.sobrou), p.sobrou === 0 ? 0 : 2);
-              // Alinhamento do tooltip pela posição da coluna: centralizado no
-              // meio, encostado nas pontas — a caixa é larga e nas bordas sairia
-              // da área visível.
-              const ancora =
-                i <= 1 ? "left-0" : i >= points.length - 2 ? "right-0" : "left-1/2 -translate-x-1/2";
-              return (
-                <div key={k} className="group relative flex min-w-[16px] flex-1 flex-col">
-                  <span style={{ height: PAD_TOPO }} />
-                  <div className="flex flex-col justify-end" style={{ height: areaPos }}>
-                    {!neg && (
-                      <div className={cx("w-full rounded-t-md transition-colors",
-                                         destacado ? "bg-emerald-400" : "bg-emerald-500/50 group-hover:bg-emerald-400")}
-                           style={{ height: h }} />
-                    )}
-                  </div>
-                  <div className="flex flex-col justify-start" style={{ height: areaNeg }}>
-                    {neg && (
-                      <div className={cx("w-full rounded-b-md transition-colors",
-                                         destacado ? "bg-rose-400" : "bg-rose-500/50 group-hover:bg-rose-400")}
-                           style={{ height: h }} />
-                    )}
-                  </div>
-
-                  {/* mês visto: valor sempre à vista, encostado na barra */}
-                  {destacado && (
-                    <span className={cx(
-                      "tnum pointer-events-none absolute z-20 whitespace-nowrap rounded-md bg-veu/10 px-1.5 py-0.5 text-[10px] font-semibold",
-                      // mesma âncora do tooltip: o mês visto é quase sempre o
-                      // último, e centralizado ali o valor saía cortado
-                      ancora,
-                      neg ? "text-rose-300" : "text-emerald-300"
-                    )}
-                      style={neg ? { top: topoZero + h + 4 } : { top: topoZero - h - 19 }}>
-                      {format(p.sobrou)}
-                    </span>
-                  )}
-
-                  {/* Hover: o mês inteiro (sobra + o porquê dela). Fica DENTRO da
-                      área do gráfico porque o wrapper tem overflow-x:auto, e isso
-                      corta também o que passa por cima — era o que fazia o tooltip
-                      antigo simplesmente não aparecer. */}
-                  <span className={cx(
-                    "pointer-events-none absolute bottom-0.5 z-30 whitespace-nowrap rounded-md bg-slate-900/95 px-2 py-1 text-[10px] leading-relaxed text-slate-200 opacity-0 ring-1 ring-veu/10 transition-opacity group-hover:opacity-100",
-                    ancora
-                  )}>
-                    <b className="text-slate-100">{p.label}</b>
-                    {" · sobrou "}
-                    <b className={neg ? "text-rose-300" : "text-emerald-300"}>{format(p.sobrou)}</b>
-                    <br />
-                    recebeu {format(p.recebido ?? 0)} · gastou {format(p.saiu ?? 0)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Média por cima das barras (z-20): com pouca variação o gráfico é um
-              paredão, e é a média que diz qual mês ficou acima ou abaixo do normal.
-              O rótulo vai pra ESQUERDA — à direita ele bate no valor do mês visto,
-              que é justamente onde a barra destacada costuma estar. */}
-          <div className="pointer-events-none absolute inset-x-0 z-20 border-t border-dashed border-sky-300/70"
-               style={{ top: topoMedia }}>
-            <span className="tnum absolute -top-2 left-0 rounded bg-[var(--color-surface)] px-1 text-[9px] font-semibold text-sky-300">
-              média {format(media)}
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-1.5 flex min-w-[300px] gap-1 sm:gap-1.5">
+        <div className="relative z-10 flex h-full items-stretch gap-[3px] sm:gap-1.5">
           {points.map((p, i) => {
             const k = p.key ?? p.label;
             const destacado = k === destaque;
-            // Rótulo alternado no mobile (doze meses não caem lado a lado), mas
-            // com "invisible" e não "hidden": sumir do flex desalinharia o
-            // rótulo dos meses que ficam.
+            const neg = p.sobrou < 0;
+            const h = Math.max(px(p.sobrou), p.sobrou === 0 ? 0 : 2);
+            // Alinhamento do tooltip pela posição da coluna: centralizado no
+            // meio, encostado nas pontas — a caixa é larga e nas bordas sairia
+            // da área visível.
+            const ancora =
+              i <= 1 ? "left-0" : i >= points.length - 2 ? "right-0" : "left-1/2 -translate-x-1/2";
             return (
-              <span key={k} className={cx(
-                "min-w-[16px] flex-1 text-center text-[10px]",
-                destacado ? "font-semibold text-slate-300" : "text-slate-500",
-                !destacado && i % 2 === 1 && "invisible sm:visible"
-              )}>
-                {p.label}
-              </span>
+              <div key={k} className="group relative flex min-w-0 flex-1 flex-col">
+                <span style={{ height: PAD_TOPO }} />
+                <div className="flex flex-col justify-end" style={{ height: areaPos }}>
+                  {!neg && (
+                    <div className={cx("w-full rounded-t-[3px] transition-colors",
+                                       destacado ? "bg-emerald-400" : "bg-emerald-400/35 group-hover:bg-emerald-400/60")}
+                         style={{ height: h }} />
+                  )}
+                </div>
+                <div className="flex flex-col justify-start" style={{ height: areaNeg }}>
+                  {neg && (
+                    <div className={cx("w-full rounded-b-[3px] transition-colors",
+                                       destacado ? "bg-rose-400" : "bg-rose-400/40 group-hover:bg-rose-400/65")}
+                         style={{ height: h }} />
+                  )}
+                </div>
+
+                {/* mês visto: valor sempre à vista, encostado na barra */}
+                {destacado && (
+                  <span className={cx(
+                    "tnum pointer-events-none absolute z-20 whitespace-nowrap text-xs font-semibold",
+                    // mesma âncora do tooltip: o mês visto é quase sempre o
+                    // último, e centralizado ali o valor saía cortado
+                    ancora,
+                    neg ? "text-rose-400" : "text-ink"
+                  )}
+                    style={neg ? { top: topoZero + h + 4 } : { top: topoZero - h - 20 }}>
+                    {format(p.sobrou)}
+                  </span>
+                )}
+
+                {/* Hover: o mês inteiro (sobra + o porquê dela). Fica DENTRO da
+                    área do gráfico — nada sai por cima do quadro. */}
+                <span className={cx(tooltipClass, "bottom-0.5 leading-relaxed", ancora)}>
+                  <b className="font-semibold text-ink">{p.label}</b>
+                  {" · sobrou "}
+                  <b className={cx("font-semibold", neg ? "text-rose-400" : "text-ink")}>{format(p.sobrou)}</b>
+                  <br />
+                  recebeu {format(p.recebido ?? 0)} · gastou {format(p.saiu ?? 0)}
+                </span>
+              </div>
             );
           })}
         </div>
+
+        {/* Média por cima das barras (z-20): com pouca variação o gráfico é um
+            paredão, e é a média que diz qual mês ficou acima ou abaixo do normal.
+            O rótulo vai pra ESQUERDA — à direita ele bate no valor do mês visto,
+            que é justamente onde a barra destacada costuma estar. */}
+        <div className="pointer-events-none absolute inset-x-0 z-20 border-t border-dashed border-slate-400/70"
+             style={{ top: topoMedia }}>
+          <span className="tnum absolute -top-2.5 left-0 rounded bg-[var(--color-surface)] px-1 text-[11px] font-medium text-slate-400">
+            média {format(media)}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-2 flex gap-[3px] sm:gap-1.5">
+        {points.map((p, i) => {
+          const k = p.key ?? p.label;
+          const destacado = k === destaque;
+          // Rótulo alternado no mobile (doze meses não caem lado a lado), mas
+          // com "invisible" e não "hidden": sumir do flex desalinharia o
+          // rótulo dos meses que ficam.
+          return (
+            <span key={k} className={cx(
+              "min-w-0 flex-1 truncate text-center text-[11px]",
+              destacado ? "font-semibold text-ink" : "text-slate-500",
+              !destacado && i % 2 === 1 && "invisible sm:visible"
+            )}>
+              {p.label}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -244,51 +336,65 @@ export function SobraMensal({ points, height = 200, format = fmtMoneyCompact, de
 // difíceis de distinguir — o rótulo e o tooltip é que garantem a identidade.
 export function StackedBars({ data, series, height = 168, format = fmtMoneyCompact, destaque, empty = "Sem dados." }) {
   const totais = data.map((d) => series.reduce((s, sr) => s + (d.valores[sr.key] || 0), 0));
-  const max = Math.max(1, ...totais);
   if (data.length === 0 || totais.every((t) => t === 0)) {
-    return <p className="py-6 text-center text-sm text-slate-500">{empty}</p>;
+    return <p className="py-8 text-center text-sm text-slate-500">{empty}</p>;
   }
+  const { topo, marcas } = escalaRedonda(Math.max(...totais));
   return (
     <div>
-      <div className="flex items-end gap-2 overflow-x-auto pb-1 sm:gap-3">
-        {data.map((d, i) => {
-          const total = totais[i];
-          const destacado = destaque != null && (d.key ?? d.label) === destaque;
-          const visiveis = series.filter((sr) => (d.valores[sr.key] || 0) > 0);
-          return (
-            <div key={d.key ?? d.label} className="flex min-w-[38px] flex-1 flex-col items-center gap-1.5">
-              {/* rótulo direto só no mês destacado — número em toda coluna é ruído */}
-              <span className={cx("tnum text-[10px]", destacado ? "text-slate-200" : "text-transparent")}>
-                {format(total)}
-              </span>
-              <div className="flex w-full max-w-[44px] flex-col-reverse justify-start gap-[2px]" style={{ height }}>
-                {visiveis.map((sr, k) => {
-                  const v = d.valores[sr.key] || 0;
-                  const h = Math.max((v / max) * height, 3);
-                  const topo = k === visiveis.length - 1;
-                  return (
-                    <div key={sr.key} className="group relative w-full shrink-0"
-                         style={{ height: h, backgroundColor: sr.color, borderRadius: topo ? "4px 4px 0 0" : 0 }}>
-                      <span className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200 opacity-0 ring-1 ring-veu/10 transition-opacity group-hover:opacity-100">
-                        {sr.name}: {format(v)}
-                      </span>
-                    </div>
-                  );
-                })}
+      <Legenda items={series} className="mb-4" />
+      <div className="relative [overflow-x:clip]" style={{ height }}>
+        <Grade marcas={marcas} topo={topo} height={height} />
+        <div className="absolute inset-y-0 left-11 right-0 flex items-end gap-2 sm:gap-4">
+          {data.map((d, i) => {
+            const total = totais[i];
+            const destacado = destaque != null && (d.key ?? d.label) === destaque;
+            const visiveis = series.filter((sr) => (d.valores[sr.key] || 0) > 0);
+            const ancora = i === 0 ? "left-0" : i === data.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2";
+            const alt = (total / topo) * height;
+            return (
+              <div key={d.key ?? d.label} className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end">
+                {/* rótulo direto só no mês destacado — número em toda coluna é ruído */}
+                {destacado && (
+                  <span className="tnum absolute whitespace-nowrap text-[11px] font-semibold text-ink" style={{ bottom: alt + 4 }}>
+                    {format(total)}
+                  </span>
+                )}
+                <div className={cx("flex w-full max-w-[36px] flex-col-reverse gap-[2px] transition-opacity",
+                                   destaque != null && !destacado && "opacity-70 group-hover:opacity-100")}>
+                  {visiveis.map((sr, k) => {
+                    const v = d.valores[sr.key] || 0;
+                    return (
+                      <div key={sr.key} className="w-full shrink-0"
+                           style={{ height: Math.max((v / topo) * height - 2, 2), backgroundColor: sr.color,
+                                    borderRadius: k === visiveis.length - 1 ? "3px 3px 0 0" : 0 }} />
+                    );
+                  })}
+                </div>
+                <div className={cx(tooltipClass, "top-0", ancora)}>
+                  <p className="mb-0.5 font-semibold text-ink">{d.label} · <span className="tnum">{format(total)}</span></p>
+                  {visiveis.map((sr) => (
+                    <p key={sr.key} className="tnum flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: sr.color }} />
+                      {sr.name} <span className="ml-auto pl-3 text-ink">{format(d.valores[sr.key] || 0)}</span>
+                    </p>
+                  ))}
+                </div>
               </div>
-              <span className={cx("text-[10px]", destacado ? "font-semibold text-slate-300" : "text-slate-500")}>
-                {d.label}
-              </span>
-            </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="ml-11 mt-2 flex gap-2 sm:gap-4">
+        {data.map((d) => {
+          const destacado = destaque != null && (d.key ?? d.label) === destaque;
+          return (
+            <span key={d.key ?? d.label}
+                  className={cx("min-w-0 flex-1 truncate text-center text-[11px]", destacado ? "font-semibold text-ink" : "text-slate-500")}>
+              {d.label}
+            </span>
           );
         })}
-      </div>
-      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
-        {series.map((sr) => (
-          <span key={sr.key} className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: sr.color }} /> {sr.name}
-          </span>
-        ))}
       </div>
     </div>
   );

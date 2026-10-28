@@ -17,8 +17,9 @@ export default function Detalhe() {
     return (
       <div className="grid min-h-[50vh] place-items-center px-6 text-center">
         <div className="space-y-2">
-          <p className="text-slate-300">Essa caixinha não existe mais.</p>
-          <Link href="/" className="text-sm text-blue-400 hover:text-blue-300">Voltar pro início</Link>
+          <h1 className="text-lg font-semibold text-ink">Caixinha não encontrada</h1>
+          <p className="text-sm text-slate-400">Ela foi excluída ou o link é antigo.</p>
+          <Link href="/" className="inline-block pt-1 text-sm font-medium text-blue-400 hover:text-blue-300">Voltar pro início</Link>
         </div>
       </div>
     );

@@ -9,11 +9,13 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { LogOut, PiggyBank } from "lucide-react";
+
 // primitives são .jsx sem tipos — TS inferiria todas as props como obrigatórias
 import * as P from "./ui/primitives.jsx";
-const { Field, TextInput } =
+const { Field, TextInput, Button } =
   P as unknown as Record<string, React.ComponentType<Record<string, unknown>>>;
+import { FormError } from "./ui/fields.jsx";
+import { Marca } from "./ui/marca.jsx";
 import { hasPermission } from "@/server/auth/permissions";
 import { login, logout, me, register, type AuthUser } from "@/services/financeApi";
 import { BotaoTema } from "./ui/tema.jsx";
@@ -76,7 +78,11 @@ export default function AuthGate({
   }, []);
 
   if (status === "checking") {
-    return <div className="grid min-h-dvh place-items-center text-slate-500 text-sm">Verificando sessão…</div>;
+    return (
+      <div className="grid min-h-dvh place-items-center text-sm text-slate-500" role="status">
+        Verificando sessão…
+      </div>
+    );
   }
 
   if (status === "anon" || !user) {
@@ -93,13 +99,6 @@ export default function AuthGate({
   return (
     <AuthContext.Provider value={{ user, can, signOut }}>
       {children}
-      <button
-        title={`Sair (${user.email})`}
-        onClick={signOut}
-        className="fixed right-4 top-4 z-40 hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)]/80 p-2 text-slate-500 backdrop-blur transition-colors hover:text-slate-200 lg:block"
-      >
-        <LogOut size={16} />
-      </button>
     </AuthContext.Provider>
   );
 }
@@ -130,55 +129,62 @@ function LoginForm({ onLogged }: { onLogged: (u: AuthUser) => void }) {
     setError(null);
   }
 
+  // Sair agora mora na casca (rodapé da barra lateral / barra do celular).
   return (
-    <div className="grid min-h-dvh place-items-center px-6">
-      <BotaoTema className="fixed right-4 top-4" />
-      <form onSubmit={submit} className="w-full max-w-sm space-y-4">
-        <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 text-white shadow-lg shadow-blue-500/20">
-            <PiggyBank size={19} />
-          </span>
-          <div className="leading-tight">
-            <p className="font-bold text-ink">Wallet</p>
-            <p className="text-[11px] text-slate-500">
-              {registering ? "crie sua conta" : "entre pra continuar"}
-            </p>
-          </div>
+    <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] px-5 py-5 sm:px-8">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-2.5">
+          <Marca className="h-7 w-7" />
+          <span className="text-[17px] font-semibold tracking-[-0.01em] text-ink">Wallet</span>
+        </span>
+        <BotaoTema />
+      </div>
+
+      <main className="grid place-items-center py-10">
+        <div className="w-full max-w-[24rem]">
+          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.015em] text-ink">
+            {registering ? "Criar sua conta" : "Entrar"}
+          </h1>
+          <p className="mt-1.5 text-sm text-slate-400">
+            {registering
+              ? "Caixinhas, despesas do mês e faturas de cartão num lugar só."
+              : "Suas caixinhas, despesas e cartões estão te esperando."}
+          </p>
+
+          <form onSubmit={submit} className="mt-8 space-y-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)] p-5 sm:p-6" noValidate={false}>
+            {registering && (
+              <Field label="Nome" required>
+                <TextInput type="text" required autoFocus placeholder="Como te chamamos" autoComplete="name"
+                           value={nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNome(e.target.value)} />
+              </Field>
+            )}
+            <Field label="Email" required>
+              <TextInput type="email" required autoFocus={!registering} placeholder="voce@email.com" autoComplete="email"
+                         value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
+            </Field>
+            <Field label="Senha" required hint={registering ? "Mínimo de 6 caracteres." : ""}>
+              <TextInput type="password" required minLength={registering ? 6 : undefined}
+                         autoComplete={registering ? "new-password" : "current-password"}
+                         placeholder="••••••" value={senha} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSenha(e.target.value)} />
+            </Field>
+
+            <FormError>{error}</FormError>
+
+            <Button type="submit" size="lg" loading={busy} className="w-full">
+              {busy ? (registering ? "Criando conta…" : "Entrando…") : registering ? "Criar conta" : "Entrar"}
+            </Button>
+          </form>
+
+          <p className="mt-5 text-center text-sm text-slate-500">
+            {registering ? "Já tem conta?" : "Ainda não tem conta?"}{" "}
+            <button type="button" onClick={toggle}
+                    className="cursor-pointer font-medium text-ink underline-offset-4 hover:underline">
+              {registering ? "Entrar" : "Criar conta"}
+            </button>
+          </p>
         </div>
-
-        {registering && (
-          <Field label="Nome" required>
-            <TextInput type="text" required autoFocus placeholder="como te chamamos"
-                       value={nome} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNome(e.target.value)} />
-          </Field>
-        )}
-        <Field label="Email" required>
-          <TextInput type="email" required autoFocus={!registering} placeholder="voce@email.com"
-                     value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
-        </Field>
-        <Field label="Senha" required hint={registering ? "mínimo 6 caracteres" : ""}>
-          <TextInput type="password" required minLength={registering ? 6 : undefined}
-                     placeholder="••••••" value={senha} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSenha(e.target.value)} />
-        </Field>
-
-        {error && <p className="text-xs text-rose-400">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-xl bg-blue-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-400 disabled:opacity-50"
-        >
-          {busy ? (registering ? "Criando…" : "Entrando…") : registering ? "Criar conta" : "Entrar"}
-        </button>
-
-        <button
-          type="button"
-          onClick={toggle}
-          className="w-full text-center text-xs text-slate-500 transition-colors hover:text-slate-300"
-        >
-          {registering ? "Já tenho conta · entrar" : "Não tem conta? Criar conta"}
-        </button>
-      </form>
+      </main>
+      <span />
     </div>
   );
 }

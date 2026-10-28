@@ -2,11 +2,37 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Receipt, PiggyBank, CreditCard, ShieldCheck, Users } from "lucide-react";
+import { Home, Receipt, CreditCard, ShieldCheck, Users, LogOut, Moon, Sun, ChevronsUpDown } from "lucide-react";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 import { Spinner, Button } from "./ui/primitives.jsx";
-import { BotaoTema } from "./ui/tema.jsx";
+import { useTema } from "./ui/tema.jsx";
+import { Marca } from "./ui/marca.jsx";
+import { Avatar, AvatarFallback } from "./ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+  useSidebar,
+} from "./ui/sidebar";
 
 // Casca do app: navegação + gate do boot. O conteúdo de cada área virou rota de
 // verdade (`app/despesas/page.tsx` e cia.) em vez de `useState("view")` — o
@@ -17,9 +43,18 @@ import { BotaoTema } from "./ui/tema.jsx";
 // refaz o boot: o Next mantém layout compartilhado entre rotas irmãs e só
 // substitui o segmento da página.
 //
+// Desenho (Sidebar do shadcn, `components/ui/sidebar.tsx`): a barra lateral
+// fica no MESMO chão da página (só uma régua de 1px a separa), o item ativo é
+// uma pílula neutra — cor fica pro dado — e ela recolhe pra um trilho de
+// ícones (botão no topo, a borda da barra ou Ctrl+B; o estado mora no cookie
+// `sidebar_state`, lido no layout pra não piscar no SSR). Conta, tema e sair
+// moram num menu só, no rodapé. No celular (< md) vira barra superior (marca +
+// conta) e barra inferior com rótulo — com quatro ou cinco destinos, a barra
+// do polegar ganha de um menu escondido atrás de um hambúrguer.
+//
 // perms: item some se o usuário não tiver NENHUMA delas
 const NAV = [
-  { href: "/", label: "Início", icon: LayoutGrid, perms: ["caixinha:view"] },
+  { href: "/", label: "Início", icon: Home, perms: ["caixinha:view"] },
   { href: "/despesas", label: "Despesas", icon: Receipt, perms: ["orcamento:view"] },
   { href: "/cartoes", label: "Cartões", icon: CreditCard, perms: ["cartao:view"] },
   {
@@ -28,7 +63,7 @@ const NAV = [
     icon: Users,
     perms: ["cartao:share", "cartao:view_shared", "share:manage", "share:view_shared"],
   },
-  { href: "/admin", label: "Admin", icon: ShieldCheck, perms: ["user:view", "role:view"] },
+  { href: "/admin", label: "Admin", icon: ShieldCheck, perms: ["user:view", "role:view"], grupo: "sistema" },
 ];
 
 // A área de caixinhas é filha do Início: `/caixinhas/:id` mantém "Início" aceso.
@@ -37,7 +72,7 @@ function estaAtivo(href, pathname) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export default function AppShell({ children }) {
+export default function AppShell({ children, sidebarAberta = true }) {
   const fin = useFinance();
   const { can } = useAuth();
   const pathname = usePathname();
@@ -45,84 +80,208 @@ export default function AppShell({ children }) {
 
   if (nav.length === 0) {
     return (
-      <div className="grid min-h-dvh place-items-center px-6 text-center">
+      <Centro>
         <p className="text-sm text-slate-400">
           Sua conta não tem permissão pra ver nenhuma área. Fale com um admin.
         </p>
-      </div>
+      </Centro>
     );
   }
 
   if (fin.status === "loading") {
     return (
-      <div className="grid min-h-dvh place-items-center text-slate-400">
-        <div className="flex flex-col items-center gap-3">
-          <Spinner className="h-7 w-7" />
-          <p className="text-sm">Carregando suas finanças…</p>
+      <Centro>
+        <div className="flex flex-col items-center gap-3 text-slate-400" role="status">
+          <Marca className="h-9 w-9" />
+          <p className="flex items-center gap-2 text-sm"><Spinner className="h-3.5 w-3.5" /> Carregando suas finanças…</p>
         </div>
-      </div>
+      </Centro>
     );
   }
 
   if (fin.status === "error") {
     return (
-      <div className="grid min-h-dvh place-items-center px-6 text-center">
-        <div className="space-y-3">
-          <p className="text-slate-300">Não consegui carregar os dados.</p>
-          <p className="text-xs text-slate-500">{fin.error}</p>
+      <Centro>
+        <div className="max-w-sm space-y-3">
+          <p className="font-semibold text-ink">Não consegui carregar seus dados.</p>
+          <p className="text-[13px] text-slate-500">{fin.error}</p>
           <Button onClick={fin.refresh}>Tentar de novo</Button>
         </div>
-      </div>
+      </Centro>
     );
   }
 
-  return (
-    <div className="min-h-dvh lg:flex">
-      {/* desktop sidebar */}
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-6 lg:flex">
-        <Brand />
-        <nav className="mt-8 flex flex-1 flex-col gap-1">
-          {nav.map((n) => (
-            <NavItem key={n.href} {...n} ativo={estaAtivo(n.href, pathname)} desktop />
-          ))}
-        </nav>
-        <BotaoTema className="self-start" />
-      </aside>
+  const principal = nav.filter((n) => !n.grupo);
+  const sistema = nav.filter((n) => n.grupo === "sistema");
 
-      {/* main */}
-      <div className="flex-1">
-        {/* mobile topbar */}
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[var(--color-line)] bg-[var(--color-bg)]/90 px-4 py-3.5 backdrop-blur lg:hidden">
+  return (
+    <SidebarProvider defaultOpen={sidebarAberta}>
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="px-2 pb-2 pt-4">
+          <CabecalhoDaBarra />
+        </SidebarHeader>
+
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <nav aria-label="Principal">
+                <SidebarMenu>
+                  {principal.map((n) => (
+                    <NavItem key={n.href} {...n} ativo={estaAtivo(n.href, pathname)} />
+                  ))}
+                </SidebarMenu>
+              </nav>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          {sistema.length > 0 && (
+            <SidebarGroup className="mt-auto">
+              <SidebarGroupLabel>Sistema</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {sistema.map((n) => (
+                    <NavItem key={n.href} {...n} ativo={estaAtivo(n.href, pathname)} />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+        </SidebarContent>
+
+        <SidebarFooter className="border-t border-sidebar-border p-2">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <MenuDaConta lado="right">
+                <SidebarMenuButton size="lg" className="gap-2.5 px-1.5" aria-label="Conta, tema e sair">
+                  <IniciaisDoUsuario />
+                  <NomeDoUsuario />
+                  <ChevronsUpDown className="ml-auto !size-4 text-slate-500" />
+                </SidebarMenuButton>
+              </MenuDaConta>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+
+        <SidebarRail />
+      </Sidebar>
+
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {/* barra superior do celular */}
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[var(--color-line)] bg-[var(--color-bg)] px-4 md:hidden">
           <Brand />
-          <BotaoTema />
+          <MenuDaConta lado="bottom">
+            <button
+              type="button"
+              aria-label="Conta, tema e sair"
+              className="relative grid size-9 cursor-pointer place-items-center rounded-full before:absolute before:-inset-1 before:content-['']"
+            >
+              <IniciaisDoUsuario />
+            </button>
+          </MenuDaConta>
         </header>
 
-        <main className="mx-auto w-full max-w-5xl px-4 py-6 pb-28 sm:px-6 lg:py-8 lg:pb-10">
+        <main id="conteudo" className="mx-auto w-full max-w-[76rem] px-4 pb-28 pt-6 sm:px-6 md:pb-14 lg:px-10 lg:pt-10">
           {children}
         </main>
       </div>
 
-      {/* mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[var(--color-line)] bg-[var(--color-surface)]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      {/* navegação inferior do celular */}
+      <nav aria-label="Principal"
+           className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[var(--color-line)] bg-[var(--color-bg)] pb-[env(safe-area-inset-bottom)] md:hidden">
         {nav.map((n) => (
-          <NavItem key={n.href} {...n} ativo={estaAtivo(n.href, pathname)} />
+          <NavItemCelular key={n.href} {...n} ativo={estaAtivo(n.href, pathname)} />
         ))}
       </nav>
+    </SidebarProvider>
+  );
+}
+
+function Centro({ children }) {
+  return <div className="grid min-h-dvh place-items-center px-6 text-center">{children}</div>;
+}
+
+function Brand({ className = "" }) {
+  return (
+    <Link href="/" className={`flex min-w-0 items-center gap-2.5 rounded-lg ${className}`} aria-label="Wallet — início">
+      <Marca className="h-7 w-7 shrink-0" />
+      <span className="truncate text-[17px] font-semibold tracking-[-0.01em] text-ink group-data-[collapsible=icon]:hidden">Wallet</span>
+    </Link>
+  );
+}
+
+// Marca + botão de recolher. Recolhida, a barra tem 52px: só cabe um dos dois,
+// então a marca cede lugar ao botão (o Início continua a um clique no trilho).
+function CabecalhoDaBarra() {
+  const { state } = useSidebar();
+  if (state === "collapsed") {
+    return (
+      <div className="flex justify-center">
+        <SidebarTrigger title="Expandir menu (Ctrl+B)" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-between gap-2 pl-2">
+      <Brand />
+      <SidebarTrigger title="Recolher menu (Ctrl+B)" />
     </div>
   );
 }
 
-function Brand() {
+function iniciais(nome = "") {
+  const p = nome.trim().split(/\s+/).filter(Boolean);
+  return ((p[0]?.[0] ?? "?") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase();
+}
+
+function IniciaisDoUsuario() {
+  const { user } = useAuth();
   return (
-    <Link href="/" className="flex items-center gap-2.5">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 text-white shadow-lg shadow-blue-500/20">
-        <PiggyBank size={19} />
-      </span>
-      <div className="leading-tight">
-        <p className="font-bold text-ink">Wallet</p>
-        <p className="text-[11px] text-slate-500">finanças pessoais</p>
-      </div>
-    </Link>
+    <Avatar className="size-8">
+      <AvatarFallback className="bg-blue-500/15 text-xs font-semibold text-blue-300">
+        {iniciais(user.nome || user.email)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+function NomeDoUsuario() {
+  const { user } = useAuth();
+  return (
+    <span className="grid min-w-0 flex-1 text-left leading-tight">
+      <span className="truncate text-[13px] font-medium text-ink">{user.nome || "Minha conta"}</span>
+      <span className="truncate text-xs text-slate-500">{user.email}</span>
+    </span>
+  );
+}
+
+// Quem está logado + tema + sair. Fica separado da navegação: sair não é
+// destino, e tema é preferência — os dois cabem num menu só em vez de dois
+// ícones espremendo o nome no rodapé da barra.
+function MenuDaConta({ children, lado }) {
+  const { signOut } = useAuth();
+  const [tema, trocaTema] = useTema();
+  const claro = tema === "claro";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+      <DropdownMenuContent side={lado} align="end" sideOffset={12} className="w-60">
+        <DropdownMenuLabel className="flex items-center gap-2.5 px-2 py-2 font-normal">
+          <IniciaisDoUsuario />
+          <NomeDoUsuario />
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {/* `preventDefault` mantém o menu aberto: dá pra ver o tema virar e
+            voltar sem reabrir. */}
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); trocaTema(); }}>
+          {claro ? <Moon /> : <Sun />}
+          {claro ? "Tema escuro" : "Tema claro"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => signOut()}>
+          <LogOut />
+          Sair da conta
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -133,40 +292,41 @@ function ProgressoDoLink() {
   const { pending } = useLinkStatus();
   if (!pending) return null;
   return (
-    <span aria-hidden className="pointer-events-none absolute inset-x-2 bottom-0 h-0.5 overflow-hidden rounded-full bg-blue-400/25">
-      <span className="block h-full w-full origin-left bg-blue-400"
+    <span aria-hidden className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 overflow-hidden rounded-full bg-blue-500/20">
+      <span className="block h-full w-full origin-left bg-blue-500"
             style={{ animation: "rota-progresso 1.1s ease-out infinite" }} />
     </span>
   );
 }
 
-function NavItem({ href, label, icon: Icon, ativo, desktop }) {
-  const base = "relative cursor-pointer transition-colors";
-  if (desktop) {
-    return (
-      <Link
-        href={href}
-        prefetch
-        aria-current={ativo ? "page" : undefined}
-        className={`${base} inline-flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
-          ativo ? "bg-blue-500/15 text-blue-300" : "text-slate-400 hover:bg-veu/5 hover:text-slate-200"
-        }`}
-      >
-        <Icon size={18} /> {label}
-        <ProgressoDoLink />
-      </Link>
-    );
-  }
+function NavItem({ href, label, icon: Icon, ativo }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild isActive={ativo} tooltip={label}>
+        <Link href={href} prefetch aria-current={ativo ? "page" : undefined} className="relative">
+          <Icon strokeWidth={1.75} className={ativo ? "text-ink" : "text-slate-500"} />
+          <span>{label}</span>
+          <ProgressoDoLink />
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+function NavItemCelular({ href, label, icon: Icon, ativo }) {
   return (
     <Link
       href={href}
       prefetch
       aria-current={ativo ? "page" : undefined}
-      className={`${base} flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${
-        ativo ? "text-blue-400" : "text-slate-500"
+      className={`relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors ${
+        ativo ? "text-ink" : "text-slate-500"
       }`}
     >
-      <Icon size={20} /> {label}
+      <span className={`grid h-7 w-12 place-items-center rounded-full transition-colors ${ativo ? "bg-veu/[0.08]" : ""}`}>
+        <Icon size={19} strokeWidth={ativo ? 2 : 1.75} />
+      </span>
+      {label}
       <ProgressoDoLink />
     </Link>
   );
@@ -181,8 +341,9 @@ export function Protegido({ perms, children }) {
   return (
     <div className="grid min-h-[50vh] place-items-center px-6 text-center">
       <div className="space-y-2">
-        <p className="text-slate-300">Essa área não está liberada pra sua conta.</p>
-        <Link href="/" className="text-sm text-blue-400 hover:text-blue-300">Voltar pro início</Link>
+        <h1 className="text-lg font-semibold text-ink">Área não liberada</h1>
+        <p className="text-sm text-slate-400">Essa área não está liberada pra sua conta.</p>
+        <Link href="/" className="text-sm font-medium text-blue-400 hover:text-blue-300">Voltar pro início</Link>
       </div>
     </div>
   );

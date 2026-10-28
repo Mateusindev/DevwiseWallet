@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CreditCard, Plus, Pencil, Trash2, CalendarClock, Users, Receipt, Flag, TrendingDown, ChevronDown, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, CalendarClock, Users, ChevronDown, Upload } from "lucide-react";
 import {
-  Card, Button, IconButton, ProgressBar, Donut, Skeleton, SkeletonChart, SkeletonLines, SkeletonList, Spinner,
+  Card, CardHeader, Button, IconButton, ProgressBar, PageHeader, SectionHeader, EmptyState, Stat, Badge,
+  Skeleton, SkeletonChart, SkeletonLines, SkeletonList, Spinner,
 } from "./ui/primitives.jsx";
 import { useAsync } from "./ui/useAsync.js";
 import { HBars, StackedBars } from "./ui/charts.jsx";
@@ -16,6 +17,11 @@ import { MonthStepper } from "./ui/fields.jsx";
 import { useFinance } from "../store/FinanceContext.jsx";
 import * as api from "../services/financeApi";
 import { useAuth } from "./AuthGate";
+
+// Vermelho é sinal, não textura: só aparece quando o limite estourou ou está
+// a ≤10% de estourar. Comprometido normal é tinta.
+const COR_ALERTA = "var(--acento-rose)";
+const perto = (pct) => pct >= 0.9;
 
 export default function Cartoes() {
   const {
@@ -51,75 +57,59 @@ export default function Cartoes() {
     return { limite, usado, disponivel, pct: limite > 0 ? usado / limite : 0 };
   }, [cartoes]);
 
+  // A frase do título é o achado do mês: quanto do limite já está tomado.
+  const frase = cartoesCarregando ? (
+    <span className="inline-flex items-center gap-2">
+      <Spinner className="h-3.5 w-3.5 text-slate-500" /> Atualizando a fatura de {fmtMonthLabel(ym)}…
+    </span>
+  ) : cartoes.length === 0 ? (
+    "Limites, faturas e parcelas em aberto."
+  ) : (
+    <>
+      <span className="tnum font-medium text-ink">{fmtMoney(totais.usado)}</span> comprometidos de{" "}
+      <span className="tnum">{fmtMoney(totais.limite)}</span> ·{" "}
+      <span className={`tnum ${totais.disponivel < 0 || perto(totais.pct) ? "font-medium text-rose-400" : ""}`}>
+        {Math.round(totais.pct * 100)}% do limite
+      </span>
+    </>
+  );
+
   return (
-    <section className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
-            <CreditCard size={20} /> Cartões de crédito
-            {cartoesCarregando && <Spinner className="h-4 w-4 border-slate-500/40 border-t-slate-300" />}
-          </h2>
-          <p className="text-sm text-slate-400">
-            {cartoesCarregando ? `Atualizando a fatura de ${fmtMonthLabel(ym)}…` : "Limites, faturas e parcelas em aberto."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comFatura} />
-          {canManage && cartoes.length > 0 && (
-            <Button variant="ghost" onClick={() => setImportando(cartoes[0])} title="Importar fatura OFX">
-              <Upload size={16} /> OFX
-            </Button>
-          )}
-          {canManage && <Button onClick={() => setNovoOpen(true)}><Plus size={16} /> Novo cartão</Button>}
-        </div>
-      </header>
+    <section className="space-y-10">
+      <PageHeader
+        title="Cartões"
+        description={frase}
+        actions={
+          <>
+            <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comFatura} />
+            {canManage && cartoes.length > 0 && (
+              <Button variant="outline" onClick={() => setImportando(cartoes[0])} title="Importar fatura OFX">
+                <Upload size={16} /> OFX
+              </Button>
+            )}
+            {canManage && <Button onClick={() => setNovoOpen(true)}><Plus size={16} /> Novo cartão</Button>}
+          </>
+        }
+      />
 
       {cartoes.length === 0 ? (
-        <Card className="px-5 py-14 text-center">
-          <CreditCard size={28} className="mx-auto mb-3 text-slate-500" />
-          <p className="text-sm text-slate-400">Nenhum cartão cadastrado.</p>
-          <p className="mt-1 text-xs text-slate-500">Cadastre seus cartões pra associar despesas e acompanhar a fatura.</p>
-        </Card>
+        <EmptyState
+          title="Nenhum cartão cadastrado"
+          description="Cadastre seus cartões pra associar despesas e acompanhar a fatura."
+          action={canManage && <Button size="sm" onClick={() => setNovoOpen(true)}><Plus size={15} /> Novo cartão</Button>}
+        />
       ) : (
-        <>
-        <Card className="p-5 sm:p-6">
-          <div className="grid gap-6 sm:grid-cols-[1fr_auto] sm:items-center">
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">Limite total</p>
-                <p className="tnum text-3xl font-bold text-ink sm:text-4xl">{fmtMoney(totais.limite)}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-veu/4 p-3">
-                  <p className="text-[11px] leading-tight text-slate-500">Comprometido</p>
-                  <p className="tnum text-sm font-bold text-rose-400">{fmtMoney(totais.usado)}</p>
-                </div>
-                <div className="rounded-xl bg-veu/4 p-3">
-                  <p className="text-[11px] leading-tight text-slate-500">Disponível</p>
-                  <p className={`tnum text-sm font-bold ${totais.disponivel < 0 ? "text-rose-400" : "text-emerald-400"}`}>{fmtMoney(totais.disponivel)}</p>
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-center">
-              <Donut
-                segments={totais.limite > 0
-                  ? [{ value: totais.usado, color: "#fb7185" }, { value: Math.max(totais.disponivel, 0), color: "var(--color-trilho)" }]
-                  : [{ value: 1, color: "var(--color-trilho)" }]}
-                centerSub="usado"
-                centerLabel={`${Math.round(totais.pct * 100)}%`}
-              />
-            </div>
-          </div>
-        </Card>
+        <div className="space-y-6">
+          <ResumoLimite totais={totais} cartoes={cartoes} />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {cartoes.map((c) => (
-            <CartaoCard key={c.id} cartao={c} canManage={canManage} canShare={canShare}
-                        onEdit={() => setEditing(c)} onRemove={() => removeCartao(c.id)}
-                        onShare={() => setSharing(c)} />
-          ))}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {cartoes.map((c) => (
+              <CartaoCard key={c.id} cartao={c} ym={ym} canManage={canManage} canShare={canShare}
+                          onEdit={() => setEditing(c)} onRemove={() => removeCartao(c.id)}
+                          onShare={() => setSharing(c)} />
+            ))}
+          </div>
         </div>
-        </>
       )}
 
       {cartoes.length > 0 && <ParaOndeVaiAFatura ym={ym} cartoes={cartoes} />}
@@ -138,7 +128,46 @@ export default function Cartoes() {
   );
 }
 
-const CINZA = "#64748b"; // "sem categoria" — neutro de propósito, não é uma série
+// Resumo do limite da conta: três números em tipo (sem tile) e um trilho do
+// tamanho do limite total, com o tomado de cada cartão na cor do cartão — a
+// barra responde "quanto do limite já foi" e "de qual cartão" de uma vez.
+function ResumoLimite({ totais, cartoes }) {
+  const alerta = totais.disponivel < 0 || perto(totais.pct);
+  const base = Math.max(totais.limite, totais.usado, 1);
+  const partes = cartoes
+    .map((c) => ({ c, usado: (c.faturaMes || 0) + (c.comprometido || 0) }))
+    .filter((p) => p.usado > 0);
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+        <Stat className="col-span-2 sm:col-span-1" label="Limite total" value={fmtMoney(totais.limite)} size="lg" />
+        <Stat label="Comprometido" value={fmtMoney(totais.usado)} tone={alerta ? "neg" : undefined}
+              sub="fatura do mês + parcelas" />
+        <Stat label="Disponível" value={fmtMoney(totais.disponivel)} tone={totais.disponivel < 0 ? "neg" : undefined}
+              sub={`${Math.round(Math.max(1 - totais.pct, 0) * 100)}% do limite livre`} />
+      </div>
+
+      <div className="mt-6 flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full bg-[var(--color-trilho)]"
+           role="img" aria-label={`${Math.round(totais.pct * 100)}% do limite comprometido`}>
+        {partes.map(({ c, usado }) => (
+          <span key={c.id} className="h-full first:rounded-l-full" title={`${c.nome}: ${fmtMoney(usado)}`}
+                style={{ width: `${(usado / base) * 100}%`, backgroundColor: alerta ? COR_ALERTA : acento(c.cor).dot }} />
+        ))}
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
+        {cartoes.map((c) => (
+          <li key={c.id} className="inline-flex items-center gap-1.5 text-[13px] text-slate-400">
+            <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: acento(c.cor).dot }} />
+            {c.nome}
+            <span className="tnum text-ink">{fmtMoney((c.faturaMes || 0) + (c.comprometido || 0))}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+const CINZA = "var(--acento-neutro)"; // "sem categoria" — neutro de propósito, não é uma série
 
 // "Para onde vai a fatura": composição do mês (categoria e cartão), histórico de
 // 6 meses e uso do limite. Um endpoint só (`/cartoes/resumo`) alimenta os três
@@ -174,20 +203,21 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
     valores: Object.fromEntries(m.porCartao.map((x) => [x.cartaoId ?? "sem", x.total])),
   }));
 
-  // Uso do limite: % da fatura + comprometido futuro sobre o limite de cada cartão.
+  // Uso do limite: fatura + comprometido futuro sobre o limite de cada cartão.
   const usoLimite = cartoes
     .filter((c) => (c.limite || 0) > 0)
     .map((c) => {
       const usado = (c.faturaMes || 0) + (c.comprometido || 0);
-      const pct = Math.round((usado / c.limite) * 100);
-      return {
-        label: c.nome,
-        value: Math.min(pct, 100),
-        color: c.disponivel < 0 ? "#f43f5e" : acento(c.cor).dot,
-        sub: `${fmtMoneyCompact(usado)} de ${fmtMoneyCompact(c.limite)}${c.disponivel < 0 ? " · estourou o limite" : ""}`,
-      };
+      return { id: c.id, nome: c.nome, usado, limite: c.limite, pct: usado / c.limite, estourou: c.disponivel < 0, cor: acento(c.cor).dot };
     })
-    .sort((a, b) => b.value - a.value);
+    .sort((a, b) => b.pct - a.pct);
+
+  const titulo = (
+    <SectionHeader
+      title="Para onde vai a fatura"
+      description={resumo ? `${fmtMonthLabel(ym)} · ${fmtMoney(totalMes)} na fatura` : fmtMonthLabel(ym)}
+    />
+  );
 
   // Enquanto o resumo não chega, o bloco inteiro é skeleton. Antes ele
   // renderizava os quatro cards com "Nada na fatura deste mês" — indistinguível
@@ -195,20 +225,18 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
   if (carregando || (erro && !resumo)) {
     return (
       <div className="space-y-4">
-        <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
-          <TrendingDown size={17} /> Para onde vai a fatura
-        </h3>
+        {titulo}
         {erro ? (
-          <Card className="space-y-3 p-5">
-            <p className="text-sm text-slate-400">{erro}</p>
-            <Button variant="ghost" onClick={recarregar}>Tentar de novo</Button>
+          <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
+            <p className="text-sm text-slate-400">Não consegui carregar o resumo da fatura. {erro}</p>
+            <Button variant="secondary" size="sm" onClick={recarregar}>Tentar de novo</Button>
           </Card>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="space-y-4 p-5"><Skeleton className="h-4 w-48" /><SkeletonChart height={140} bars={6} /></Card>
-            <Card className="space-y-4 p-5"><Skeleton className="h-4 w-40" /><SkeletonLines lines={4} /></Card>
-            <Card className="space-y-4 p-5 lg:col-span-2"><Skeleton className="h-4 w-44" /><SkeletonChart /></Card>
-            <Card className="space-y-4 p-5 lg:col-span-2"><Skeleton className="h-4 w-52" /><SkeletonLines lines={3} /></Card>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+            <Card className="space-y-4 p-6"><Skeleton className="h-4 w-40" /><SkeletonLines lines={4} /></Card>
+            <Card className="space-y-4 p-6"><Skeleton className="h-4 w-36" /><SkeletonLines lines={3} /></Card>
+            <Card className="space-y-4 p-6 lg:col-span-2 xl:col-span-1"><Skeleton className="h-4 w-44" /><SkeletonLines lines={3} /></Card>
+            <Card className="space-y-4 p-6 lg:col-span-2 xl:col-span-3"><Skeleton className="h-4 w-48" /><SkeletonChart /></Card>
           </div>
         )}
       </div>
@@ -217,47 +245,55 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
 
   return (
     <div className="space-y-4">
-      <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
-        <TrendingDown size={17} /> Para onde vai a fatura
-      </h3>
+      {titulo}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="p-5">
-          <h4 className="mb-4 text-sm font-semibold text-ink">Fatura por categoria · {fmtMonthLabel(ym)}</h4>
-          {porCategoria.length === 0 ? (
-            <p className="py-10 text-center text-sm text-slate-500">Nada na fatura deste mês.</p>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <Card className="p-5 sm:p-6">
+          <CardHeader title="Por categoria" description="Fatura do mês, todos os cartões" className="mb-5" />
+          <HBars items={porCategoria} total={totalMes} empty="Nada na fatura deste mês." />
+        </Card>
+
+        <Card className="p-5 sm:p-6">
+          <CardHeader title="Por cartão" description="Fatura do mês" className="mb-5" />
+          <HBars items={porCartao} total={totalMes} empty="Nada na fatura deste mês." />
+        </Card>
+
+        <Card className="p-5 sm:p-6 lg:col-span-2 xl:col-span-1">
+          <CardHeader title="Uso do limite" description="Fatura do mês + parcelas ainda por vir" className="mb-5" />
+          {usoLimite.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-500">Nenhum cartão com limite definido.</p>
           ) : (
-            <div className="flex flex-col items-center gap-5 sm:flex-row">
-              <Donut size={150} segments={porCategoria.map((c) => ({ value: c.value, color: c.color }))}
-                     centerSub="fatura" centerLabel={fmtMoneyCompact(totalMes)} />
-              <ul className="flex-1 space-y-2 self-stretch">
-                {porCategoria.map((c) => (
-                  <li key={c.label} className="flex items-center gap-2 text-sm">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: c.color }} />
-                    <span className="min-w-0 flex-1 truncate text-slate-300">{c.label}</span>
-                    <span className="tnum text-slate-400">{Math.round((c.value / (totalMes || 1)) * 100)}%</span>
-                    <span className="tnum w-20 text-right font-medium text-slate-200">{fmtMoneyCompact(c.value)}</span>
+            // Trilho do tamanho do limite (razão verdadeira, não relativa ao
+            // maior): 26% enche um quarto, não a barra inteira.
+            <ul className="space-y-3.5">
+              {usoLimite.map((u) => {
+                const alerta = u.estourou || perto(u.pct);
+                return (
+                  <li key={u.id}>
+                    <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+                      <span className="flex min-w-0 items-center gap-2 text-slate-200">
+                        <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ backgroundColor: u.cor }} />
+                        <span className="truncate">{u.nome}</span>
+                      </span>
+                      <span className={`tnum shrink-0 font-medium ${alerta ? "text-rose-400" : "text-ink"}`}>
+                        {Math.round(u.pct * 100)}%
+                      </span>
+                    </div>
+                    <ProgressBar value={u.pct} color={alerta ? COR_ALERTA : u.cor} label={`Limite usado de ${u.nome}`} />
+                    <p className="tnum mt-1 text-xs text-slate-500">
+                      {fmtMoneyCompact(u.usado)} de {fmtMoneyCompact(u.limite)}
+                      {u.estourou && <span className="text-rose-400"> · estourou o limite</span>}
+                    </p>
                   </li>
-                ))}
-              </ul>
-            </div>
+                );
+              })}
+            </ul>
           )}
         </Card>
 
-        <Card className="p-5">
-          <h4 className="mb-4 text-sm font-semibold text-ink">Fatura por cartão · {fmtMonthLabel(ym)}</h4>
-          <HBars items={porCartao} empty="Nada na fatura deste mês." />
-        </Card>
-
-        <Card className="p-5 lg:col-span-2">
-          <h4 className="mb-4 text-sm font-semibold text-ink">Fatura total · 6 meses</h4>
+        <Card className="p-5 sm:p-6 lg:col-span-2 xl:col-span-3">
+          <CardHeader title="Fatura nos últimos 6 meses" description="Empilhada por cartão" className="mb-4" />
           <StackedBars data={serie} series={series} destaque={ym} empty="Sem fatura nesse período." />
-        </Card>
-
-        <Card className="p-5 lg:col-span-2">
-          <h4 className="mb-1 text-sm font-semibold text-ink">Uso do limite por cartão</h4>
-          <p className="mb-4 text-xs text-slate-500">Fatura do mês + parcelas ainda por vir.</p>
-          <HBars items={usoLimite} format={(v) => `${v}%`} empty="Nenhum cartão com limite definido." />
         </Card>
       </div>
     </div>
@@ -300,167 +336,159 @@ function QuitacaoParceladas({ ym, cartoes }) {
   const mediaMes = total.cronograma.length > 0 ? total.falta / total.cronograma.length : 0;
 
   return (
-    <Card className="p-5 sm:p-6">
-      <div className="mb-4">
-        <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
-          <Receipt size={18} /> Quitação das parceladas
-        </h3>
-        <p className="mt-0.5 text-xs text-slate-500">
-          O que ainda vai cair de {fmtMonthLabel(ym)} até a última parcela · {total.itens.length}{" "}
-          {total.itens.length === 1 ? "compra em andamento" : "compras em andamento"}
-        </p>
-      </div>
+    <div className="space-y-4">
+      <SectionHeader
+        title="Quitação das parceladas"
+        description={`O que ainda vai cair de ${fmtMonthLabel(ym)} até a última parcela · ${total.itens.length} ${
+          total.itens.length === 1 ? "compra em andamento" : "compras em andamento"}`}
+      />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
-            <Receipt size={13} className="text-amber-400" /> Falta pra quitar tudo
-          </p>
-          <p className="tnum text-xl font-bold text-ink sm:text-2xl">{fmtMoney(total.falta)}</p>
-          <p className="mt-0.5 text-xs text-slate-500">de {fmtMoney(total.contrato)} contratados</p>
+      <Card className="p-5 sm:p-6">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+          <Stat className="col-span-2 sm:col-span-1" label="Falta pra quitar tudo" value={fmtMoney(total.falta)} size="lg"
+                sub={`de ${fmtMoney(total.contrato)} contratados`} />
+          <Stat label={`Ainda sai em ${fmtMonthShort(ym)}`} value={fmtMoney(total.faltaNoMes)}
+                sub={`média de ${fmtMoney(mediaMes)}/mês até o fim`} />
+          <Stat label="Livre em" value={fmtMonthShort(total.ultimoMes)}
+                sub={total.mesesAte === 0
+                  ? "última parcela é este mês"
+                  : `faltam ${total.mesesAte + 1} ${total.mesesAte + 1 === 1 ? "mês" : "meses"}`} />
         </div>
-        <div>
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
-            <TrendingDown size={13} className="text-rose-400" /> Ainda sai em {fmtMonthShort(ym)}
-          </p>
-          <p className="tnum text-xl font-bold text-ink sm:text-2xl">{fmtMoney(total.faltaNoMes)}</p>
-          <p className="mt-0.5 text-xs text-slate-500">média de {fmtMoney(mediaMes)}/mês até o fim</p>
-        </div>
-        <div>
-          <p className="flex items-center gap-1.5 text-[11px] text-slate-400 sm:text-xs">
-            <Flag size={13} className="text-emerald-400" /> Livre em
-          </p>
-          <p className="text-xl font-bold text-ink sm:text-2xl">{fmtMonthShort(total.ultimoMes)}</p>
-          <p className="mt-0.5 text-xs text-slate-500">
-            {total.mesesAte === 0
-              ? "última parcela é este mês"
-              : `faltam ${total.mesesAte + 1} ${total.mesesAte + 1 === 1 ? "mês" : "meses"}`}
-          </p>
-        </div>
-      </div>
 
-      <div className="mt-4">
-        <div className="mb-1.5 flex items-center justify-between text-xs">
-          <span className="text-slate-400">Já quitado</span>
-          <span className="tnum font-medium text-slate-300">
-            {fmtMoney(total.quitado)} · {Math.round(total.progresso * 100)}%
-          </span>
+        <div className="mt-6">
+          <div className="mb-1.5 flex items-baseline justify-between text-[13px]">
+            <span className="text-slate-400">Já quitado</span>
+            <span className="tnum text-slate-400">
+              <span className="font-medium text-ink">{fmtMoney(total.quitado)}</span> · {Math.round(total.progresso * 100)}%
+            </span>
+          </div>
+          <ProgressBar value={total.progresso} color="var(--acento-emerald)" label="Parceladas já quitadas" />
         </div>
-        <ProgressBar value={total.progresso} fromClass="from-emerald-500" toClass="to-emerald-400" />
-      </div>
 
-      {/* por cartão (grupo sem cartão = carnê/boleto) */}
-      <div className="mt-5 space-y-3">
-        {grupos.map((g) => {
-          const c = g.cartaoId ? cartoesMap[g.cartaoId] : null;
-          const a = acento(c?.cor || "amber");
-          return (
-            <div key={g.cartaoId || "sem-cartao"} className="rounded-xl bg-veu/4 p-4">
-              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <p className="min-w-0 flex-1 truncate font-semibold" style={{ color: g.cartaoId ? a.dot : undefined }}>
-                  {g.cartaoId ? c?.nome || "Cartão removido" : "Sem cartão (carnê, boleto)"}
-                </p>
-                <div className="text-right">
-                  <p className="tnum text-sm font-bold text-rose-400">{fmtMoney(g.falta)}</p>
-                  <p className="text-[11px] text-slate-500">quita em {fmtMonthShort(g.ultimoMes)}</p>
+        {/* por cartão (grupo sem cartão = carnê/boleto) */}
+        <div className={`mt-6 grid grid-cols-1 gap-4 ${grupos.length > 1 ? "lg:grid-cols-2" : ""}`}>
+          {grupos.map((g) => {
+            const c = g.cartaoId ? cartoesMap[g.cartaoId] : null;
+            const a = acento(c?.cor || "amber");
+            return (
+              <div key={g.cartaoId || "sem-cartao"} className="rounded-xl border border-[var(--color-line)] p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-[var(--color-line)] pb-3">
+                  <p className="flex min-w-0 flex-1 items-center gap-2 truncate font-semibold text-ink">
+                    {g.cartaoId && <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: a.dot }} />}
+                    <span className="truncate">{g.cartaoId ? c?.nome || "Cartão removido" : "Sem cartão (carnê, boleto)"}</span>
+                  </p>
+                  <p className="tnum text-right text-sm">
+                    <span className="font-semibold text-ink">{fmtMoney(g.falta)}</span>
+                    <span className="text-slate-500"> · quita em {fmtMonthShort(g.ultimoMes)}</span>
+                  </p>
                 </div>
+                <ul className="divide-y divide-[var(--color-line)]">
+                  {g.itens.map((i) => (
+                    <li key={i.id} className="py-3 last:pb-0">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-200">{i.descricao}</p>
+                        <span className="tnum text-sm font-medium text-ink">{fmtMoney(i.falta)}</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                        <Badge tone="neutral" className="tnum">{i.label}</Badge>
+                        <span>
+                          {i.notStarted
+                            ? `começa em ${fmtMonthShort(i.primeiroMes)}`
+                            : `${i.parcelas} ${i.parcelas === 1 ? "parcela" : "parcelas"} de ${fmtMoney(i.valor)}`}
+                        </span>
+                        <span aria-hidden>·</span>
+                        <span>quita em {fmtMonthShort(i.ultimoMes)}</span>
+                        {fixasMap[i.id]?.espacoNome && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span>{fixasMap[i.id].espacoEmoji} {fixasMap[i.id].espacoNome}</span>
+                          </>
+                        )}
+                      </div>
+                      <ProgressBar className="mt-2" value={i.progresso} color={a.dot} label={`Progresso de ${i.descricao}`} />
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="divide-y divide-[var(--color-line)]">
-                {g.itens.map((i) => (
-                  <li key={i.id} className="py-2.5">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-200">{i.descricao}</p>
-                      <span className="tnum text-sm font-semibold text-slate-200">{fmtMoney(i.falta)}</span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                      <span className="rounded-md bg-veu/6 px-1.5 py-0.5 font-medium text-slate-300">{i.label}</span>
-                      <span>
-                        {i.notStarted
-                          ? `começa em ${fmtMonthShort(i.primeiroMes)}`
-                          : `${i.parcelas} ${i.parcelas === 1 ? "parcela" : "parcelas"} de ${fmtMoney(i.valor)}`}
-                      </span>
-                      <span className="text-slate-600">·</span>
-                      <span>quita em {fmtMonthShort(i.ultimoMes)}</span>
-                      {fixasMap[i.id]?.espacoNome && (
-                        <>
-                          <span className="text-slate-600">·</span>
-                          <span>{fixasMap[i.id].espacoEmoji} {fixasMap[i.id].espacoNome}</span>
-                        </>
-                      )}
-                    </div>
-                    <ProgressBar className="mt-2 h-1.5" value={i.progresso} fromClass={a.from} toClass={a.from} />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
 
-      {/* cronograma mês a mês até quitar tudo */}
-      <button onClick={() => setAberto((v) => !v)}
-              className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
-        <ChevronDown size={15} className={`transition-transform ${aberto ? "rotate-180" : ""}`} />
-        {aberto ? "Ocultar" : "Ver"} mês a mês até quitar
-      </button>
+        {/* cronograma mês a mês até quitar tudo */}
+        <Button variant="ghost" size="sm" className="-ml-3 mt-5" aria-expanded={aberto}
+                onClick={() => setAberto((v) => !v)}>
+          <ChevronDown size={15} className={`transition-transform ${aberto ? "rotate-180" : ""}`} />
+          {aberto ? "Ocultar" : "Ver"} mês a mês até quitar
+        </Button>
 
-      {aberto && (
-        <ul className="mt-3 space-y-1.5">
-          {total.cronograma.map((m) => (
-            <li key={m.ym} className="flex items-center gap-3 text-xs">
-              <span className={`w-14 shrink-0 ${m.ym === ym ? "font-semibold text-slate-200" : "text-slate-500"}`}>
-                {fmtMonthShort(m.ym)}
-              </span>
-              <span className="h-2 flex-1 overflow-hidden rounded-full bg-veu/8">
-                <span className="block h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400"
-                      style={{ width: `${total.picoMes > 0 ? (m.valor / total.picoMes) * 100 : 0}%` }} />
-              </span>
-              <span className="tnum w-24 shrink-0 text-right text-slate-300">{fmtMoney(m.valor)}</span>
-              <span className="w-16 shrink-0 text-right text-slate-500">
-                {m.itens} {m.itens === 1 ? "conta" : "contas"}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+        {aberto && (
+          <ul className="mt-3 space-y-2">
+            {total.cronograma.map((m) => (
+              <li key={m.ym} className="flex items-center gap-3 text-[13px]">
+                <span className={`w-14 shrink-0 ${m.ym === ym ? "font-semibold text-ink" : "text-slate-500"}`}>
+                  {fmtMonthShort(m.ym)}
+                </span>
+                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--color-trilho)]">
+                  <span className={`block h-full rounded-full ${m.ym === ym ? "bg-blue-500" : "bg-blue-500/45"}`}
+                        style={{ width: `${total.picoMes > 0 ? (m.valor / total.picoMes) * 100 : 0}%` }} />
+                </span>
+                <span className="tnum w-24 shrink-0 text-right text-ink">{fmtMoney(m.valor)}</span>
+                <span className="w-16 shrink-0 text-right text-slate-500">
+                  {m.itens} {m.itens === 1 ? "conta" : "contas"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
   );
 }
 
-function CartaoCard({ cartao: c, canManage, canShare, onEdit, onRemove, onShare }) {
+// Mini-cartão na proporção real (85,6 × 54 mm ≈ 1,6:1) na cor do cartão: é a
+// identidade da linha, não um ícone num quadrado.
+function ArteCartao({ cor }) {
+  return (
+    <span aria-hidden className="relative block h-[26px] w-[42px] shrink-0 rounded-[5px]" style={{ backgroundColor: cor }}>
+      <span className="absolute left-[7px] top-[8px] h-[7px] w-[9px] rounded-[2px] bg-white/70" />
+      <span className="absolute bottom-[5px] right-[6px] h-[3px] w-[12px] rounded-full bg-white/45" />
+    </span>
+  );
+}
+
+function CartaoCard({ cartao: c, ym, canManage, canShare, onEdit, onRemove, onShare }) {
   const a = acento(c.cor);
   const usado = (c.faturaMes || 0) + (c.comprometido || 0);
   const pct = c.limite > 0 ? usado / c.limite : 0;
   const estourado = c.disponivel < 0;
+  const alerta = estourado || perto(pct);
 
   return (
-    <Card className="overflow-hidden p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl" style={{ backgroundColor: a.dot + "26", color: a.dot }}>
-            <CreditCard size={20} />
-          </span>
-          <div>
-            <p className="font-semibold text-ink">{c.nome}</p>
-            <p className="text-xs text-slate-500">
+    <Card className="flex flex-col p-5 sm:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <ArteCartao cor={a.dot} />
+          <div className="min-w-0">
+            <h3 className="truncate text-[15px] font-semibold text-ink">{c.nome}</h3>
+            <p className="tnum truncate text-[13px] text-slate-500">
               {c.bandeira ? `${c.bandeira} · ` : ""}limite {fmtMoney(c.limite)}
             </p>
           </div>
         </div>
         {(canManage || canShare) && (
-          <div className="flex gap-1">
+          <div className="-mr-1.5 flex shrink-0 gap-0.5">
             {canShare && (
-              <IconButton onClick={onShare} aria-label="Compartilhar cartão">
-                <Users size={15} />
+              <IconButton onClick={onShare} aria-label={`Compartilhar ${c.nome}`} title="Compartilhar">
+                <Users size={16} />
               </IconButton>
             )}
             {canManage && (
               <>
-                <IconButton onClick={onEdit} aria-label="Editar cartão">
-                  <Pencil size={15} />
+                <IconButton onClick={onEdit} aria-label={`Editar ${c.nome}`} title="Editar">
+                  <Pencil size={16} />
                 </IconButton>
-                <IconButton tone="danger" onClick={onRemove} aria-label="Remover cartão">
-                  <Trash2 size={15} />
+                <IconButton tone="danger" onClick={onRemove} aria-label={`Remover ${c.nome}`} title="Remover">
+                  <Trash2 size={16} />
                 </IconButton>
               </>
             )}
@@ -468,34 +496,38 @@ function CartaoCard({ cartao: c, canManage, canShare, onEdit, onRemove, onShare 
         )}
       </div>
 
-      <ProgressBar value={pct} fromClass={a.from} toClass={a.from}
-                   className={estourado ? "ring-1 ring-rose-500/40" : ""} />
-      <p className="mt-1.5 text-xs text-slate-500">
-        {fmtMoney(usado)} de {fmtMoney(c.limite)} comprometidos ({Math.round(pct * 100)}%)
+      {/* a fatura do mês é o número que a pessoa veio ver */}
+      <p className="mt-5 text-[13px] text-slate-500">Fatura de {fmtMonthLabel(ym).toLowerCase()}</p>
+      <p className="tnum text-2xl font-semibold tracking-[-0.01em] text-ink">{fmtMoney(c.faturaMes)}</p>
+
+      <ProgressBar className="mt-4" value={pct} color={alerta ? COR_ALERTA : a.dot} label={`Limite comprometido de ${c.nome}`} />
+      <p className="tnum mt-1.5 text-[13px] text-slate-500">
+        <span className={alerta ? "font-medium text-rose-400" : "text-slate-300"}>{Math.round(pct * 100)}%</span>
+        {" "}do limite comprometido · {fmtMoney(usado)}
       </p>
 
       <dl className="mt-4 space-y-2 text-sm">
-        <Linha label="Fatura do mês" value={c.faturaMes} />
-        <Linha label="Parcelas em aberto" value={c.comprometido} muted />
-        <div className="my-1 border-t border-[var(--color-line)]" />
-        <Linha label="Limite disponível" value={c.disponivel} strong tone={estourado ? "neg" : "pos"} />
+        <Linha label="Parcelas em aberto" value={c.comprometido} />
+        <Linha label="Limite disponível" value={c.disponivel} strong tone={estourado ? "neg" : undefined} />
       </dl>
 
-      <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
-        <CalendarClock size={14} />
-        Vence dia {c.diaVencimento}
-        {c.diaFechamento ? ` · fecha dia ${c.diaFechamento}` : ""}
+      <div className="mt-auto pt-5">
+        <p className="flex items-center gap-2 border-t border-[var(--color-line)] pt-4 text-[13px] text-slate-500">
+          <CalendarClock size={15} strokeWidth={1.75} />
+          Vence dia {c.diaVencimento}
+          {c.diaFechamento ? ` · fecha dia ${c.diaFechamento}` : ""}
+        </p>
       </div>
     </Card>
   );
 }
 
-function Linha({ label, value, strong, muted, tone }) {
-  const color = tone === "pos" ? "text-emerald-400" : tone === "neg" ? "text-rose-400" : muted ? "text-slate-400" : "text-slate-200";
+function Linha({ label, value, strong, tone }) {
+  const color = tone === "neg" ? "text-rose-400" : "text-ink";
   return (
-    <div className="flex items-center justify-between">
-      <dt className={strong ? "font-semibold text-ink" : "text-slate-400"}>{label}</dt>
-      <dd className={`tnum ${strong ? "font-bold" : ""} ${color}`}>{fmtMoney(value)}</dd>
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className={strong ? "font-medium text-ink" : "text-slate-400"}>{label}</dt>
+      <dd className={`tnum ${strong ? "font-semibold" : ""} ${color}`}>{fmtMoney(value)}</dd>
     </div>
   );
 }

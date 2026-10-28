@@ -1,15 +1,18 @@
-// Controles de formulário próprios (Radix + tema escuro). Ficam fora de
-// `primitives.jsx` porque têm portal, estado de abertura e navegação por
-// teclado — nada "tiny and cohesive".
+// Controles de formulário da casa sobre os componentes shadcn (Select,
+// Checkbox, Popover em `components/ui/*.tsx`). Ficam fora de `primitives.jsx`
+// porque têm portal, estado de abertura e navegação por teclado — nada "tiny
+// and cohesive". A API (`onValue`, `onChecked`, "" como "sem valor") é a que as
+// telas já usam.
 import { useMemo, useState } from "react";
-import * as RSelect from "@radix-ui/react-select";
-import * as RCheckbox from "@radix-ui/react-checkbox";
-import * as RPopover from "@radix-ui/react-popover";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CalendarDays } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { inputBase } from "./primitives.jsx";
+import { Select as SelectUI, SelectContent, SelectItem as SelectItemUI, SelectTrigger, SelectValue } from "./select";
+import { Checkbox as CheckboxUI } from "./checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { MESES, MESES_ABBR, addMonths, currentMonthKey, fmtDate, fmtMonthLabel, todayISO } from "../../lib/format.js";
 
-const cx = (...c) => c.filter(Boolean).join(" ");
+const cx = cn;
 
 // Radix não aceita item com value "" (reservado pra "sem valor"). Os forms usam
 // "" como "sem categoria/sem cartão", então codifica na fronteira do Radix.
@@ -17,10 +20,8 @@ const EMPTY = "__empty__";
 const enc = (v) => (v === "" || v == null ? EMPTY : v);
 const dec = (v) => (v === EMPTY ? "" : v);
 
-// Camada flutuante (dropdown/popover): z acima do Modal (z-50) e do popover de
-// pagamento das fixas (z-61).
-const layer =
-  "z-[70] overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-2)] shadow-2xl";
+// Camadas flutuantes (popover/select) ficam em z-[70] no próprio componente
+// shadcn: acima do Modal (z-50) e do popover de pagamento das fixas (z-61).
 
 // ── FormError ───────────────────────────────────────────────────────────────
 // Banner de topo do formulário. Renderiza sempre que existir mensagem — é o
@@ -28,7 +29,7 @@ const layer =
 export function FormError({ children }) {
   if (!children) return null;
   return (
-    <p role="alert" className="rounded-xl bg-rose-500/10 px-3.5 py-3 text-sm text-rose-300 ring-1 ring-rose-500/30">
+    <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3.5 py-3 text-sm text-rose-300">
       {children}
     </p>
   );
@@ -39,77 +40,54 @@ export function FormError({ children }) {
 // "— saldo R$ x", "3/10".
 export function Select({ value, onValue, placeholder, disabled, className, children, ...rest }) {
   return (
-    <RSelect.Root value={enc(value)} onValueChange={(v) => onValue(dec(v))} disabled={disabled}>
-      <RSelect.Trigger
-        className={cx(inputBase, "flex cursor-pointer items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50", className)}
+    <SelectUI value={enc(value)} onValueChange={(v) => onValue(dec(v))} disabled={disabled}>
+      <SelectTrigger
+        className={cx(inputBase, "cursor-pointer text-left data-[placeholder]:text-slate-500 [&_svg:not([class*='text-'])]:text-slate-500", className)}
         {...rest}
       >
-        <span className="truncate"><RSelect.Value placeholder={placeholder} /></span>
-        <RSelect.Icon className="shrink-0 text-slate-400"><ChevronDown size={16} /></RSelect.Icon>
-      </RSelect.Trigger>
-      {/* Portal obrigatório: sem ele o popup é clipado pelo overflow-y-auto do Modal. */}
-      <RSelect.Portal>
-        <RSelect.Content position="popper" sideOffset={6} className={cx(layer, "max-h-[min(20rem,60vh)] w-[var(--radix-select-trigger-width)]")}>
-          <RSelect.ScrollUpButton className="flex h-6 items-center justify-center text-slate-400">
-            <ChevronUp size={14} />
-          </RSelect.ScrollUpButton>
-          <RSelect.Viewport className="p-1">{children}</RSelect.Viewport>
-          <RSelect.ScrollDownButton className="flex h-6 items-center justify-center text-slate-400">
-            <ChevronDown size={14} />
-          </RSelect.ScrollDownButton>
-        </RSelect.Content>
-      </RSelect.Portal>
-    </RSelect.Root>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      {/* O SelectContent do shadcn já porta pro body: sem isso o popup é
+          clipado pelo overflow-y-auto do Modal. */}
+      <SelectContent position="popper" sideOffset={6} className="max-h-[min(20rem,60vh)] w-[var(--radix-select-trigger-width)]">
+        {children}
+      </SelectContent>
+    </SelectUI>
   );
 }
 
 export function SelectItem({ value, disabled, className, children }) {
   return (
-    <RSelect.Item
+    <SelectItemUI
       value={enc(value)}
       disabled={disabled}
-      className={cx(
-        "relative flex cursor-pointer select-none items-center gap-2 rounded-lg py-2 pl-3 pr-8 text-base sm:text-sm text-slate-200 outline-none",
-        "data-[highlighted]:bg-veu/10 data-[highlighted]:text-ink data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed",
-        className
-      )}
+      className={cx("text-slate-200 focus:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink", className)}
     >
-      <RSelect.ItemText>{children}</RSelect.ItemText>
-      <RSelect.ItemIndicator className="absolute right-2.5 text-blue-400"><Check size={15} /></RSelect.ItemIndicator>
-    </RSelect.Item>
+      {children}
+    </SelectItemUI>
   );
 }
 
 // ── Checkbox ────────────────────────────────────────────────────────────────
 export function Checkbox({ checked, onChecked, disabled, className, ...rest }) {
-  const indeterminate = checked === "indeterminate";
   return (
-    <RCheckbox.Root
-      checked={indeterminate ? "indeterminate" : !!checked}
+    <CheckboxUI
+      checked={checked === "indeterminate" ? "indeterminate" : !!checked}
       onCheckedChange={(v) => onChecked(!!v)}
       disabled={disabled}
-      className={cx(
-        "grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded-md border border-veu/20 bg-transparent transition-colors",
-        "data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500 data-[state=indeterminate]:border-blue-500 data-[state=indeterminate]:bg-blue-500",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/70 disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
+      className={className}
       {...rest}
-    >
-      <RCheckbox.Indicator className="text-white">
-        {indeterminate ? <span className="block h-0.5 w-2.5 rounded bg-white" /> : <Check size={14} strokeWidth={3} />}
-      </RCheckbox.Indicator>
-    </RCheckbox.Root>
+    />
   );
 }
 
 export function CheckboxField({ label, hint, checked, onChecked, disabled, className }) {
   return (
-    <label className={cx("flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-200", className)}>
+    <label className={cx("flex cursor-pointer items-start gap-3 text-sm font-medium text-slate-200 [&>button]:mt-0.5", className)}>
       <Checkbox checked={checked} onChecked={onChecked} disabled={disabled} />
       <span>
         {label}
-        {hint && <span className="mt-0.5 block text-xs font-normal text-slate-500">{hint}</span>}
+        {hint && <span className="mt-0.5 block text-[13px] font-normal text-slate-500">{hint}</span>}
       </span>
     </label>
   );
@@ -171,8 +149,8 @@ export function DayInput({ value, onValue, allowEmpty = false, suggestion, class
           <button
             key={d} type="button" onClick={() => onValue(d)}
             className={cx(
-              "min-w-8 rounded-lg px-2 py-1 text-xs font-semibold cursor-pointer transition-colors",
-              Number(value) === d ? "bg-blue-500/20 text-blue-200 ring-1 ring-blue-500/40" : "bg-veu/5 text-slate-400 hover:bg-veu/10"
+              "tnum h-8 min-w-9 rounded-lg px-2 text-[13px] font-medium cursor-pointer transition-colors",
+              Number(value) === d ? "bg-ink text-[var(--color-on-ink)]" : "bg-veu/[0.06] text-slate-400 hover:bg-veu/10 hover:text-ink"
             )}
           >
             {d}
@@ -181,7 +159,7 @@ export function DayInput({ value, onValue, allowEmpty = false, suggestion, class
       </div>
       {suggestion != null && Number(value) !== Number(suggestion) && (
         <button type="button" onClick={() => onValue(suggestion)}
-                className="text-xs font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
+                className="text-[13px] font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
           sugerido: dia {suggestion}
         </button>
       )}
@@ -197,19 +175,18 @@ export function MonthSelect({ value, onValue, min, max, marked, current = curren
   const fora = (k) => (min && k < min) || (max && k > max);
 
   return (
-    <RPopover.Root open={open} onOpenChange={(o) => { setOpen(o); if (o) setAno(Number((value || current).slice(0, 4))); }}>
-      <RPopover.Trigger
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setAno(Number((value || current).slice(0, 4))); }}>
+      <PopoverTrigger
         className={cx(
-          "inline-flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3.5 py-2 text-sm text-ink cursor-pointer",
-          "transition-colors hover:bg-veu/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
+          "inline-flex h-10 min-w-[11.5rem] items-center justify-between gap-2 rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-surface)] px-3.5 text-sm font-medium text-ink cursor-pointer",
+          "transition-colors hover:bg-veu/[0.05]",
           className
         )}
       >
         {fmtMonthLabel(value)}
-        <ChevronDown size={15} className="text-slate-400" />
-      </RPopover.Trigger>
-      <RPopover.Portal>
-        <RPopover.Content sideOffset={6} align="end" className={cx(layer, "w-64 p-3")}>
+        <ChevronDown size={15} className="text-slate-500" />
+      </PopoverTrigger>
+      <PopoverContent sideOffset={6} align="end" className="w-64 p-3">
           <div className="mb-2 flex items-center justify-between">
             <button type="button" aria-label="Ano anterior" onClick={() => setAno(ano - 1)}
                     disabled={!!min && ym(ano - 1, 11) < min}
@@ -233,24 +210,23 @@ export function MonthSelect({ value, onValue, min, max, marked, current = curren
                   aria-label={fmtMonthLabel(k)}
                   onClick={() => { onValue(k); setOpen(false); }}
                   className={cx(
-                    "relative rounded-lg py-2 text-xs font-semibold cursor-pointer transition-colors",
-                    sel ? "bg-blue-500 text-white"
-                        : k === current ? "bg-veu/5 text-blue-300 ring-1 ring-blue-500/40 hover:bg-veu/10"
-                        : "bg-veu/5 text-slate-300 hover:bg-veu/10",
+                    "relative h-10 rounded-lg text-[13px] font-medium capitalize cursor-pointer transition-colors",
+                    sel ? "bg-ink text-[var(--color-on-ink)]"
+                        : k === current ? "text-blue-400 ring-1 ring-inset ring-blue-500/50 hover:bg-veu/[0.07]"
+                        : "text-slate-300 hover:bg-veu/[0.07]",
                     "disabled:opacity-25 disabled:cursor-not-allowed"
                   )}
                 >
                   {rot}
                   {marked?.has(k) && (
-                    <span className={cx("absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full", sel ? "bg-white" : "bg-blue-400")} />
+                    <span className={cx("absolute bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full", sel ? "bg-[var(--color-on-ink)]" : "bg-blue-400")} />
                   )}
                 </button>
               );
             })}
           </div>
-        </RPopover.Content>
-      </RPopover.Portal>
-    </RPopover.Root>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -259,9 +235,9 @@ export function MonthSelect({ value, onValue, min, max, marked, current = curren
 export function MonthStepper({ value, onValue, min, max, marked, current, className }) {
   const prev = addMonths(value, -1);
   const next = addMonths(value, 1);
-  const btn = "rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] p-2 text-slate-300 cursor-pointer transition-colors hover:bg-veu/5 disabled:opacity-30 disabled:cursor-not-allowed";
+  const btn = "grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-surface)] text-slate-300 cursor-pointer transition-colors hover:bg-veu/[0.05] hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed";
   return (
-    <div className={cx("flex items-center gap-1.5", className)}>
+    <div className={cx("flex items-center gap-1.5", className)} role="group" aria-label="Mês">
       <button type="button" aria-label="Mês anterior" onClick={() => onValue(prev)} disabled={!!min && prev < min} className={btn}>
         <ChevronLeft size={16} />
       </button>
@@ -293,17 +269,16 @@ export function DateInput({ value, onValue, min, max, month, className, disabled
   const fora = (k) => (min && k < min) || (max && k > max);
 
   return (
-    <RPopover.Root open={open} onOpenChange={(o) => { setOpen(o); if (o) setVisto(base); }}>
-      <RPopover.Trigger
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setVisto(base); }}>
+      <PopoverTrigger
         name={name}
         disabled={disabled}
         className={cx(inputBase, "flex cursor-pointer items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50", className)}
       >
         <span className={value ? "tnum" : "text-slate-500"}>{value ? fmtDate(value) : "dd/mm/aaaa"}</span>
         <CalendarDays size={16} className="shrink-0 text-slate-400" />
-      </RPopover.Trigger>
-      <RPopover.Portal>
-        <RPopover.Content sideOffset={6} align="start" className={cx(layer, "w-72 p-3")}>
+      </PopoverTrigger>
+      <PopoverContent sideOffset={6} align="start" className="w-72 p-3">
           <div className="mb-2 flex items-center justify-between">
             {/* `month` travado (despesa/receita do mês): esconde a navegação em
                 vez de deixar sair do mês e a linha "desaparecer" da lista. */}
@@ -321,7 +296,7 @@ export function DateInput({ value, onValue, min, max, month, className, disabled
           </div>
           <div className="grid grid-cols-7 gap-1 text-center">
             {SEMANA.map((d, i) => (
-              <span key={i} className="py-1 text-[11px] font-semibold text-slate-500">{d}</span>
+              <span key={i} className="py-1 text-xs font-medium text-slate-500">{d}</span>
             ))}
             {Array.from({ length: offset }, (_, i) => <span key={`v${i}`} />)}
             {Array.from({ length: dias }, (_, i) => {
@@ -334,9 +309,9 @@ export function DateInput({ value, onValue, min, max, month, className, disabled
                   onClick={() => { onValue(k); setOpen(false); }}
                   className={cx(
                     "tnum grid h-9 place-items-center rounded-lg text-sm cursor-pointer transition-colors",
-                    sel ? "bg-blue-500 font-semibold text-white"
-                        : k === hoje ? "text-blue-300 ring-1 ring-blue-500/40 hover:bg-veu/10"
-                        : "text-slate-300 hover:bg-veu/10",
+                    sel ? "bg-ink font-semibold text-[var(--color-on-ink)]"
+                        : k === hoje ? "text-blue-400 ring-1 ring-inset ring-blue-500/50 hover:bg-veu/[0.07]"
+                        : "text-slate-300 hover:bg-veu/[0.07]",
                     "disabled:opacity-25 disabled:cursor-not-allowed"
                   )}
                 >
@@ -347,12 +322,11 @@ export function DateInput({ value, onValue, min, max, month, className, disabled
           </div>
           {!fora(hoje) && (!month || hoje.slice(0, 7) === month) && (
             <button type="button" onClick={() => { onValue(hoje); setOpen(false); }}
-                    className="mt-2 w-full rounded-lg bg-veu/5 py-2 text-xs font-semibold text-slate-300 hover:bg-veu/10 cursor-pointer">
+                    className="mt-2 h-9 w-full rounded-lg bg-veu/[0.06] text-[13px] font-medium text-slate-300 hover:bg-veu/10 hover:text-ink cursor-pointer">
               hoje
             </button>
           )}
-        </RPopover.Content>
-      </RPopover.Portal>
-    </RPopover.Root>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, PiggyBank, Target, LifeBuoy, ChevronRight } from "lucide-react";
+import { Plus, PiggyBank, LifeBuoy, ChevronRight } from "lucide-react";
 import {
-  Card, Donut, Button, ProgressBar, Modal, Skeleton, SkeletonChart, SkeletonLines, Spinner,
+  Card, CardHeader, Button, ProgressBar, Modal, PageHeader, SectionHeader, EmptyState,
+  Skeleton, SkeletonChart, SkeletonLines, Spinner,
 } from "./ui/primitives.jsx";
 import { useAsync } from "./ui/useAsync.js";
 import { MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
-import { GroupedBars, HBars, SobraMensal, StackedBars } from "./ui/charts.jsx";
+import { BarraComposicao, GroupedBars, HBars, Legenda, SobraMensal, StackedBars } from "./ui/charts.jsx";
 import CaixinhaCard from "./CaixinhaCard.jsx";
 import { ConvitesBanner, MeusCompartilhamentos } from "./Compartilhamento.jsx";
 import { AporteModal, DespesaVariavelModal, CaixinhaModal, ReservaEmergenciaModal } from "./forms.jsx";
@@ -17,10 +18,14 @@ import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 import * as api from "../services/financeApi";
 
-const GREY = "#64748b";
-// Paleta do "gasto por página": página não tem cor cadastrada (só nome e
-// emoji), então a cor vem da posição — ordem estável dentro do mesmo mês.
-const CORES_PAGINA = ["#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#06b6d4", "#f43f5e"];
+const GREY = "var(--acento-neutro)";
+// Cores dos gráficos: uma pergunta, um matiz. Entrada é verde (polaridade
+// calma: dinheiro que chega), gasto é neutro — não pinta de vermelho toda
+// saída normal. O cobalto marca a série principal.
+const COR_RECEBIDO = "var(--acento-emerald)";
+const COR_GASTO = "var(--acento-neutro)";
+const COR_PRINCIPAL = "var(--color-brand)";
+const COR_PRINCIPAL_CLARA = "color-mix(in srgb, var(--color-brand) 42%, transparent)";
 
 export default function Dashboard({ onOpenCaixinha }) {
   const fin = useFinance();
@@ -144,7 +149,7 @@ export default function Dashboard({ onOpenCaixinha }) {
       const c = k !== "__none" ? catMap[k] : null;
       return { key: k, name: c?.nome || "Sem categoria", color: c ? acento(c.cor).dot : GREY };
     });
-    if (totalPorCat.size > top.length) series.push({ key: "__outras", name: "Outras", color: "#475569" });
+    if (totalPorCat.size > top.length) series.push({ key: "__outras", name: "Outras", color: "var(--color-slate-600)" });
 
     const data = porMes.map((m) => {
       const valores = {};
@@ -195,212 +200,209 @@ export default function Dashboard({ onOpenCaixinha }) {
     };
   }, [caixinhas]);
 
-  const segments = caixinhas
-    .filter((c) => c.saldo > 0)
-    .map((c) => ({ value: c.saldo, color: acento(c.cor).dot }));
-
   const ordered = [...caixinhas].sort((a, b) => a.ordem - b.ordem);
+  const espacoViz = espacos.find((e) => e.id === vizId);
+  const nomeEspaco = espacoViz ? `${espacoViz.emoji ? `${espacoViz.emoji} ` : ""}${espacoViz.nome}` : "";
+  // O mês visto, no espaço visualizado: é a frase debaixo do título.
+  const mesVisto = serie[serie.length - 1];
+  const podeOrc = can("orcamento:view");
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-10">
       {/* convite pendente bloqueia tudo que vem depois — fica antes do resto */}
       {can("cartao:view_shared") && <ConvitesBanner onRespondido={fin.refresh} />}
 
-      {/* greeting + quick actions */}
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comDados} />
-        {can("movimentacao:manage") && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="growth" onClick={() => setAporte({})}><Plus size={16} /> Aporte</Button>
-            <Button variant="outline" onClick={() => setDespesa({})}>Registrar despesa</Button>
-          </div>
-        )}
-      </header>
+      <PageHeader
+        title="Visão geral"
+        description={
+          podeOrc && mesVisto ? (
+            <>
+              {fmtMonthLabel(ym)} · {mesVisto.sobrou >= 0 ? "sobraram " : "faltaram "}
+              <span className={`tnum font-medium ${mesVisto.sobrou < 0 ? "text-rose-400" : "text-ink"}`}>
+                {fmtMoney(Math.abs(mesVisto.sobrou))}
+              </span>
+              {nomeEspaco && <> em {nomeEspaco}</>}
+            </>
+          ) : fmtMonthLabel(ym)
+        }
+        actions={
+          <>
+            <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comDados} />
+            {can("movimentacao:manage") && (
+              <>
+                <Button variant="outline" onClick={() => setDespesa({})}>Registrar despesa</Button>
+                <Button onClick={() => setAporte({})}><Plus size={16} /> Aporte</Button>
+              </>
+            )}
+          </>
+        }
+      />
 
-      {/* hero: patrimônio + donut */}
-      <Card className="p-5 sm:p-6">
-        <div className="grid gap-6 sm:grid-cols-[1fr_auto] sm:items-center">
-          <div className="space-y-5">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Total guardado</p>
-              <p className="tnum text-3xl font-bold text-ink sm:text-4xl">{fmtMoney(saldo)}</p>
+      {/* patrimônio + o mês */}
+      <div className={`grid grid-cols-1 gap-6 ${podeOrc ? "lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]" : ""}`}>
+        <Card className="flex flex-col p-5 sm:p-6">
+          <CardHeader title="Total guardado" description={`${caixinhas.length} ${caixinhas.length === 1 ? "caixinha" : "caixinhas"}`} />
+          <p className="tnum mt-3 text-[34px] font-semibold leading-10 tracking-[-0.02em] text-ink">{fmtMoney(saldo)}</p>
+          <p className="tnum mt-1 text-[13px] text-slate-500">
+            <span className="text-slate-300">{fmtMoney(aporteMensal)}</span> por mês em aportes
+            {metas.qtd > 0 && (
+              <> · {metas.atingidas} de {metas.qtd} {metas.qtd === 1 ? "meta atingida" : "metas atingidas"} ({Math.round(metas.progresso * 100)}% do total)</>
+            )}
+          </p>
+
+          <BarraComposicao className="mt-6 lg:mt-auto"
+            label="Como o total se divide entre as caixinhas"
+            partes={ordered.map((c) => ({ key: c.id, label: c.nome, value: c.saldo, color: acento(c.cor).dot }))} />
+          {/* legenda que carrega o dado: nome, fatia e valor */}
+          <ul className="mt-4 divide-y divide-[var(--color-line)]">
+            {ordered.map((c) => (
+              <li key={c.id} className="flex items-center gap-2.5 py-2 text-sm">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: acento(c.cor).dot }} />
+                <button onClick={() => onOpenCaixinha(c.id)}
+                        className="min-w-0 flex-1 truncate text-left text-slate-200 hover:text-ink hover:underline decoration-veu/30 underline-offset-4 cursor-pointer">
+                  {c.nome}
+                </button>
+                <span className="tnum w-10 text-right text-xs text-slate-500">
+                  {saldo > 0 ? `${Math.round((Math.max(c.saldo, 0) / saldo) * 100)}%` : "—"}
+                </span>
+                <span className="tnum w-28 text-right font-medium text-ink">{fmtMoney(c.saldo)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        {podeOrc && mesVisto && (
+          <Card className="flex flex-col p-5 sm:p-6">
+            <CardHeader title="Este mês" description={nomeEspaco ? `${fmtMonthLabel(ym)} · ${nomeEspaco}` : fmtMonthLabel(ym)} />
+            <dl className="mt-4 space-y-2.5 text-sm">
+              <KV label="Recebido" value={`+${fmtMoney(mesVisto.recebido)}`} tone="emerald" />
+              <KV label="Despesas fixas" value={fmtMoney(mesVisto.fixas)} />
+              <KV label="Despesas do mês" value={fmtMoney(mesVisto.variaveis)} />
+            </dl>
+            <div className="mt-4 flex items-baseline justify-between border-t border-[var(--color-line)] pt-4">
+              <span className="text-sm font-medium text-ink">{mesVisto.sobrou >= 0 ? "Sobrou" : "Faltou"}</span>
+              <span className={`tnum text-2xl font-semibold tracking-[-0.01em] ${mesVisto.sobrou < 0 ? "text-rose-400" : "text-ink"}`}>
+                {fmtMoney(mesVisto.sobrou)}
+              </span>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-veu/4 p-3">
-                <PiggyBank size={15} className="mb-1.5 text-slate-500" />
-                <p className="text-[11px] leading-tight text-slate-500">Aporte mensal</p>
-                <p className="tnum text-sm font-bold text-emerald-400">{fmtMoney(aporteMensal)}</p>
-              </div>
-              <div className="rounded-xl bg-veu/4 p-3">
-                <div className="mb-1.5 flex items-center justify-between">
-                  <Target size={15} className="text-slate-500" />
-                  {metas.qtd > 0 && (
-                    <span className="tnum text-[11px] text-slate-500">{metas.atingidas}/{metas.qtd} metas</span>
+
+            {/* uso dos cartões: trilho do tamanho do limite, comprometido cheio */}
+            <div className="mt-auto pt-6">
+              <div className="rounded-xl bg-veu/[0.035] p-4">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-[13px] font-medium text-slate-300">Uso dos cartões</p>
+                  {cart.limite > 0 && (
+                    <p className={`tnum text-[13px] ${cart.pct > 0.9 ? "font-semibold text-rose-400" : "text-slate-400"}`}>
+                      {Math.round(cart.pct * 100)}% do limite
+                    </p>
                   )}
                 </div>
-                <p className="text-[11px] leading-tight text-slate-500">Progresso das metas</p>
-                {metas.qtd > 0 ? (
-                  <>
-                    <p className="tnum text-sm font-bold text-blue-400">{Math.round(metas.progresso * 100)}%</p>
-                    <ProgressBar value={metas.progresso} className="mt-1.5 h-1.5" />
-                  </>
+                {cart.limite === 0 ? (
+                  <p className="mt-1 text-[13px] text-slate-500">Nenhum cartão cadastrado.</p>
                 ) : (
-                  <p className="text-sm font-medium text-slate-400">sem metas</p>
+                  <>
+                    <ProgressBar className="mt-2.5" value={cart.pct} label="Limite comprometido"
+                                 barClass={cart.pct > 0.9 ? "bg-rose-400" : "bg-blue-500"} />
+                    <dl className="mt-3 grid grid-cols-3 gap-3 text-[13px]">
+                      <MiniKV label="Comprometido" value={fmtMoney(cart.usado)} />
+                      <MiniKV label="Disponível" value={fmtMoney(cart.disponivel)} neg={cart.disponivel < 0} />
+                      <MiniKV label="Limite" value={fmtMoney(cart.limite)} />
+                    </dl>
+                  </>
                 )}
               </div>
             </div>
-          </div>
-          <div className="flex justify-center">
-            <Donut
-              segments={segments.length ? segments : [{ value: 1, color: "var(--color-trilho)" }]}
-              centerLabel={fmtMoney(saldo).replace("R$ ", "R$ ")}
-            />
-          </div>
-        </div>
-        {/* legend */}
-        <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-[var(--color-line)] pt-4">
-          {ordered.map((c) => (
-            <span key={c.id} className="inline-flex items-center gap-2 text-xs text-slate-400">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: acento(c.cor).dot }} />
-              {c.nome} <span className="tnum text-slate-300">{fmtMoney(c.saldo)}</span>
-            </span>
-          ))}
-        </div>
-      </Card>
+          </Card>
+        )}
+      </div>
 
       {/* caixinhas */}
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-ink">Caixinhas</h3>
-          {can("caixinha:manage") && (
-            <button onClick={() => setNovaMode(temReserva ? "normal" : "choose")}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer">
-              <Plus size={15} /> Nova
-            </button>
+      <div className="space-y-4">
+        <SectionHeader
+          title="Caixinhas"
+          description={aporteMensal > 0 ? `${fmtMoney(aporteMensal)} por mês em aportes programados` : "Cofres com meta, reserva e sobra do mês"}
+          actions={can("caixinha:manage") && (
+            <Button variant="secondary" size="sm" onClick={() => setNovaMode(temReserva ? "normal" : "choose")}>
+              <Plus size={15} /> Nova caixinha
+            </Button>
           )}
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {ordered.map((c) => (
-            <CaixinhaCard
-              key={c.id}
-              caixinha={c}
-              onOpen={() => onOpenCaixinha(c.id)}
-              onAporte={() => setAporte({ caixinhaId: c.id })}
-              onDespesa={() => setDespesa({ caixinhaId: c.id })}
-            />
-          ))}
-        </div>
+        />
+        {ordered.length === 0 ? (
+          <EmptyState title="Nenhuma caixinha ainda"
+            description="Comece pela reserva de emergência: ela calcula a meta pelo seu gasto mensal."
+            action={can("caixinha:manage") && <Button size="sm" onClick={() => setNovaMode("choose")}><Plus size={15} /> Criar caixinha</Button>} />
+        ) : (
+          <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${ordered.length >= 3 ? "xl:grid-cols-3" : ""}`}>
+            {ordered.map((c) => (
+              <CaixinhaCard
+                key={c.id}
+                caixinha={c}
+                onOpen={() => onOpenCaixinha(c.id)}
+                onAporte={() => setAporte({ caixinhaId: c.id })}
+                onDespesa={() => setDespesa({ caixinhaId: c.id })}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Gráficos do orçamento — espaço escolhido no select (independe da página ativa em Despesas) */}
-      {can("orcamento:view") && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="flex items-center gap-2 text-lg font-semibold text-ink">
-              Gráficos do orçamento
-              {vizLoading && <Spinner className="h-4 w-4 border-slate-500/40 border-t-slate-300" />}
-            </h3>
-            {espacos.length > 0 && (
-              <label className="flex items-center gap-2 text-sm text-slate-400">
-                <span className="whitespace-nowrap">Visualizar página</span>
-                <Select value={vizId ?? ""} onValue={setVizId} className="w-auto py-1.5" placeholder="Selecione…">
+      {podeOrc && (
+        <div className="space-y-4">
+          <SectionHeader
+            title={<span className="flex items-center gap-2">Orçamento
+              {vizLoading && <Spinner className="h-4 w-4 text-slate-500" />}</span>}
+            description="Como o dinheiro entra e sai, mês a mês"
+            actions={espacos.length > 0 && (
+              <label className="flex items-center gap-2 text-[13px] text-slate-500">
+                <span className="whitespace-nowrap">Página</span>
+                <Select value={vizId ?? ""} onValue={setVizId} className="w-auto min-w-40" placeholder="Selecione…" aria-label="Página do orçamento">
                   {espacos.map((e) => (
                     <SelectItem key={e.id} value={e.id}>{e.emoji ? `${e.emoji} ` : ""}{e.nome}</SelectItem>
                   ))}
                 </Select>
               </label>
             )}
-          </div>
+          />
           {/* Primeira carga de uma página que NÃO é a ativa: sem skeleton os
               gráficos apareciam vazios (dados = []) e depois se preenchiam, o
               que se lê como "essa página não tem nada". */}
           {vizLoading && !vizOrc ? (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card className="space-y-4 p-5 lg:col-span-2"><Skeleton className="h-4 w-52" /><SkeletonChart /></Card>
-              <Card className="space-y-4 p-5"><Skeleton className="h-4 w-32" /><SkeletonChart height={150} bars={10} /></Card>
-              <Card className="space-y-4 p-5"><Skeleton className="h-4 w-44" /><SkeletonLines lines={5} /></Card>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <Card className="space-y-4 p-6 lg:col-span-2"><Skeleton className="h-4 w-52" /><SkeletonChart /></Card>
+              <Card className="space-y-4 p-6"><Skeleton className="h-4 w-32" /><SkeletonChart height={150} bars={10} /></Card>
+              <Card className="space-y-4 p-6"><Skeleton className="h-4 w-44" /><SkeletonLines lines={5} /></Card>
             </div>
           ) : (
-          <div className={`space-y-6 transition-opacity ${vizLoading ? "pointer-events-none opacity-40" : "opacity-100"}`}>
-          {/* Evolução mensal */}
-          <Card className="p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-ink">Entradas × saídas · 6 meses</h3>
-              <Legend items={[{ name: "Recebido", color: "#10b981" }, { name: "Gasto", color: "#f43f5e" }]} />
-            </div>
-            <GroupedBars
-              data={serie.map((s) => ({
-                label: fmtMonthShort(s.ym),
-                bars: [{ name: "Recebido", value: s.recebido, color: "#10b981" }, { name: "Gasto", value: s.saiu, color: "#f43f5e" }],
-              }))}
-            />
-          </Card>
-
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className={`grid grid-cols-1 gap-6 transition-opacity md:grid-cols-2 xl:grid-cols-6 ${vizLoading ? "pointer-events-none opacity-40" : "opacity-100"}`}>
             {/* Sobra mensal — 12 meses (a janela do orçamento já traz esse histórico) */}
-            <Card className="p-5">
-              <div className="mb-4 flex items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold text-ink">Sobra mensal</h3>
-                <span className="text-[11px] text-slate-500">recebido − gasto</span>
-              </div>
+            <Card className="p-5 sm:p-6 md:col-span-2 xl:col-span-6">
+              <CardHeader title="Sobra mensal" description="Recebido menos gasto, últimos 12 meses" className="mb-5" />
               <SobraMensal points={serieSobra} destaque={ym} />
             </Card>
 
-            {/* Despesas por categoria */}
-            <Card className="p-5">
-              <h3 className="mb-4 text-sm font-semibold text-ink">Despesas por categoria</h3>
-              {porCategoria.length === 0 ? (
-                <p className="py-10 text-center text-sm text-slate-500">Nenhuma despesa neste mês.</p>
-              ) : (
-                <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
-                  <Donut size={150} segments={porCategoria.map((c) => ({ value: c.value, color: c.color }))}
-                         centerSub="gasto" centerLabel={fmtMoneyCompact(gastoCartao)} />
-                  <ul className="flex-1 space-y-2 self-stretch">
-                    {porCategoria.map((c) => (
-                      <li key={c.label} className="flex items-center gap-2 text-sm">
-                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: c.color }} />
-                        <span className="min-w-0 flex-1 truncate text-slate-300">{c.label}</span>
-                        <span className="tnum text-slate-400">{Math.round((c.value / gastoCartao) * 100)}%</span>
-                        <span className="tnum w-20 text-right font-medium text-slate-200">{fmtMoneyCompact(c.value)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            {/* Evolução mensal */}
+            <Card className="p-5 sm:p-6 xl:col-span-3">
+              <CardHeader title="Entradas e saídas" description="Últimos 6 meses" className="mb-4" />
+              <Legenda className="mb-4" items={[{ name: "Recebido", color: COR_RECEBIDO }, { name: "Gasto", color: COR_GASTO }]} />
+              <GroupedBars
+                destaque={ym}
+                data={serie.map((s) => ({
+                  key: s.ym,
+                  label: fmtMonthShort(s.ym),
+                  bars: [{ name: "Recebido", value: s.recebido, color: COR_RECEBIDO }, { name: "Gasto", value: s.saiu, color: COR_GASTO }],
+                }))}
+              />
             </Card>
 
-            {/* Top despesas fixas */}
-            <Card className="p-5">
-              <h3 className="mb-4 text-sm font-semibold text-ink">Maiores despesas fixas</h3>
-              <HBars items={topFixas} empty="Nenhuma despesa fixa ativa." />
-            </Card>
-
-            {/* Cartões */}
-            <Card className="p-5">
-              <h3 className="mb-4 text-sm font-semibold text-ink">Uso dos cartões</h3>
-              {cart.limite === 0 ? (
-                <p className="py-10 text-center text-sm text-slate-500">Nenhum cartão cadastrado.</p>
-              ) : (
-                <div className="flex flex-col items-center gap-5 sm:flex-row">
-                  <Donut size={150}
-                         segments={[{ value: cart.usado, color: "#fb7185" }, { value: Math.max(cart.disponivel, 0), color: "var(--color-trilho)" }]}
-                         centerSub="usado" centerLabel={`${Math.round(cart.pct * 100)}%`} />
-                  <dl className="flex-1 space-y-2.5 self-stretch text-sm">
-                    <KV label="Limite total" value={fmtMoney(cart.limite)} />
-                    <KV label="Comprometido" value={fmtMoney(cart.usado)} tone="rose" />
-                    <KV label="Disponível" value={fmtMoney(cart.disponivel)} tone={cart.disponivel < 0 ? "rose" : "emerald"} strong />
-                  </dl>
-                </div>
-              )}
-            </Card>
             {/* Fixas × variáveis: mostra se o aperto é estrutural ou pontual */}
-            <Card className="p-5 lg:col-span-2">
-              <h3 className="mb-4 text-sm font-semibold text-ink">Fixas × variáveis · 6 meses</h3>
+            <Card className="p-5 sm:p-6 xl:col-span-3">
+              <CardHeader title="Fixas e do mês" description="O aperto é estrutural ou pontual?" className="mb-4" />
               <StackedBars
                 destaque={ym}
                 series={[
-                  { key: "fixas", name: "Fixas", color: "#3987e5" },
-                  { key: "variaveis", name: "Do mês", color: "#d95926" },
+                  { key: "fixas", name: "Fixas", color: COR_PRINCIPAL },
+                  { key: "variaveis", name: "Do mês", color: COR_PRINCIPAL_CLARA },
                 ]}
                 data={serie.map((sm) => ({
                   key: sm.ym,
@@ -411,9 +413,33 @@ export default function Dashboard({ onOpenCaixinha }) {
               />
             </Card>
 
+            {/* Despesas por categoria */}
+            <Card className="p-5 sm:p-6 xl:col-span-2">
+              <CardHeader title="Por categoria" description={`${fmtMonthLabel(ym)} · ${fmtMoneyCompact(gastoCartao)}`} className="mb-5" />
+              <HBars items={porCategoria} empty="Nenhuma despesa neste mês." />
+            </Card>
+
+            {/* Top despesas fixas */}
+            <Card className="p-5 sm:p-6 xl:col-span-2">
+              <CardHeader title="Maiores fixas" description="As 6 que mais pesam no mês" className="mb-5" />
+              <HBars items={topFixas} empty="Nenhuma despesa fixa ativa." />
+            </Card>
+
+            {/* Gasto por página no mês (todas as páginas, não só a visualizada) */}
+            <Card className="p-5 sm:p-6 md:col-span-2 xl:col-span-2">
+              <CardHeader title="Por página" description="Fixas + lançadas, em todas as páginas" className="mb-5" />
+              {carregandoEspacos ? (
+                <SkeletonLines lines={3} />
+              ) : (
+                // Ranking de uma grandeza só: um matiz, o comprimento diz a ordem.
+                <HBars items={porEspaco.map((l) => ({ ...l, color: COR_PRINCIPAL }))}
+                       empty="Nenhuma despesa neste mês." />
+              )}
+            </Card>
+
             {/* Categoria ao longo do tempo */}
-            <Card className="p-5 lg:col-span-2">
-              <h3 className="mb-4 text-sm font-semibold text-ink">Categorias · 6 meses</h3>
+            <Card className="p-5 sm:p-6 md:col-span-2 xl:col-span-6">
+              <CardHeader title="Categorias ao longo do tempo" description="As 5 maiores dos últimos 6 meses" className="mb-4" />
               <StackedBars
                 destaque={ym}
                 series={categoriaNoTempo.series}
@@ -421,21 +447,6 @@ export default function Dashboard({ onOpenCaixinha }) {
                 empty="Sem despesas nesse período."
               />
             </Card>
-
-            {/* Gasto por página no mês (todas as páginas, não só a visualizada) */}
-            <Card className="p-5 lg:col-span-2">
-              <h3 className="mb-1 text-sm font-semibold text-ink">Gasto por página · {fmtMonthLabel(ym)}</h3>
-              <p className="mb-4 text-xs text-slate-500">Fixas do mês + despesas lançadas, em todas as páginas.</p>
-              {carregandoEspacos ? (
-                <SkeletonLines lines={3} />
-              ) : (
-                // A cor vem da posição na lista: o payload do resumo traz nome,
-                // emoji e valor — página não tem cor cadastrada.
-                <HBars items={porEspaco.map((l, i) => ({ ...l, color: CORES_PAGINA[i % CORES_PAGINA.length] }))}
-                       empty="Nenhuma despesa neste mês." />
-              )}
-            </Card>
-          </div>
           </div>
           )}
         </div>
@@ -449,13 +460,14 @@ export default function Dashboard({ onOpenCaixinha }) {
                             defaultCaixinhaId={despesa?.caixinhaId} lockCaixinha={!!despesa?.caixinhaId} />
 
       {/* Passo 1: escolher o tipo de caixinha a criar */}
-      <Modal open={novaMode === "choose"} onClose={() => setNovaMode(null)} title="Nova caixinha">
+      <Modal open={novaMode === "choose"} onClose={() => setNovaMode(null)} title="Nova caixinha"
+             description="Que tipo de cofre você quer abrir?">
         <div className="space-y-2.5">
-          <TipoOpcao icon={LifeBuoy} tone="emerald" title="Reserva de emergência"
-            desc="Meta calculada pelas suas respostas — meses de segurança × gasto mensal."
+          <TipoOpcao icon={LifeBuoy} title="Reserva de emergência"
+            desc="Meta calculada pelas suas respostas: meses de segurança × gasto mensal."
             onClick={() => setNovaMode("reserva")} />
-          <TipoOpcao icon={PiggyBank} tone="blue" title="Caixinha comum"
-            desc="Meta livre, aporte mensal e rendimento — pra qualquer objetivo."
+          <TipoOpcao icon={PiggyBank} title="Caixinha comum"
+            desc="Meta livre, aporte mensal e rendimento, pra qualquer objetivo."
             onClick={() => setNovaMode("normal")} />
         </div>
       </Modal>
@@ -467,43 +479,36 @@ export default function Dashboard({ onOpenCaixinha }) {
   );
 }
 
-// Linha rótulo/valor (uso dos cartões). Portado do antigo Painel.
-function KV({ label, value, tone, strong }) {
-  const color = tone === "rose" ? "text-rose-400" : tone === "emerald" ? "text-emerald-400" : "text-slate-200";
+// Linha rótulo/valor do resumo do mês.
+function KV({ label, value, tone }) {
   return (
-    <div className="flex items-center justify-between">
-      <dt className={strong ? "font-semibold text-ink" : "text-slate-400"}>{label}</dt>
-      <dd className={`tnum ${strong ? "font-bold" : ""} ${color}`}>{value}</dd>
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-slate-400">{label}</dt>
+      <dd className={`tnum font-medium ${tone === "emerald" ? "text-emerald-400" : "text-ink"}`}>{value}</dd>
     </div>
   );
 }
 
-function Legend({ items }) {
+function MiniKV({ label, value, neg }) {
   return (
-    <div className="flex gap-3">
-      {items.map((it) => (
-        <span key={it.name} className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: it.color }} /> {it.name}
-        </span>
-      ))}
+    <div className="min-w-0">
+      <dt className="truncate text-slate-500">{label}</dt>
+      <dd className={`tnum truncate font-medium ${neg ? "text-rose-400" : "text-ink"}`}>{value}</dd>
     </div>
   );
 }
 
 // Opção de tipo no passo 1 do "Nova caixinha".
-function TipoOpcao({ icon: Icon, tone, title, desc, onClick }) {
-  const tones = { emerald: "text-emerald-400 bg-emerald-500/15", blue: "text-blue-400 bg-blue-500/15" };
+function TipoOpcao({ icon: Icon, title, desc, onClick }) {
   return (
     <button onClick={onClick}
-      className="flex w-full items-center gap-3.5 rounded-xl border border-[var(--color-line)] bg-veu/[0.02] p-4 text-left hover:border-veu/25 hover:bg-veu/5 cursor-pointer transition-colors">
-      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tones[tone]}`}>
-        <Icon size={19} />
-      </span>
+      className="group flex w-full items-center gap-3.5 rounded-xl border border-[var(--color-line-strong)] p-4 text-left transition-colors hover:border-veu/30 hover:bg-veu/[0.03] cursor-pointer">
+      <Icon size={20} strokeWidth={1.75} className="shrink-0 text-slate-400" />
       <span className="min-w-0 flex-1">
         <span className="block font-semibold text-ink">{title}</span>
-        <span className="block text-xs text-slate-400">{desc}</span>
+        <span className="mt-0.5 block text-[13px] text-slate-500">{desc}</span>
       </span>
-      <ChevronRight size={18} className="shrink-0 text-slate-500" />
+      <ChevronRight size={18} className="shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5" />
     </button>
   );
 }
