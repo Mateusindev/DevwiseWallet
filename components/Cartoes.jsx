@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, CalendarClock, Users, ChevronDown, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, CalendarClock, Users, ChevronDown, Upload, Nfc } from "lucide-react";
 import {
-  Card, CardHeader, Button, IconButton, ProgressBar, PageHeader, SectionHeader, EmptyState, Stat, Badge,
+  Card, CardHeader, Button, IconButton, ProgressBar, SectionHeader, EmptyState, Stat, Badge,
+  Ilustracao, Valor,
   Skeleton, SkeletonChart, SkeletonLines, SkeletonList, Spinner,
 } from "./ui/primitives.jsx";
 import { useAsync } from "./ui/useAsync.js";
@@ -13,7 +14,7 @@ import ImportOfxModal from "./ImportOfx.jsx";
 import { CompartilharModal, MeusCompartilhamentos } from "./Compartilhamento.jsx";
 import { fmtMoney, fmtMoneyCompact, fmtMonthLabel, fmtMonthShort, currentMonthKey, addMonths } from "../lib/format.js";
 import { acento, janelaMeses, mesesComFatura, quitacaoParceladas, quitacaoPorCartao } from "../lib/calc.js";
-import { MonthStepper } from "./ui/fields.jsx";
+import { CabecalhoMes, SeloResumo } from "./ui/cabecalho.jsx";
 import { useFinance } from "../store/FinanceContext.jsx";
 import * as api from "../services/financeApi";
 import { useAuth } from "./AuthGate";
@@ -57,31 +58,23 @@ export default function Cartoes() {
     return { limite, usado, disponivel, pct: limite > 0 ? usado / limite : 0 };
   }, [cartoes]);
 
-  // A frase do título é o achado do mês: quanto do limite já está tomado.
-  const frase = cartoesCarregando ? (
-    <span className="inline-flex items-center gap-2">
-      <Spinner className="h-3.5 w-3.5 text-slate-500" /> Atualizando a fatura de {fmtMonthLabel(ym)}…
-    </span>
-  ) : cartoes.length === 0 ? (
-    "Limites, faturas e parcelas em aberto."
-  ) : (
-    <>
-      <span className="tnum font-medium text-ink">{fmtMoney(totais.usado)}</span> comprometidos de{" "}
-      <span className="tnum">{fmtMoney(totais.limite)}</span> ·{" "}
-      <span className={`tnum ${totais.disponivel < 0 || perto(totais.pct) ? "font-medium text-rose-400" : ""}`}>
-        {Math.round(totais.pct * 100)}% do limite
-      </span>
-    </>
+  // O selo é o achado do mês: quanto do limite já está tomado.
+  const alertaLimite = totais.disponivel < 0 || perto(totais.pct);
+  const selo = cartoesCarregando ? (
+    <SeloResumo><Spinner className="h-3.5 w-3.5" /> Atualizando…</SeloResumo>
+  ) : cartoes.length > 0 && (
+    <SeloResumo tone={alertaLimite ? "neg" : "neutro"}>
+      {fmtMoney(totais.usado)} de {fmtMoney(totais.limite)} · {Math.round(totais.pct * 100)}%
+    </SeloResumo>
   );
 
   return (
-    <section className="space-y-10">
-      <PageHeader
-        title="Cartões"
-        description={frase}
+    <section className="space-y-6">
+      <CabecalhoMes
+        pagina="Cartões" trocaPagina ym={ym} onYm={setYm} min={janela.min} max={janela.max} marked={comFatura}
+        resumo={selo}
         actions={
           <>
-            <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comFatura} />
             {canManage && cartoes.length > 0 && (
               <Button variant="outline" onClick={() => setImportando(cartoes[0])} title="Importar fatura OFX">
                 <Upload size={16} /> OFX
@@ -138,13 +131,17 @@ function ResumoLimite({ totais, cartoes }) {
     .map((c) => ({ c, usado: (c.faturaMes || 0) + (c.comprometido || 0) }))
     .filter((p) => p.usado > 0);
   return (
-    <Card className="p-5 sm:p-6">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
-        <Stat className="col-span-2 sm:col-span-1" label="Limite total" value={fmtMoney(totais.limite)} size="lg" />
+    <Card className="group p-5 sm:p-6">
+      <div className="flex items-start gap-4">
+      <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+        <Stat className="col-span-2 sm:col-span-1" label="Limite total" size="lg"
+              value={<Valor value={totais.limite} className="text-[38px] leading-[46px]" />} />
         <Stat label="Comprometido" value={fmtMoney(totais.usado)} tone={alerta ? "neg" : undefined}
               sub="fatura do mês + parcelas" />
         <Stat label="Disponível" value={fmtMoney(totais.disponivel)} tone={totais.disponivel < 0 ? "neg" : undefined}
               sub={`${Math.round(Math.max(1 - totais.pct, 0) * 100)}% do limite livre`} />
+      </div>
+      <Ilustracao nome="credit_card" size={88} className="-my-3 -mr-2 hidden sm:block" />
       </div>
 
       <div className="mt-6 flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full bg-[var(--color-trilho)]"
@@ -224,7 +221,7 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
   // de uma fatura vazia de verdade, e depois trocava tudo.
   if (carregando || (erro && !resumo)) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         {titulo}
         {erro ? (
           <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
@@ -232,7 +229,7 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
             <Button variant="secondary" size="sm" onClick={recarregar}>Tentar de novo</Button>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
             <Card className="space-y-4 p-6"><Skeleton className="h-4 w-40" /><SkeletonLines lines={4} /></Card>
             <Card className="space-y-4 p-6"><Skeleton className="h-4 w-36" /><SkeletonLines lines={3} /></Card>
             <Card className="space-y-4 p-6 lg:col-span-2 xl:col-span-1"><Skeleton className="h-4 w-44" /><SkeletonLines lines={3} /></Card>
@@ -244,10 +241,10 @@ function ParaOndeVaiAFatura({ ym, cartoes }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {titulo}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <Card className="p-5 sm:p-6">
           <CardHeader title="Por categoria" description="Fatura do mês, todos os cartões" className="mb-5" />
           <HBars items={porCategoria} total={totalMes} empty="Nada na fatura deste mês." />
@@ -336,7 +333,7 @@ function QuitacaoParceladas({ ym, cartoes }) {
   const mediaMes = total.cronograma.length > 0 ? total.falta / total.cronograma.length : 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SectionHeader
         title="Quitação das parceladas"
         description={`O que ainda vai cair de ${fmtMonthLabel(ym)} até a última parcela · ${total.itens.length} ${
@@ -447,12 +444,55 @@ function QuitacaoParceladas({ ym, cartoes }) {
 
 // Mini-cartão na proporção real (85,6 × 54 mm ≈ 1,6:1) na cor do cartão: é a
 // identidade da linha, não um ícone num quadrado.
-function ArteCartao({ cor }) {
+// Face do cartão de plástico, em CSS puro: degradê na cor do cartão, reflexo
+// diagonal, chip e aproximação. É objeto, não cromo — por isso pode ter a
+// sombra projetada que o resto da UI não tem em repouso. No hover inclina um
+// pouco em perspectiva (pede `group` no pai).
+function FaceCartao({ cartao: c, cor }) {
   return (
-    <span aria-hidden className="relative block h-[26px] w-[42px] shrink-0 rounded-[5px]" style={{ backgroundColor: cor }}>
-      <span className="absolute left-[7px] top-[8px] h-[7px] w-[9px] rounded-[2px] bg-white/70" />
-      <span className="absolute bottom-[5px] right-[6px] h-[3px] w-[12px] rounded-full bg-white/45" />
-    </span>
+    <div
+      aria-hidden
+      className={[
+        "relative isolate flex aspect-[1.586] w-full max-w-[20rem] flex-col justify-between overflow-hidden rounded-[14px] p-4 text-white",
+        "shadow-[0_18px_30px_-14px_rgb(0_0_0/0.55),inset_0_1px_0_rgb(255_255_255/0.18)] ring-1 ring-inset ring-black/10",
+        "transition-transform duration-500 ease-out [transform:perspective(900px)]",
+        "group-hover:[transform:perspective(900px)_rotateX(5deg)_rotateY(-8deg)_translateY(-2px)]",
+      ].join(" ")}
+      style={{
+        // a cor do acento clareia no tema escuro: misturar com quase-preto
+        // segura o contraste do texto branco nos dois temas
+        background: `linear-gradient(140deg, color-mix(in srgb, ${cor} 88%, #2a2a2a) 0%, color-mix(in srgb, ${cor} 62%, #111) 45%, color-mix(in srgb, ${cor} 30%, #000) 100%)`,
+      }}
+    >
+      {/* reflexo e textura: duas camadas atrás do conteúdo */}
+      <span className="absolute -left-1/3 -top-2/3 -z-10 h-[160%] w-[70%] rotate-[28deg] bg-gradient-to-b from-white/30 via-white/5 to-transparent" />
+      <span className="absolute -bottom-1/2 -right-1/4 -z-10 aspect-square w-[85%] rounded-full border-[18px] border-white/[0.06]" />
+
+      <div className="flex items-start justify-between gap-3">
+        <span className="truncate text-[13px] font-semibold tracking-wide drop-shadow-sm">{c.nome}</span>
+        {c.bandeira && <span className="shrink-0 text-[11px] font-bold uppercase italic tracking-wider opacity-85">{c.bandeira}</span>}
+      </div>
+
+      <div className="flex items-center gap-2.5">
+        <span className="relative h-[22px] w-[30px] overflow-hidden rounded-[5px] bg-gradient-to-br from-[#f6dc8f] via-[#d6ad4f] to-[#a77b26] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.15)]">
+          <span className="absolute inset-x-0 top-1/2 h-px bg-black/25" />
+          <span className="absolute inset-y-0 left-1/3 w-px bg-black/25" />
+          <span className="absolute inset-y-0 right-1/3 w-px bg-black/25" />
+        </span>
+        <Nfc size={18} strokeWidth={1.75} className="opacity-75" />
+      </div>
+
+      <div className="flex items-end justify-between gap-3 text-[10px] uppercase tracking-[0.08em]">
+        <div>
+          <p className="opacity-65">Vence</p>
+          <p className="tnum text-[13px] font-semibold normal-case tracking-normal">dia {String(c.diaVencimento).padStart(2, "0")}</p>
+        </div>
+        <div className="min-w-0 text-right">
+          <p className="opacity-65">Limite livre</p>
+          <p className="tnum truncate text-[13px] font-semibold normal-case tracking-normal">{fmtMoney(c.disponivel)}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -464,47 +504,48 @@ function CartaoCard({ cartao: c, ym, canManage, canShare, onEdit, onRemove, onSh
   const alerta = estourado || perto(pct);
 
   return (
-    <Card className="flex flex-col p-5 sm:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <ArteCartao cor={a.dot} />
-          <div className="min-w-0">
-            <h3 className="truncate text-[15px] font-semibold text-ink">{c.nome}</h3>
-            <p className="tnum truncate text-[13px] text-slate-500">
-              {c.bandeira ? `${c.bandeira} · ` : ""}limite {fmtMoney(c.limite)}
-            </p>
+    <Card className="group @container flex flex-col p-5 sm:p-6">
+      <div className="grid grid-cols-1 gap-5 @md:grid-cols-[minmax(0,13.5rem)_minmax(0,1fr)]">
+        <FaceCartao cartao={c} cor={a.dot} />
+
+        <div className="flex min-w-0 flex-col">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="truncate text-[15px] font-semibold text-ink">{c.nome}</h3>
+              <p className="tnum truncate text-[13px] text-slate-500">limite {fmtMoney(c.limite)}</p>
+            </div>
+            {(canManage || canShare) && (
+              <div className="-mr-1.5 -mt-1 flex shrink-0 gap-0.5">
+                {canShare && (
+                  <IconButton onClick={onShare} aria-label={`Compartilhar ${c.nome}`} title="Compartilhar">
+                    <Users size={16} />
+                  </IconButton>
+                )}
+                {canManage && (
+                  <>
+                    <IconButton onClick={onEdit} aria-label={`Editar ${c.nome}`} title="Editar">
+                      <Pencil size={16} />
+                    </IconButton>
+                    <IconButton tone="danger" onClick={onRemove} aria-label={`Remover ${c.nome}`} title="Remover">
+                      <Trash2 size={16} />
+                    </IconButton>
+                  </>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* a fatura do mês é o número que a pessoa veio ver */}
+          <p className="mt-4 text-[13px] text-slate-500 @md:mt-auto">Fatura de {fmtMonthLabel(ym).toLowerCase()}</p>
+          <Valor value={c.faturaMes} className="text-[32px] leading-10 text-ink" />
+
+          <ProgressBar className="mt-3" value={pct} color={alerta ? COR_ALERTA : a.dot} label={`Limite comprometido de ${c.nome}`} />
+          <p className="tnum mt-1.5 text-[13px] text-slate-500">
+            <span className={alerta ? "font-medium text-rose-400" : "text-slate-300"}>{Math.round(pct * 100)}%</span>
+            {" "}do limite · {fmtMoney(usado)}
+          </p>
         </div>
-        {(canManage || canShare) && (
-          <div className="-mr-1.5 flex shrink-0 gap-0.5">
-            {canShare && (
-              <IconButton onClick={onShare} aria-label={`Compartilhar ${c.nome}`} title="Compartilhar">
-                <Users size={16} />
-              </IconButton>
-            )}
-            {canManage && (
-              <>
-                <IconButton onClick={onEdit} aria-label={`Editar ${c.nome}`} title="Editar">
-                  <Pencil size={16} />
-                </IconButton>
-                <IconButton tone="danger" onClick={onRemove} aria-label={`Remover ${c.nome}`} title="Remover">
-                  <Trash2 size={16} />
-                </IconButton>
-              </>
-            )}
-          </div>
-        )}
       </div>
-
-      {/* a fatura do mês é o número que a pessoa veio ver */}
-      <p className="mt-5 text-[13px] text-slate-500">Fatura de {fmtMonthLabel(ym).toLowerCase()}</p>
-      <p className="tnum text-2xl font-semibold tracking-[-0.01em] text-ink">{fmtMoney(c.faturaMes)}</p>
-
-      <ProgressBar className="mt-4" value={pct} color={alerta ? COR_ALERTA : a.dot} label={`Limite comprometido de ${c.nome}`} />
-      <p className="tnum mt-1.5 text-[13px] text-slate-500">
-        <span className={alerta ? "font-medium text-rose-400" : "text-slate-300"}>{Math.round(pct * 100)}%</span>
-        {" "}do limite comprometido · {fmtMoney(usado)}
-      </p>
 
       <dl className="mt-4 space-y-2 text-sm">
         <Linha label="Parcelas em aberto" value={c.comprometido} />

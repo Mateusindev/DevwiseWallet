@@ -180,7 +180,7 @@ export default function AppShell({ children, sidebarAberta = true }) {
           </MenuDaConta>
         </header>
 
-        <main id="conteudo" className="mx-auto w-full max-w-[76rem] px-4 pb-28 pt-6 sm:px-6 md:pb-14 lg:px-10 lg:pt-10">
+        <main id="conteudo" className="mx-auto w-full max-w-[88rem] px-4 pb-28 pt-5 sm:px-5 md:pb-10 lg:px-6 lg:pt-6">
           {children}
         </main>
       </div>

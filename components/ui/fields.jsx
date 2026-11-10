@@ -168,7 +168,9 @@ export function DayInput({ value, onValue, allowEmpty = false, suggestion, class
 }
 
 // ── MonthSelect ─────────────────────────────────────────────────────────────
-export function MonthSelect({ value, onValue, min, max, marked, current = currentMonthKey(), className }) {
+// `bare`: sem a caixa padrão (só `className`); `children`: conteúdo próprio do
+// gatilho — é o que deixa o mês virar título grande clicável.
+export function MonthSelect({ value, onValue, min, max, marked, current = currentMonthKey(), className, bare, align = "end", children }) {
   const [open, setOpen] = useState(false);
   const [ano, setAno] = useState(() => Number((value || current).slice(0, 4)));
   const ym = (a, m) => `${a}-${String(m + 1).padStart(2, "0")}`;
@@ -177,16 +179,20 @@ export function MonthSelect({ value, onValue, min, max, marked, current = curren
   return (
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setAno(Number((value || current).slice(0, 4))); }}>
       <PopoverTrigger
-        className={cx(
+        className={bare ? cx("cursor-pointer", className) : cx(
           "inline-flex h-10 min-w-[11.5rem] items-center justify-between gap-2 rounded-xl border border-[var(--color-line-strong)] bg-[var(--color-surface)] px-3.5 text-sm font-medium text-ink cursor-pointer",
           "transition-colors hover:bg-veu/[0.05]",
           className
         )}
       >
-        {fmtMonthLabel(value)}
-        <ChevronDown size={15} className="text-slate-500" />
+        {children ?? (
+          <>
+            {fmtMonthLabel(value)}
+            <ChevronDown size={15} className="text-slate-500" />
+          </>
+        )}
       </PopoverTrigger>
-      <PopoverContent sideOffset={6} align="end" className="w-64 p-3">
+      <PopoverContent sideOffset={6} align={align} className="w-64 p-3">
           <div className="mb-2 flex items-center justify-between">
             <button type="button" aria-label="Ano anterior" onClick={() => setAno(ano - 1)}
                     disabled={!!min && ym(ano - 1, 11) < min}

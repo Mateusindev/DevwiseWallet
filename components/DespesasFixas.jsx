@@ -2,23 +2,23 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Popover as RPopover } from "radix-ui";
 import {
-  Plus, Trash2, Pencil, Check, CreditCard, X, Undo2, Repeat, Upload, Split, Pause, Play, MoreHorizontal, EyeOff,
+  Plus, Trash2, Pencil, Check, CreditCard, X, Repeat, Upload, Split, Pause, Play,
 } from "lucide-react";
 import {
-  Card, Button, Field, MoneyInput, Spinner, Modal, PageHeader, SectionHeader, EmptyState, Badge, IconButton,
+  Card, Button, Field, MoneyInput, Spinner, Modal, SectionHeader, EmptyState, Badge, IconButton, Ilustracao, Valor,
 } from "./ui/primitives.jsx";
-import { Checkbox, CheckboxField, FormError, MonthStepper, Select, SelectItem } from "./ui/fields.jsx";
+import { Checkbox, CheckboxField, FormError, Select, SelectItem } from "./ui/fields.jsx";
 import { BarraComposicao } from "./ui/charts.jsx";
 import BulkBar, { BulkAcao } from "./BulkBar.jsx";
 import ImportOfxModal from "./ImportOfx.jsx";
 import { MeusCompartilhamentos, RateioChips, RatearModal } from "./Compartilhamento.jsx";
 import { useSelecao } from "./ui/useSelecao.js";
 import { mensagemDeErro } from "../lib/formErrors.js";
-import { DespesaFixaModal, DespesaMesModal, ReceitaMesModal, EspacoModal } from "./forms.jsx";
+import { DespesaFixaModal, DespesaMesModal, ReceitaMesModal } from "./forms.jsx";
 import { fmtDate, fmtMoney, fmtMonthLabel } from "../lib/format.js";
-import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, janelaMeses, mesesComDados, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, espacosOcultosNoMes, valorEfetivoLinha } from "../lib/calc.js";
+import { totalFixasNoMes, despesasDoMes, receitasDoMes, orcamentoMes, janelaMeses, mesesComDados, rendaDoMes, parcelaInfo, fixaContaNoMes, fixaPaga, fixaValorPago, fixaFaltaPagar, fixaParcial, acento, espacoOcultoNoMes, espacosVisiveisNoMes, valorEfetivoLinha } from "../lib/calc.js";
+import { CabecalhoMes, SeloResumo } from "./ui/cabecalho.jsx";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 
@@ -105,7 +105,7 @@ function Linha({ selecionada, apagada, paga, sel, children, valor, acoes }) {
       : "hover:bg-veu/[0.02]";
   return (
     <li data-paga={paga || undefined}
-      className={`flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-3.5 transition-colors duration-300 sm:flex-nowrap sm:items-center sm:px-5 ${fundo} ${apagada ? "opacity-60" : ""}`}>
+      className={`flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-2.5 transition-colors duration-300 sm:flex-nowrap sm:items-center sm:px-5 ${fundo} ${apagada ? "opacity-60" : ""}`}>
       {sel && <span className="flex h-6 items-center sm:h-auto">{sel}</span>}
       <div className="min-w-0 flex-1">{children}</div>
       <div className="flex shrink-0 justify-end sm:w-32">{valor}</div>
@@ -281,34 +281,32 @@ export default function DespesasFixas() {
 
   return (
     <section className="space-y-8">
-      <PageHeader
-        title="Despesas"
-        description={
-          <>
-            {nomeEspaco && <>{nomeEspaco} · </>}{fmtMonthLabel(ym)} · {orc.sobrou >= 0 ? "sobraram " : "faltaram "}
-            <span className={`tnum font-medium ${orc.sobrou < 0 ? "text-rose-400" : "text-ink"}`}>{fmtMoney(Math.abs(orc.sobrou))}</span>
-          </>
+      <CabecalhoMes
+        pagina="Despesas" contexto={nomeEspaco} trocaPagina
+        ym={ym} onYm={setYm} min={janela.min} max={janela.max} marked={comDados}
+        resumo={
+          <SeloResumo tone={orc.sobrou < 0 ? "neg" : "pos"}>
+            {orc.sobrou >= 0 ? "Sobraram" : "Faltaram"} {fmtMoney(Math.abs(orc.sobrou))}
+          </SeloResumo>
         }
-        actions={
-          <>
-            <MonthStepper value={ym} onValue={setYm} min={janela.min} max={janela.max} marked={comDados} />
-            {canOrc && <Button onClick={() => setMesOpen(true)}><Plus size={16} /> Despesa</Button>}
-          </>
-        }
+        actions={canOrc && <Button onClick={() => setMesOpen(true)}><Plus size={16} /> Despesa</Button>}
       />
 
-      {/* espaço (Nosso / Meu) — só o orçamento muda, caixinhas seguem globais */}
-      <EspacoTabs ym={ym} />
 
       {/* conteúdo do orçamento — esmaece durante troca de espaço */}
-      <div className={`space-y-10 transition-opacity ${loading ? "pointer-events-none opacity-40" : "opacity-100"}`}>
+      <div className={`space-y-6 transition-opacity ${loading ? "pointer-events-none opacity-40" : "opacity-100"}`}>
         {/* resumo: a sobra é a resposta; o razão embaixo diz de onde ela veio */}
-        <Card className="grid grid-cols-1 gap-8 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-10">
-          <div className="flex flex-col">
-            <p className="text-[13px] text-slate-500">{orc.sobrou >= 0 ? "Sobrou" : "Faltou"} em {fmtMonthLabel(ym)}</p>
-            <p className={`tnum mt-1 text-[34px] font-semibold leading-10 tracking-[-0.02em] ${orc.sobrou < 0 ? "text-rose-400" : "text-ink"}`}>
-              {fmtMoney(orc.sobrou)}
-            </p>
+        <Card className="grid grid-cols-1 gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
+          <div className="group flex flex-col">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[13px] text-slate-500">{orc.sobrou >= 0 ? "Sobrou" : "Faltou"} em {fmtMonthLabel(ym)}</p>
+                <p className="mt-1">
+                  <Valor value={orc.sobrou} className={`text-[44px] leading-[52px] sm:text-[52px] sm:leading-[60px] ${orc.sobrou < 0 ? "text-rose-400" : "text-ink"}`} />
+                </p>
+              </div>
+              <Ilustracao nome="carteira.svg" size={128} className="-my-4 -mr-2 size-24 sm:size-32" />
+            </div>
             <p className="tnum mt-1 text-[13px] text-slate-500">
               {orc.recebido > 0
                 ? <>{Math.round((orc.sobrou / orc.recebido) * 100)}% dos {fmtMoney(orc.recebido)} recebidos</>
@@ -459,7 +457,12 @@ export default function DespesasFixas() {
                           </IconButton>
                         </>
                       )}>
-                      <p className="truncate font-medium text-ink">{d.descricao}</p>
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="truncate font-medium text-ink">{d.descricao}</p>
+                        <CategoriaBadge d={d} categoriasMap={categoriasMap} />
+                        <CartaoBadge d={d} cartoesMap={cartoesMap} ym={ym} />
+                        <RateioChips d={d} />
+                      </div>
                       {(d.data || parcial) && (
                         <Meta>
                           {d.data && fmtDate(d.data)}
@@ -467,11 +470,6 @@ export default function DespesasFixas() {
                         </Meta>
                       )}
                       {d.nota && <p className="mt-1 whitespace-pre-wrap break-words text-[13px] text-slate-400">{d.nota}</p>}
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 empty:hidden">
-                        <CategoriaBadge d={d} categoriasMap={categoriasMap} />
-                        <CartaoBadge d={d} cartoesMap={cartoesMap} ym={ym} />
-                        <RateioChips d={d} />
-                      </div>
                     </Linha>
                   );
                 })}
@@ -555,20 +553,18 @@ export default function DespesasFixas() {
                           </IconButton>
                         </>
                       )}>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                         <p className="truncate font-medium text-ink">{d.descricao}</p>
                         {!d.ativa && <Badge tone="neutral">Pausada</Badge>}
+                        <CategoriaBadge d={d} categoriasMap={categoriasMap} />
+                        <CartaoBadge d={d} cartoesMap={cartoesMap} ym={ym} />
+                        <RateioChips d={d} />
                       </div>
                       <Meta>
                         vence dia {d.diaVencimento}
                         {parcial && <> · <span className="text-amber-400">pago {fmtMoney(valorPago)} de {fmtMoney(d.valor)}</span></>}
                       </Meta>
                       {d.nota && <p className="mt-1 whitespace-pre-wrap break-words text-[13px] text-slate-400">{d.nota}</p>}
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 empty:hidden">
-                        <CategoriaBadge d={d} categoriasMap={categoriasMap} />
-                        <CartaoBadge d={d} cartoesMap={cartoesMap} ym={ym} />
-                        <RateioChips d={d} />
-                      </div>
                     </Linha>
                   );
                 })}
@@ -615,7 +611,7 @@ export default function DespesasFixas() {
 
       <Modal open={!!atribuir} onClose={() => !loteBusy && setAtribuir(null)}
              title={atribuir === "cartao" ? "Aplicar cartão" : "Aplicar categoria"}>
-        <div className="space-y-4">
+        <div className="space-y-3">
           <FormError>{loteErr}</FormError>
           <Field label={atribuir === "cartao" ? "Cartão" : "Categoria"}
                  hint={`Vai valer para as ${linhasLote.length} linhas selecionadas.`}>
@@ -646,7 +642,7 @@ export default function DespesasFixas() {
 
       <Modal open={delLote} onClose={() => !loteBusy && setDelLote(false)}
              title={alvoLote === "fixas" ? "Excluir despesas fixas" : "Excluir despesas"}>
-        <div className="space-y-4">
+        <div className="space-y-3">
           <FormError>{loteErr}</FormError>
           <p className="text-sm text-slate-300">
             Excluir <b>{linhasLote.length}</b> {linhasLote.length === 1 ? "linha" : "linhas"} ·{" "}
@@ -707,7 +703,7 @@ export default function DespesasFixas() {
 
       <Modal open={!!delFixa} onClose={() => !delBusy && setDelFixa(null)} title="Excluir despesa fixa">
         {delFixa && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <p className="text-sm text-slate-300">
               Excluir <b className="text-ink">{delFixa.descricao}</b> ({fmtMoney(delFixa.valor)})?
             </p>
@@ -728,7 +724,7 @@ export default function DespesasFixas() {
 
       <Modal open={!!delMes} onClose={() => !delBusy && setDelMes(null)} title="Excluir despesa do mês">
         {delMes && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <p className="text-sm text-slate-300">
               Excluir <b className="text-ink">{delMes.descricao}</b> ({fmtMoney(delMes.valor)})?
             </p>
@@ -749,7 +745,7 @@ export default function DespesasFixas() {
 
       <Modal open={!!delReceita} onClose={() => !delBusy && setDelReceita(null)} title="Excluir receita do mês">
         {delReceita && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <p className="text-sm text-slate-300">
               Excluir <b className="text-ink">{delReceita.descricao}</b> ({fmtMoney(delReceita.valor)})?
             </p>
@@ -768,172 +764,6 @@ export default function DespesasFixas() {
         )}
       </Modal>
     </section>
-  );
-}
-
-// Abas de espaço de despesa (Nosso / Meu / …) + criar novo.
-// As abas são filtradas pelo mês `ym`: páginas excluídas naquele mês somem
-// (exclusão reversível). Uma faixa abaixo lista as ocultas p/ restaurar.
-//
-// Abas sublinhadas numa régua de 1px (neutras: cor fica pro dado). Ocultar e
-// excluir moram no menu "…" da aba ATIVA — antes eram bolinhas que só
-// apareciam no hover, ou seja, inalcançáveis no toque.
-function EspacoTabs({ ym }) {
-  const {
-    espacos, espacosOcultos, activeEspacoId, orcamentoStatus, espacoPendente,
-    setActiveEspaco, prefetchEspaco, ocultarEspacoMes, restaurarEspacoMes, removeEspaco,
-  } = useFinance();
-  const [novoOpen, setNovoOpen] = useState(false);
-  const [confirmDel, setConfirmDel] = useState(null); // espaço a ocultar do mês
-  const [confirmDelPerm, setConfirmDelPerm] = useState(null); // espaço a excluir de vez
-  const [busy, setBusy] = useState(false);
-  const loading = orcamentoStatus === "loading";
-  const { can } = useAuth();
-  const canEspaco = can("espaco:manage");
-
-  const visiveis = espacosVisiveisNoMes(espacos, espacosOcultos, ym);
-  const ocultas = espacosOcultosNoMes(espacos, espacosOcultos, ym);
-  const podeExcluir = canEspaco && visiveis.length > 1; // guarda: sempre sobra 1 no mês
-  const podeExcluirPerm = canEspaco && espacos.length > 1; // guarda: nunca zerar espaços
-
-  async function confirmar() {
-    setBusy(true);
-    try {
-      await ocultarEspacoMes(confirmDel.id, ym);
-      setConfirmDel(null);
-    } finally { setBusy(false); }
-  }
-
-  async function confirmarPerm() {
-    setBusy(true);
-    try {
-      await removeEspaco(confirmDelPerm.id);
-      setConfirmDelPerm(null);
-    } finally { setBusy(false); }
-  }
-
-  const itemMenu = "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-sm transition-colors cursor-pointer";
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-end gap-2 border-b border-[var(--color-line)]">
-        <div role="tablist" aria-label="Páginas de despesa" className="-mb-px flex min-w-0 flex-1 gap-5 overflow-x-auto">
-          {visiveis.map((e) => {
-            // A aba clicada acende NA HORA (o conteúdo fica esmaecido até o
-            // orçamento chegar); hover/foco já pré-carregam o orçamento dela.
-            const active = e.id === (espacoPendente ?? activeEspacoId);
-            const vem = () => prefetchEspaco(e.id);
-            return (
-              <div key={e.id} className="flex shrink-0 items-center gap-0.5">
-                <button role="tab" aria-selected={active} onClick={() => setActiveEspaco(e.id).catch(() => {})}
-                  onPointerEnter={vem} onFocus={vem} onTouchStart={vem}
-                  className={`relative inline-flex h-11 items-center gap-2 whitespace-nowrap border-b-2 text-sm transition-colors cursor-pointer disabled:cursor-not-allowed ${
-                    active ? "border-ink font-semibold text-ink" : "border-transparent text-slate-400 hover:text-ink"}`}>
-                  {e.emoji && <span>{e.emoji}</span>}
-                  {e.nome}
-                  {active && loading && <Spinner className="h-3.5 w-3.5" />}
-                </button>
-                {active && !loading && (podeExcluir || podeExcluirPerm) && (
-                  <RPopover.Root>
-                    <RPopover.Trigger asChild>
-                      <IconButton className="h-7 w-7" aria-label={`Opções de ${e.nome}`} title="Opções da página">
-                        <MoreHorizontal size={15} />
-                      </IconButton>
-                    </RPopover.Trigger>
-                    <RPopover.Portal>
-                      <RPopover.Content align="start" sideOffset={6}
-                        className="z-[70] w-60 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] p-1.5 shadow-[var(--sombra-flutua)] animate-[surge_.12s_ease-out]">
-                        {podeExcluir && (
-                          <RPopover.Close asChild>
-                            <button onClick={() => setConfirmDel(e)} className={`${itemMenu} text-slate-200 hover:bg-veu/[0.07]`}>
-                              <EyeOff size={15} className="text-slate-500" /> Ocultar de {fmtMonthLabel(ym)}
-                            </button>
-                          </RPopover.Close>
-                        )}
-                        {podeExcluirPerm && (
-                          <RPopover.Close asChild>
-                            <button onClick={() => setConfirmDelPerm(e)} className={`${itemMenu} text-rose-400 hover:bg-rose-500/10`}>
-                              <Trash2 size={15} /> Excluir página…
-                            </button>
-                          </RPopover.Close>
-                        )}
-                      </RPopover.Content>
-                    </RPopover.Portal>
-                  </RPopover.Root>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        {canEspaco && (
-          <Button variant="ghost" size="sm" className="mb-1.5" onClick={() => setNovoOpen(true)} aria-label="Nova página de despesa">
-            <Plus size={15} /> <span className="hidden sm:inline">Nova página</span>
-          </Button>
-        )}
-      </div>
-
-      {canEspaco && ocultas.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
-          <span>Ocultas em {fmtMonthLabel(ym)}:</span>
-          {ocultas.map((e) => (
-            <Button key={e.id} variant="outline" size="sm" onClick={() => restaurarEspacoMes(e.id, ym)}
-              title={`Restaurar ${e.nome} em ${fmtMonthLabel(ym)}`}>
-              {e.emoji && <span>{e.emoji}</span>}{e.nome}
-              <Undo2 size={13} className="text-slate-500" />
-            </Button>
-          ))}
-        </div>
-      )}
-
-      <EspacoModal open={novoOpen} onClose={() => setNovoOpen(false)}
-        onCreated={(esp) => setActiveEspaco(esp.id)} />
-
-      <Modal open={!!confirmDel} onClose={() => !busy && setConfirmDel(null)} title="Ocultar página do mês">
-        {confirmDel && (
-          <div className="space-y-4">
-            <p className="text-sm text-slate-300">
-              Ocultar <b className="text-ink">{confirmDel.emoji} {confirmDel.nome}</b> só de{" "}
-              <b className="text-ink">{fmtMonthLabel(ym)}</b>?
-            </p>
-            <p className="rounded-xl bg-veu/[0.04] px-3.5 py-3 text-[13px] text-slate-400">
-              Some só deste mês. A página e os dados dela continuam nos outros meses —
-              dá pra restaurar quando quiser.
-            </p>
-            <div className="flex gap-2 pt-1">
-              <Button variant="ghost" className="flex-1" disabled={busy} onClick={() => setConfirmDel(null)}>
-                Cancelar
-              </Button>
-              <Button className="flex-1" loading={busy} onClick={confirmar}>
-                <EyeOff size={15} /> Ocultar do mês
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      <Modal open={!!confirmDelPerm} onClose={() => !busy && setConfirmDelPerm(null)} title="Excluir página permanentemente">
-        {confirmDelPerm && (
-          <div className="space-y-4">
-            <p className="text-sm text-slate-300">
-              Excluir <b className="text-ink">{confirmDelPerm.emoji} {confirmDelPerm.nome}</b> de vez?
-            </p>
-            <Aviso>
-              Apaga o espaço e <b>todos os dados dele em todos os meses</b> — despesas fixas,
-              despesas do mês, receitas e renda. Não dá pra desfazer. As caixinhas
-              (economias) são compartilhadas e não são afetadas.
-            </Aviso>
-            <div className="flex gap-2 pt-1">
-              <Button variant="ghost" className="flex-1" disabled={busy} onClick={() => setConfirmDelPerm(null)}>
-                Cancelar
-              </Button>
-              <Button variant="danger" className="flex-1" loading={busy} onClick={confirmarPerm}>
-                <Trash2 size={15} /> Excluir de vez
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-    </div>
   );
 }
 
@@ -1120,7 +950,7 @@ function PagarControl({ valor, valorPago = 0, onSet }) {
 function Row({ label, value, strong, tone, sinal, ultima }) {
   const color = tone === "pos" ? "text-emerald-400" : tone === "neg" ? "text-rose-400" : strong ? "text-ink" : "text-slate-200";
   return (
-    <div className={`flex items-baseline justify-between gap-3 py-2.5 ${strong ? "border-t border-[var(--color-line)]" : ""} ${ultima ? "pb-0" : ""}`}>
+    <div className={`flex items-baseline justify-between gap-3 py-2 ${strong ? "border-t border-[var(--color-line)]" : ""} ${ultima ? "pb-0" : ""}`}>
       <dt className={strong ? "font-semibold text-ink" : "text-slate-400"}>{label}</dt>
       <dd className={`tnum ${strong ? (ultima ? "text-lg font-semibold" : "font-semibold") : "font-medium"} ${color}`}>
         {sinal && value !== 0 ? `${sinal} ` : ""}{fmtMoney(value)}

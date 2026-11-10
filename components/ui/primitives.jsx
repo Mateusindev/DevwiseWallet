@@ -6,6 +6,7 @@
 // clique, `Modal` controlado por `open`/`onClose`. As telas não importam o
 // shadcn direto; trocar a base não pede tocar em tela nenhuma.
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "./button";
@@ -30,15 +31,62 @@ export function Card({ className, children, as: Tag = "div", ...rest }) {
 
 // Cabeçalho de cartão: título (16/600) + descrição cinza + ação à direita.
 // O título é `h3` por padrão: as seções da tela são `h2`.
-export function CardHeader({ title, description, action, as: Tag = "h3", className }) {
+// `art` = nome de uma ilustração 3D (`public/3d/<nome>.png`): entra no canto
+// direito, maior que o cabeçalho e sangrando pra cima — é o objeto que diz do
+// que o cartão trata antes de ler o título.
+export function CardHeader({ title, description, action, art, as: Tag = "h3", className }) {
   return (
     <div className={cx("flex flex-wrap items-start justify-between gap-x-4 gap-y-2", className)}>
       <div className="min-w-0">
         <Tag className="text-[15px] font-semibold leading-6 text-ink">{title}</Tag>
         {description && <p className="mt-0.5 text-[13px] leading-5 text-slate-500">{description}</p>}
       </div>
-      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+      {(action || art) && (
+        <div className="flex shrink-0 items-start gap-2">
+          {action}
+          {art && <Ilustracao nome={art} className="-my-3 -mr-1 sm:-my-4" />}
+        </div>
+      )}
     </div>
+  );
+}
+
+// ── Ilustração 3D ───────────────────────────────────────────────────────────
+// Fluent Emoji 3D (Microsoft, MIT), PNG 256px em `public/3d/`. Decorativa:
+// alt vazio, nunca carrega dado. A sombra projetada é o que tira o objeto do
+// papel — sem ela vira figurinha colada. O balanço no hover pede `group` no pai.
+// `nome` sem extensão = PNG do Fluent; com extensão (`carteira.svg`) = arte
+// própria — SVG passa sem o otimizador do next/image, que recusa SVG.
+export function Ilustracao({ nome, size = 72, className }) {
+  const svg = nome.endsWith(".svg");
+  return (
+    <Image
+      src={`/3d/${nome.includes(".") ? nome : `${nome}.png`}`} alt="" aria-hidden width={size} height={size}
+      unoptimized={svg}
+      className={cx(
+        "pointer-events-none shrink-0 select-none drop-shadow-[0_10px_12px_rgb(0_0_0/0.22)]",
+        "transition-transform duration-300 ease-out group-hover:-translate-y-1 group-hover:-rotate-3",
+        className
+      )}
+    />
+  );
+}
+
+// ── Valor em destaque ───────────────────────────────────────────────────────
+// "R$ 5.304,28" com o R$ e os centavos rebaixados: o olho lê o inteiro, que é
+// o que importa num valor grande. O tamanho vem da classe (o resto é em em).
+const partesBRL = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export function Valor({ value, className, sinal }) {
+  const n = Number(value) || 0;
+  const [inteiro, centavos] = partesBRL.format(Math.abs(n)).split(",");
+  const prefixo = n < 0 ? "−" : sinal && n > 0 ? "+" : "";
+  return (
+    <span className={cx("tnum inline-flex items-baseline font-semibold tracking-[-0.025em]", className)}
+          aria-label={`${prefixo}R$ ${inteiro},${centavos}`}>
+      <span aria-hidden className="mr-[0.18em] text-[0.5em] font-semibold tracking-normal opacity-55">{prefixo}R$</span>
+      <span aria-hidden>{inteiro}</span>
+      <span aria-hidden className="text-[0.5em] tracking-normal opacity-55">,{centavos}</span>
+    </span>
   );
 }
 

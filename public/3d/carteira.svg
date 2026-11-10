@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="nota" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7be3a0"/>
+      <stop offset="1" stop-color="#2f9e5c"/>
+    </linearGradient>
+    <linearGradient id="nota2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5fd18a"/>
+      <stop offset="1" stop-color="#23824a"/>
+    </linearGradient>
+    <linearGradient id="couro" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a4d55"/>
+      <stop offset=".55" stop-color="#2a2c32"/>
+      <stop offset="1" stop-color="#17181c"/>
+    </linearGradient>
+    <linearGradient id="lado" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1b1c20"/>
+      <stop offset="1" stop-color="#34363d"/>
+    </linearGradient>
+    <linearGradient id="aba" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a5e67"/>
+      <stop offset="1" stop-color="#2c2e34"/>
+    </linearGradient>
+    <linearGradient id="brilho" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".28"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="botao" cx=".35" cy=".35" r=".7">
+      <stop offset="0" stop-color="#f3f4f6"/>
+      <stop offset="1" stop-color="#8b8f98"/>
+    </radialGradient>
+  </defs>
+
+  <!-- notas saindo por cima -->
+  <g transform="rotate(-9 128 90)">
+    <rect x="58" y="44" width="142" height="78" rx="8" fill="url(#nota2)"/>
+    <rect x="66" y="52" width="126" height="62" rx="5" fill="none" stroke="#bff0cf" stroke-opacity=".55" stroke-width="2"/>
+  </g>
+  <g transform="rotate(5 128 90)">
+    <rect x="52" y="52" width="148" height="80" rx="8" fill="url(#nota)"/>
+    <rect x="60" y="60" width="132" height="64" rx="5" fill="none" stroke="#d6f7e1" stroke-opacity=".7" stroke-width="2"/>
+    <circle cx="126" cy="92" r="17" fill="#d6f7e1" fill-opacity=".55"/>
+    <text x="126" y="99" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#1f7a45">$</text>
+  </g>
+
+  <!-- corpo da carteira -->
+  <path d="M30 104 Q30 92 42 92 H214 Q226 92 226 104 V206 Q226 220 212 220 H44 Q30 220 30 206 Z" fill="url(#couro)"/>
+  <!-- espessura lateral -->
+  <path d="M214 92 Q226 92 226 104 V206 Q226 220 212 220 H206 Q218 218 218 204 V106 Q218 94 208 92 Z" fill="url(#lado)" opacity=".8"/>
+  <!-- costura -->
+  <path d="M40 104 Q40 101 44 101 H210 Q216 101 216 106 V202 Q216 210 208 210 H46 Q40 210 40 204 Z"
+        fill="none" stroke="#7d818b" stroke-opacity=".55" stroke-width="2" stroke-dasharray="6 5"/>
+  <!-- brilho do couro -->
+  <path d="M30 104 Q30 92 42 92 H170 L96 220 H44 Q30 220 30 206 Z" fill="url(#brilho)"/>
+
+  <!-- aba com fecho -->
+  <path d="M140 126 H226 V184 H140 Q124 184 124 168 V142 Q124 126 140 126 Z" fill="url(#aba)"/>
+  <path d="M140 126 H226 V136 H136 Q126 136 125 144 Q126 128 140 126 Z" fill="#fff" fill-opacity=".12"/>
+  <circle cx="150" cy="155" r="11" fill="url(#botao)"/>
+  <circle cx="150" cy="155" r="11" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="1.5"/>
+</svg>
