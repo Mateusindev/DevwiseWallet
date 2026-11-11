@@ -19,11 +19,11 @@ export default function Detalhe() {
         <div className="space-y-2">
           <h1 className="text-lg font-semibold text-ink">Caixinha não encontrada</h1>
           <p className="text-sm text-slate-400">Ela foi excluída ou o link é antigo.</p>
-          <Link href="/" className="inline-block pt-1 text-sm font-medium text-blue-400 hover:text-blue-300">Voltar pro início</Link>
+          <Link href="/caixinhas" className="inline-block pt-1 text-sm font-medium text-blue-400 hover:text-blue-300">Voltar pras caixinhas</Link>
         </div>
       </div>
     );
   }
 
-  return <CaixinhaDetail caixinha={caixinha} onBack={() => router.push("/")} />;
+  return <CaixinhaDetail caixinha={caixinha} onBack={() => router.push("/caixinhas")} />;
 }

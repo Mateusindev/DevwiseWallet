@@ -14,6 +14,9 @@ import {
   criarCategoria,
   atualizarCategoria,
   removerCategoria,
+  usoCategorias,
+  reordenarCategorias as reordenarCategoriasAction,
+  mesclarCategoria as mesclarCategoriaAction,
 } from "@/server/modules/categoria/categoria.actions";
 import type {
   createCategoriaSchema,
@@ -704,6 +707,19 @@ export async function updateCategoria(id: string, patch: z.input<typeof updateCa
 
 export async function removeCategoria(id: string) {
   return mutar(removerCategoria(id));
+}
+
+// Uso por categoria em todas as páginas (fixas + lançamentos) — página Categorias.
+export async function getUsoCategorias() {
+  return ler("usoCategorias", async () => unwrapAction(await usoCategorias()));
+}
+
+export async function reordenarCategorias(ids: string[]) {
+  return mutar(reordenarCategoriasAction({ ids }));
+}
+
+export async function mesclarCategoria(id: string, destinoId: string) {
+  return mutar(mesclarCategoriaAction(id, { destinoId }));
 }
 
 // ── Dev helper ─────────────────────────────────────────────────────────────

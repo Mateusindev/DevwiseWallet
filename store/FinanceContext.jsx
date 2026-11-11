@@ -136,6 +136,8 @@ function reducer(state, action) {
           : [...state.categorias, action.categoria],
       };
     }
+    case "SET_CATEGORIAS":
+      return { ...state, categorias: action.categorias };
     case "REMOVE_CATEGORIA":
       return { ...state, categorias: state.categorias.filter((c) => c.id !== action.id) };
 
@@ -390,6 +392,26 @@ export function FinanceProvider({ children, estadoPromise }) {
     async removeCategoria(id) {
       await api.removeCategoria(id);
       dispatch({ type: "REMOVE_CATEGORIA", id });
+    },
+    // Otimista: a lista muda na hora; se o servidor recusar, volta a anterior.
+    async reordenarCategorias(ids) {
+      const antes = state.categorias;
+      const porId = new Map(antes.map((c) => [c.id, c]));
+      dispatch({ type: "SET_CATEGORIAS", categorias: ids.map((id, i) => ({ ...porId.get(id), ordem: i + 1 })) });
+      try {
+        dispatch({ type: "SET_CATEGORIAS", categorias: await api.reordenarCategorias(ids) });
+      } catch (err) {
+        dispatch({ type: "SET_CATEGORIAS", categorias: antes });
+        throw err;
+      }
+    },
+    // Mesclar mexe em despesas de todas as páginas — recarrega o estado
+    // (orçamento visto inclusive) em vez de remendar linha por linha.
+    async mesclarCategoria(id, destinoId) {
+      // Sem BOOT_START: a casca não pisca "carregando" por causa disso.
+      const r = await api.mesclarCategoria(id, destinoId);
+      dispatch({ type: "BOOT_OK", p: await api.getBootstrap() });
+      return r;
     },
 
     // ── Espaços de despesa ───────────────────────────────────────────────────

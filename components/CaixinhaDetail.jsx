@@ -76,7 +76,7 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
       <div className="space-y-3">
         <button onClick={onBack}
                 className="-ml-1 inline-flex h-8 items-center gap-1.5 rounded-lg px-1 text-[13px] font-medium text-slate-400 hover:text-ink cursor-pointer transition-colors">
-          <ArrowLeft size={15} /> Início
+          <ArrowLeft size={15} /> Caixinhas
         </button>
         <PageHeader
           title={
@@ -219,7 +219,7 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
   );
 }
 
-// Tipo da caixinha em palavras (mesma régua do card do Início).
+// Tipo da caixinha em palavras (mesma régua do card da lista de caixinhas).
 function tipoDe(c) {
   if (c.tipo === "emergencia") return "Reserva";
   if (c.meta != null) return "Com meta";

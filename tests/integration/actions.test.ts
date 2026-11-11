@@ -154,6 +154,39 @@ describe("categoria / caixinha / movimentação", () => {
     expect(dados(await categoria.removerCategoria(c.id))).toEqual({ id: c.id });
   });
 
+  it("uso, reordenar e mesclar categoria (todas as páginas, só do dono)", async () => {
+    const eu = await entraComo({ roles: ["membro"] });
+    const a = dados(await categoria.criarCategoria({ nome: "Mercado" })) as { id: string };
+    const b = dados(await categoria.criarCategoria({ nome: "Feira" })) as { id: string };
+    const casa = await prisma.espaco.create({ data: { userId: eu.id, nome: "Casa" } });
+    const viagem = await prisma.espaco.create({ data: { userId: eu.id, nome: "Viagem" } });
+    await prisma.despesaFixa.create({ data: { espacoId: casa.id, descricao: "Cesta", valor: 100, categoriaId: b.id } });
+    await prisma.despesaMes.create({
+      data: { espacoId: viagem.id, mes: "2026-10", descricao: "Feira", valor: 50, data: new Date("2026-10-05"), categoriaId: b.id },
+    });
+
+    expect(dados(await categoria.usoCategorias())).toEqual({
+      [b.id]: { fixas: 1, lancamentos: 1, ultimoMes: "2026-10" },
+    });
+
+    const ordem = dados(await categoria.reordenarCategorias({ ids: [b.id, a.id] })) as { id: string }[];
+    expect(ordem.map((c) => c.id)).toEqual([b.id, a.id]);
+    // faltando uma → 422, a ordem não muda
+    expect(await categoria.reordenarCategorias({ ids: [a.id] })).toMatchObject({ status: 422 });
+
+    expect(dados(await categoria.mesclarCategoria(b.id, { destinoId: a.id }))).toMatchObject({ fixas: 1, lancamentos: 1 });
+    expect(await prisma.categoria.findUnique({ where: { id: b.id } })).toBeNull();
+    expect(await prisma.despesaFixa.count({ where: { categoriaId: a.id } })).toBe(1);
+    expect(await prisma.despesaMes.count({ where: { categoriaId: a.id } })).toBe(1);
+
+    // destino de outro dono → 404 e nada muda
+    const outro = await entraComo({ roles: ["membro"] });
+    const dele = dados(await categoria.criarCategoria({ nome: "Dele" })) as { id: string };
+    expect(outro.id).not.toBe(eu.id);
+    expect(await categoria.mesclarCategoria(dele.id, { destinoId: a.id })).toMatchObject({ status: 404 });
+    expect(await categoria.reordenarCategorias({ ids: [a.id, dele.id] })).toMatchObject({ status: 404 });
+  });
+
   it("movimentação devolve o retorno composto e mexe no saldo", async () => {
     await entraComo({ roles: ["membro"] });
     const cx = dados(await caixinha.criarCaixinha({ nome: "Reserva" })) as { id: string };

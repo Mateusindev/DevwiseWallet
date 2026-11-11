@@ -5,7 +5,7 @@
 // as duas camadas coexistem até a Fase 5, então reverter é reverter um commit.
 import { acao, acaoValidada } from "@/server/next/action";
 import { categoriaService } from "./categoria.service";
-import { createCategoriaSchema, updateCategoriaSchema } from "./categoria.dto";
+import { createCategoriaSchema, updateCategoriaSchema, reordenarCategoriasSchema, mesclarCategoriaSchema } from "./categoria.dto";
 
 export async function listarCategorias() {
   return acao("categoria:view", (user) => categoriaService.list(user.id));
@@ -25,4 +25,22 @@ export async function atualizarCategoria(id: string, input: unknown) {
 
 export async function removerCategoria(id: string) {
   return acao("categoria:manage", (user) => categoriaService.remove(user.id, id));
+}
+
+// Página de categorias: uso por categoria (todas as páginas), ordem e mesclar.
+// Só existem aqui (sem rota Hono) — o legado não ganha superfície nova.
+export async function usoCategorias() {
+  return acao("categoria:view", (user) => categoriaService.uso(user.id));
+}
+
+export async function reordenarCategorias(input: unknown) {
+  return acaoValidada("categoria:manage", reordenarCategoriasSchema, input, (user, dto) =>
+    categoriaService.reordenar(user.id, dto)
+  );
+}
+
+export async function mesclarCategoria(id: string, input: unknown) {
+  return acaoValidada("categoria:manage", mesclarCategoriaSchema, input, (user, dto) =>
+    categoriaService.mesclar(user.id, id, dto)
+  );
 }

@@ -2,7 +2,7 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Receipt, CreditCard, ShieldCheck, Users, LogOut, Moon, Sun, ChevronsUpDown } from "lucide-react";
+import { Home, PiggyBank, Receipt, CreditCard, ShieldCheck, Users, LogOut, Moon, Sun, ChevronsUpDown, Tags } from "lucide-react";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 import { Spinner, Button } from "./ui/primitives.jsx";
@@ -55,8 +55,12 @@ import {
 // perms: item some se o usuário não tiver NENHUMA delas
 const NAV = [
   { href: "/", label: "Início", icon: Home, perms: ["caixinha:view"] },
+  { href: "/caixinhas", label: "Caixinhas", icon: PiggyBank, perms: ["caixinha:view"] },
   { href: "/despesas", label: "Despesas", icon: Receipt, perms: ["orcamento:view"] },
   { href: "/cartoes", label: "Cartões", icon: CreditCard, perms: ["cartao:view"] },
+  // Fora da barra inferior do celular (já tem cinco destinos): lá ela mora no
+  // menu da conta.
+  { href: "/categorias", label: "Categorias", icon: Tags, perms: ["categoria:view"], celular: false },
   {
     href: "/pessoas",
     label: "Pessoas",
@@ -66,9 +70,9 @@ const NAV = [
   { href: "/admin", label: "Admin", icon: ShieldCheck, perms: ["user:view", "role:view"], grupo: "sistema" },
 ];
 
-// A área de caixinhas é filha do Início: `/caixinhas/:id` mantém "Início" aceso.
+// `/caixinhas/:id` acende "Caixinhas" pela regra do prefixo.
 function estaAtivo(href, pathname) {
-  if (href === "/") return pathname === "/" || pathname.startsWith("/caixinhas");
+  if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -188,7 +192,7 @@ export default function AppShell({ children, sidebarAberta = true }) {
       {/* navegação inferior do celular */}
       <nav aria-label="Principal"
            className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[var(--color-line)] bg-[var(--color-bg)] pb-[env(safe-area-inset-bottom)] md:hidden">
-        {nav.map((n) => (
+        {nav.filter((n) => n.celular !== false).map((n) => (
           <NavItemCelular key={n.href} {...n} ativo={estaAtivo(n.href, pathname)} />
         ))}
       </nav>
@@ -258,7 +262,7 @@ function NomeDoUsuario() {
 // destino, e tema é preferência — os dois cabem num menu só em vez de dois
 // ícones espremendo o nome no rodapé da barra.
 function MenuDaConta({ children, lado }) {
-  const { signOut } = useAuth();
+  const { signOut, can } = useAuth();
   const [tema, trocaTema] = useTema();
   const claro = tema === "claro";
   return (
@@ -270,6 +274,12 @@ function MenuDaConta({ children, lado }) {
           <NomeDoUsuario />
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {/* no celular é o único caminho pra ela (fora da barra inferior) */}
+        {can("categoria:view") && (
+          <DropdownMenuItem asChild className="md:hidden">
+            <Link href="/categorias"><Tags /> Categorias</Link>
+          </DropdownMenuItem>
+        )}
         {/* `preventDefault` mantém o menu aberto: dá pra ver o tema virar e
             voltar sem reabrir. */}
         <DropdownMenuItem onSelect={(e) => { e.preventDefault(); trocaTema(); }}>
