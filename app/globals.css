@@ -288,3 +288,17 @@ body {
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ── Gráfico de velas (components/ui/bolsa.jsx) ─────────────────────────────
+   Média móvel que se desenha, vela que cresce e o "preço ao vivo"
+   pulsando no último ponto. Tudo desliga com prefers-reduced-motion. */
+@keyframes bolsa-traco { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes bolsa-cresce { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes bolsa-pulso { 0% { transform: scale(1); opacity: .55; } 100% { transform: scale(3.2); opacity: 0; } }
+.bolsa-traco { stroke-dasharray: 1; animation: bolsa-traco 900ms cubic-bezier(.3,.7,.2,1) both; }
+.bolsa-cresce { transform-box: fill-box; transform-origin: center; animation: bolsa-cresce 500ms cubic-bezier(.3,.7,.2,1) both; }
+.bolsa-pulso { transform-box: fill-box; transform-origin: center; animation: bolsa-pulso 1.8s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .bolsa-traco, .bolsa-cresce, .bolsa-pulso { animation: none; }
+  .bolsa-pulso { opacity: 0; }
+}
