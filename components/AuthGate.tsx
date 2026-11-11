@@ -182,6 +182,14 @@ function LoginForm({ onLogged }: { onLogged: (u: AuthUser) => void }) {
               {registering ? "Entrar" : "Criar conta"}
             </button>
           </p>
+          {/* Bypass de login (app/dev/entrar) — o bloco some do bundle de produção */}
+          {process.env.NODE_ENV === "development" && !registering && (
+            <p className="mt-3 text-center text-xs text-slate-500">
+              <a href="/dev/entrar" className="font-medium text-slate-400 underline-offset-4 hover:text-ink hover:underline">
+                Entrar como conta de teste (dev)
+              </a>
+            </p>
+          )}
         </div>
       </main>
       <span />

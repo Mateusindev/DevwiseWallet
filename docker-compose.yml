@@ -1,0 +1,23 @@
+# Postgres de dev da Wallet. Porta 5434 de propósito: 5432/5433 são de outros
+# projetos (não usar o `pglocal`). `docker compose up -d` aqui na raiz.
+services:
+  db:
+    image: postgres:16
+    container_name: wallet-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cofre
+      POSTGRES_PASSWORD: cofre
+      POSTGRES_DB: cofre
+    ports:
+      - "5434:5432"
+    volumes:
+      - wallet-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cofre -d cofre"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  wallet-db:
