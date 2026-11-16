@@ -130,7 +130,7 @@ export default function Caixinhas() {
             {/* gráfico de bolsa do saldo guardado */}
             <Card className="group p-5 sm:p-6">
               <CardHeader title="Evolução do guardado" art="chart_increasing"
-                          description="Cada vela é um mês do saldo guardado — passe o dedo pra ver" className="mb-4" />
+                          description="Saldo guardado mês a mês — passe o dedo pra ver" className="mb-4" />
               {ordered.length > 1 && (
                 <div className="mb-4 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Caixinha no gráfico">
                   <Chip ativo={!filtroValido} onClick={() => setFiltro(null)}>Todas</Chip>
@@ -143,7 +143,7 @@ export default function Caixinhas() {
               )}
               <GraficoBolsa key={filtroValido ?? "todas"} points={grafico.points} inicio={grafico.inicio}
                             destaque={currentMonthKey()} rotulos={ROTULOS}
-                            chavePref="caixinhas" />
+                            chavePref="caixinhas" alternarTipo />
             </Card>
 
             {/* total + divisão (era o primeiro cartão do Início) */}

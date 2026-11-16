@@ -298,7 +298,9 @@ body {
 .bolsa-traco { stroke-dasharray: 1; animation: bolsa-traco 900ms cubic-bezier(.3,.7,.2,1) both; }
 .bolsa-cresce { transform-box: fill-box; transform-origin: center; animation: bolsa-cresce 500ms cubic-bezier(.3,.7,.2,1) both; }
 .bolsa-pulso { transform-box: fill-box; transform-origin: center; animation: bolsa-pulso 1.8s ease-out infinite; }
+@keyframes bolsa-surge { from { opacity: 0; } to { opacity: 1; } }
+.bolsa-surge { animation: bolsa-surge 700ms ease-out both; }
 @media (prefers-reduced-motion: reduce) {
-  .bolsa-traco, .bolsa-cresce, .bolsa-pulso { animation: none; }
+  .bolsa-traco, .bolsa-cresce, .bolsa-pulso, .bolsa-surge { animation: none; }
   .bolsa-pulso { opacity: 0; }
 }

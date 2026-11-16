@@ -9,11 +9,12 @@
 // Verde fechou acima da abertura, vermelho abaixo. Linha cobalto = média móvel
 // de 3 meses do fechamento. Embaixo, volume: entradas × saídas do mês.
 // Número grande segue o crosshair; último fechamento pulsa; período 3M/6M/1A
-// (preferência em localStorage, por tela).
+// (preferência em localStorage, por tela). Com `alternarTipo`, troca entre
+// velas e linha (fechamento com área embaixo, cor pelo saldo do período).
 //
 // SVG puro (sem lib): largura medida por ResizeObserver, então texto e traço
 // ficam nítidos em vez de esticar com viewBox.
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useMemo, useState, useSyncExternalStore } from "react";
 import { fmtMoney } from "../../lib/format.js";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
@@ -21,6 +22,7 @@ const cx = (...c) => c.filter(Boolean).join(" ");
 const UP = "var(--acento-emerald)";
 const DOWN = "var(--acento-rose)";
 const BRAND = "var(--color-brand)";
+const TIPOS = [{ id: "velas", nome: "Velas" }, { id: "linha", nome: "Linha" }];
 const PERIODOS = [{ id: 3, nome: "3M" }, { id: 6, nome: "6M" }, { id: 12, nome: "1A" }];
 
 // ── utilitários ─────────────────────────────────────────────────────────────
@@ -159,9 +161,13 @@ const ROTULOS_ORCAMENTO = { acumulado: "Saldo acumulado até", entrada: "Recebid
 // `inicio` = saldo antes do primeiro ponto (caixinhas: o saldo real; orçamento:
 // null, acumula só o período visto). `rotulos` troca os textos; `chavePref`
 // separa a preferência de período de cada tela.
-export function GraficoBolsa({ points, destaque, height = 320, inicio = null, rotulos, chavePref = "orcamento" }) {
+export function GraficoBolsa({ points, destaque, height = 320, inicio = null, rotulos, chavePref = "orcamento", alternarTipo = false }) {
   const R = { ...ROTULOS_ORCAMENTO, ...rotulos };
   const [periodo, setPeriodo] = usePref(`wallet:grafico-${chavePref}-periodo`, 12, PERIODOS.map((p) => p.id));
+  const [tipoPref, setTipo] = usePref(`wallet:grafico-${chavePref}-tipo`, "velas", TIPOS.map((t) => t.id));
+  const tipo = alternarTipo ? tipoPref : "velas";
+  const linha = tipo === "linha";
+  const gradId = `bolsa-area-${useId().replace(/:/g, "")}`;
   const [hover, setHover] = useState(null);
   const [ref, W] = useLargura();
 
@@ -198,8 +204,9 @@ export function GraficoBolsa({ points, destaque, height = 320, inicio = null, ro
   // doji (abriu = fechou): nem subiu nem desceu — neutro, não verde/vermelho
   const corDe = (p) => (Math.abs(p.close - p.open) < 0.005 ? "var(--color-slate-500)" : sobe(p) ? UP : DOWN);
 
-  // escala automática, como corretora (forçar o zero achataria as velas)
-  const vals = serie.flatMap((p) => [p.low, p.high]);
+  // escala automática, como corretora (forçar o zero achataria as velas).
+  // Na linha só o fechamento importa — máx./mín. hipotéticos achatariam a curva.
+  const vals = linha ? [serie[0].open, ...serie.map((p) => p.close)] : serie.flatMap((p) => [p.low, p.high]);
   const vMin = Math.min(...vals), vMax = Math.max(...vals);
   const folga = (vMax - vMin) * 0.08;
   const { lo, hi, marcas } = escalaY(vMin - folga, vMax + folga);
@@ -229,6 +236,9 @@ export function GraficoBolsa({ points, destaque, height = 320, inicio = null, ro
   const pct = prev && prev.close !== 0 ? (delta / Math.abs(prev.close)) * 100 : null;
   const rotuloCada = band < 34 ? 2 : 1;
   const ult = serie[ultimo];
+  // linha: cor pelo período inteiro (subiu desde a abertura do 1º mês?)
+  const corLinha = ult.close >= serie[0].open ? UP : DOWN;
+  const corUlt = linha ? corLinha : corDe(ult);
 
   return (
     <div>
@@ -251,12 +261,15 @@ export function GraficoBolsa({ points, destaque, height = 320, inicio = null, ro
             )}
           </p>
         </div>
-        <Segmentos label="Período" opcoes={PERIODOS} valor={periodo} onChange={(v) => { setPeriodo(v); setHover(null); }} />
+        <div className="flex flex-wrap gap-2">
+          {alternarTipo && <Segmentos label="Tipo de gráfico" opcoes={TIPOS} valor={tipo} onChange={(v) => { setTipo(v); setHover(null); }} />}
+          <Segmentos label="Período" opcoes={PERIODOS} valor={periodo} onChange={(v) => { setPeriodo(v); setHover(null); }} />
+        </div>
       </div>
 
       {/* OHLC + volume do mês, como a régua de uma corretora */}
       <dl className="tnum mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[12px]">
-        {[["Abert.", pa.open], ["Máx.", pa.high], ["Mín.", pa.low], ["Fech.", pa.close]].map(([k, v]) => (
+        {(linha ? [] : [["Abert.", pa.open], ["Máx.", pa.high], ["Mín.", pa.low], ["Fech.", pa.close]]).map(([k, v]) => (
           <div key={k} className="flex gap-1.5">
             <dt className="text-slate-500">{k}</dt>
             <dd className="font-semibold" style={{ color: corDe(pa) }}>{fmtMoney(v)}</dd>
@@ -276,7 +289,7 @@ export function GraficoBolsa({ points, destaque, height = 320, inicio = null, ro
         {W > 0 && (
           <svg width={W} height={height} className="block touch-pan-y overflow-visible"
                role="img"
-               aria-label={"Velas mensais, fechamento: " + serie.map((p) => `${p.label} ${fmtMoney(p.close)}`).join(", ")}>
+               aria-label={(linha ? "Saldo mês a mês: " : "Velas mensais, fechamento: ") + serie.map((p) => `${p.label} ${fmtMoney(p.close)}`).join(", ")}>
             {/* grade + eixo Y à direita */}
             {marcas.map((m) => (
               <g key={m}>
@@ -287,19 +300,41 @@ export function GraficoBolsa({ points, destaque, height = 320, inicio = null, ro
               </g>
             ))}
 
+            <defs>
+              <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" style={{ stopColor: corLinha, stopOpacity: 0.28 }} />
+                <stop offset="100%" style={{ stopColor: corLinha, stopOpacity: 0 }} />
+              </linearGradient>
+            </defs>
+
             {/* legenda da média móvel */}
-            <text x={padL + 2} y={padT - 8} className="fill-slate-400 text-[10.5px] font-medium">
+            {!linha && <text x={padL + 2} y={padT - 8} className="fill-slate-400 text-[10.5px] font-medium">
               <tspan style={{ fill: BRAND }}>━</tspan> MM3 <tspan className="tnum fill-ink">{fmtEixo(pa.mm3)}</tspan>
-            </text>
+            </text>}
 
             {/* faixa do mês sob o cursor */}
             {hover != null && (
               <rect x={xOf(hover) - band / 2} y={padT} width={band} height={plotH + volGap + volH} style={{ fill: "var(--realce)" }} />
             )}
 
-            <g key={`${periodo}-${n}`}>
+            <g key={`${tipo}-${periodo}-${n}`}>
+              {/* linha: fechamento com área até o pé do gráfico */}
+              {linha && (() => {
+                const pts = serie.map((p, i) => [xOf(i), y(p.close)]);
+                const d = curva(pts);
+                const area = `${d}L${pts[ultimo][0]},${base}L${pts[0][0]},${base}Z`;
+                return (
+                  <>
+                    <path d={area} className="bolsa-surge" style={{ fill: `url(#${gradId})` }} />
+                    <path d={d} pathLength={1} fill="none" strokeWidth={2.25} strokeLinejoin="round" strokeLinecap="round"
+                          style={{ stroke: corLinha }} className="bolsa-traco" />
+                    {n === 1 && <circle cx={pts[0][0]} cy={pts[0][1]} r={3.5} style={{ fill: corLinha }} />}
+                  </>
+                );
+              })()}
+
               {/* velas */}
-              {serie.map((p, i) => {
+              {!linha && serie.map((p, i) => {
                 const cor = corDe(p);
                 const yA = y(Math.max(p.open, p.close));
                 const yB = y(Math.min(p.open, p.close));
@@ -315,8 +350,8 @@ export function GraficoBolsa({ points, destaque, height = 320, inicio = null, ro
               })}
 
               {/* média móvel de 3 */}
-              <path d={curva(serie.map((p, i) => [xOf(i), y(p.mm3)]))} pathLength={1} fill="none" strokeWidth={1.75}
-                    strokeLinejoin="round" strokeLinecap="round" style={{ stroke: BRAND }} className="bolsa-traco" />
+              {!linha && <path d={curva(serie.map((p, i) => [xOf(i), y(p.mm3)]))} pathLength={1} fill="none" strokeWidth={1.75}
+                    strokeLinejoin="round" strokeLinecap="round" style={{ stroke: BRAND }} className="bolsa-traco" />}
 
               {/* volume: entradas × saídas */}
               <line x1={padL} x2={W - padR} y1={volTop + volH} y2={volTop + volH} style={{ stroke: "var(--color-line-strong)" }} />
@@ -337,10 +372,11 @@ export function GraficoBolsa({ points, destaque, height = 320, inicio = null, ro
             {/* último fechamento "ao vivo" — some quando o crosshair assume */}
             {hover == null && (
               <>
-                <line x1={xOf(ultimo) + bw / 2} x2={W - padR} y1={y(ult.close)} y2={y(ult.close)} strokeDasharray="2 3"
-                      style={{ stroke: corDe(ult), opacity: 0.7 }} />
-                <circle cx={W - padR} cy={y(ult.close)} r={3} style={{ fill: corDe(ult) }} className="bolsa-pulso" />
-                <TagY x={tagX} y={y(ult.close)} w={tagW} texto={fmtEixo(ult.close)} cor={corDe(ult)} />
+                <line x1={xOf(ultimo) + (linha ? 0 : bw / 2)} x2={W - padR} y1={y(ult.close)} y2={y(ult.close)} strokeDasharray="2 3"
+                      style={{ stroke: corUlt, opacity: 0.7 }} />
+                {linha && <circle cx={xOf(ultimo)} cy={y(ult.close)} r={3.5} style={{ fill: corUlt }} />}
+                <circle cx={linha ? xOf(ultimo) : W - padR} cy={y(ult.close)} r={3} style={{ fill: corUlt }} className="bolsa-pulso" />
+                <TagY x={tagX} y={y(ult.close)} w={tagW} texto={fmtEixo(ult.close)} cor={corUlt} />
               </>
             )}
 
@@ -350,6 +386,8 @@ export function GraficoBolsa({ points, destaque, height = 320, inicio = null, ro
                 <line x1={xOf(hover)} x2={xOf(hover)} y1={padT} y2={volTop + volH} strokeDasharray="3 3" style={{ stroke: "var(--color-slate-500)" }} />
                 <line x1={padL} x2={W - padR} y1={y(pa.close)} y2={y(pa.close)} strokeDasharray="3 3" style={{ stroke: "var(--color-slate-500)" }} />
                 <TagY x={tagX} y={y(pa.close)} w={tagW} texto={fmtEixo(pa.close)} />
+                {linha && <circle cx={xOf(hover)} cy={y(pa.close)} r={4.5} strokeWidth={2}
+                                  style={{ fill: "var(--color-surface)", stroke: corLinha }} />}
                 <TagX x={Math.min(Math.max(xOf(hover), padL + 22), W - padR - 22)} y={height - padB + 6} texto={pa.label} />
               </g>
             )}
