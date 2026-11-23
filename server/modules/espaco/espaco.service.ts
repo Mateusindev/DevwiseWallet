@@ -42,15 +42,18 @@ export const espacoService = {
   // As três leituras não dependem uma da outra: em série eram três voltas de
   // rede no caminho crítico do boot.
   async listWithActive(userId: string) {
-    const [espacos, ativoGravado, ocultos] = await Promise.all([
+    const [espacos, settings, ocultos] = await Promise.all([
       espacoRepository.list(userId),
-      espacoRepository.getActiveEspacoId(userId),
+      espacoRepository.getSettings(userId),
       espacoRepository.listOcultos(userId),
     ]);
+    const ativoGravado = settings.activeEspacoId;
     const activeEspacoId = espacoAtivo(espacos, ativoGravado);
     if (activeEspacoId !== ativoGravado) await espacoRepository.setActiveEspacoId(userId, activeEspacoId);
     const espacosOcultos = ocultos.map((o) => ({ espacoId: o.espacoId, ym: o.ym }));
-    return { espacos: espacos.map(espacoView), activeEspacoId, espacosOcultos };
+    // `selic` vem de carona: mora na mesma linha de app_settings, e uma query
+    // a mais no boot seria mais uma volta de rede.
+    return { espacos: espacos.map(espacoView), activeEspacoId, espacosOcultos, selic: settings.selic };
   },
 
   // Oculta o espaço só no mês `ym` (exclusão reversível daquele mês).

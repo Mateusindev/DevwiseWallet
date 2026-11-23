@@ -26,6 +26,7 @@ import {
   criarCaixinha,
   atualizarCaixinha,
   removerCaixinha,
+  definirSelic,
 } from "@/server/modules/caixinha/caixinha.actions";
 import type {
   createCaixinhaSchema,
@@ -353,6 +354,11 @@ export async function updateCaixinha(id: string, patch: z.input<typeof updateCai
 
 export async function removeCaixinha(id: string) {
   return mutar(removerCaixinha(id));
+}
+
+// Selic atual do usuário (base das caixinhas em % do CDI).
+export async function setSelic(selic: number) {
+  return mutar(definirSelic({ selic }));
 }
 
 // ── Espaços de despesa ────────────────────────────────────────────────────────

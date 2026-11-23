@@ -19,6 +19,7 @@ const initial = {
   espacos: [],
   espacosOcultos: [], // [{ espacoId, ym }] — páginas excluídas só num mês (reversível)
   activeEspacoId: null,
+  selic: null, // Selic atual do usuário (% a.a.) — base das caixinhas em % do CDI
   orcamentoStatus: "ready", // troca de espaço (in-page): ready | loading
   espacoPendente: null, // aba clicada cujo orçamento ainda está vindo
   // orçamento do espaço ativo
@@ -52,6 +53,7 @@ function reducer(state, action) {
         espacos: action.p.espacos,
         espacosOcultos: action.p.espacosOcultos || [],
         activeEspacoId: action.p.activeEspacoId,
+        selic: action.p.selic ?? null,
         orcamentoStatus: "ready",
         ...action.p.orcamento,
       };
@@ -105,6 +107,8 @@ function reducer(state, action) {
           : [...state.caixinhas, action.cx],
       };
     }
+    case "SET_SELIC":
+      return { ...state, selic: action.selic };
     case "REMOVE_CAIXINHA":
       return {
         ...state,
@@ -509,6 +513,11 @@ export function FinanceProvider({ children, estadoPromise }) {
       const cx = await api.updateCaixinha(id, patch);
       dispatch({ type: "UPSERT_CAIXINHA", cx });
       return cx;
+    },
+    async setSelic(selic) {
+      const r = await api.setSelic(selic);
+      dispatch({ type: "SET_SELIC", selic: r.selic });
+      return r.selic;
     },
     async removeCaixinha(id) {
       await api.removeCaixinha(id);

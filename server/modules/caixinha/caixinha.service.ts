@@ -2,7 +2,7 @@ import type { Caixinha } from "@prisma/client";
 import { caixinhaRepository } from "./caixinha.repository";
 import { NotFoundError } from "@/server/lib/errors";
 import { round } from "@/server/lib/serialize";
-import type { CreateCaixinhaDTO, UpdateCaixinhaDTO } from "./caixinha.dto";
+import type { CreateCaixinhaDTO, UpdateCaixinhaDTO, SelicDTO } from "./caixinha.dto";
 
 import { toView } from "./caixinha.view";
 
@@ -31,6 +31,7 @@ export const caixinhaService = {
       tipo: dto.tipo ?? null,
       aporteMensal: round(dto.aporteMensal),
       taxaJuros: round(dto.taxaJuros),
+      percentualCdi: dto.percentualCdi != null ? round(dto.percentualCdi) : null,
       meta: dto.meta != null ? round(dto.meta) : null,
       saldo: 0,
       cor: dto.cor,
@@ -45,10 +46,18 @@ export const caixinhaService = {
     const data: Record<string, unknown> = { ...patch };
     if (patch.aporteMensal != null) data.aporteMensal = round(patch.aporteMensal);
     if (patch.taxaJuros != null) data.taxaJuros = round(patch.taxaJuros);
+    if (patch.percentualCdi !== undefined) data.percentualCdi = patch.percentualCdi != null ? round(patch.percentualCdi) : null;
     if (patch.meta !== undefined) data.meta = patch.meta != null ? round(patch.meta) : null;
     if (patch.saldo != null) data.saldo = round(patch.saldo);
     const cx = await caixinhaRepository.update(id, data);
     return toView(cx);
+  },
+
+  // Selic é do usuário (app_settings), não da caixinha: mudou uma vez, toda
+  // caixinha em % do CDI recalcula a previsão.
+  async setSelic(userId: string, dto: SelicDTO) {
+    const selic = await caixinhaRepository.setSelic(userId, round(dto.selic));
+    return { selic };
   },
 
   async remove(userId: string, id: string) {

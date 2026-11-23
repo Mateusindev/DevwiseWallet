@@ -64,6 +64,7 @@ mock.module("@/server/modules/espaco/espaco.repository", () => ({
       state.unhidden = { espacoId, ym };
     },
     getActiveEspacoId: async () => state.activeId,
+    getSettings: async () => ({ activeEspacoId: state.activeId, selic: null }),
     setActiveEspacoId: async (_userId: string, id: string | null) => {
       state.activeId = id;
       return id;

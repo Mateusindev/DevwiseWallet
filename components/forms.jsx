@@ -5,7 +5,7 @@ import { Select, SelectItem, CheckboxField, NumberInput, DayInput, DateInput, Mo
 import { useFormState } from "./ui/useFormState.js";
 import { dataValida, texto } from "../lib/formErrors.js";
 import { addMonths, fmtMoney, fmtMonthLabel, todayISO } from "../lib/format.js";
-import { acento, parcelaInfo, sugereFechamento, sugereVencimento } from "../lib/calc.js";
+import { acento, parcelaInfo, sugereFechamento, sugereVencimento, taxaAnualCaixinha, cdiAnual, SELIC_PADRAO } from "../lib/calc.js";
 import { useAuth } from "./AuthGate";
 
 // Regras que repetem em quase todo form daqui.
@@ -556,27 +556,41 @@ export function ReceitaMesModal({ open, onClose, mes, mesLabel, receita, escopo 
 
 // ── Nova caixinha ─────────────────────────────────────────────────────────────
 const CORES = ["emerald", "blue", "violet", "amber", "rose", "cyan"];
+// Rendimento: taxa fixa (% a.a.) ou % do CDI. No modo CDI a Selic é do
+// usuário (vale pra todas as caixinhas) — editar aqui grava pra todas.
 export function CaixinhaModal({ open, onClose, caixinha }) {
-  const { addCaixinha, updateCaixinha } = useFinance();
+  const { addCaixinha, updateCaixinha, selic: selicAtual, setSelic } = useFinance();
   const editing = !!caixinha;
-  const init = () =>
-    caixinha
+  const selicInicial = selicAtual ?? SELIC_PADRAO;
+  const init = () => {
+    const base = caixinha
       ? { nome: caixinha.nome, aporteMensal: caixinha.aporteMensal, taxaJuros: caixinha.taxaJuros ?? 0, meta: caixinha.meta ?? 0, cor: caixinha.cor, acumulaSobra: !!caixinha.acumulaSobra }
       : { nome: "", aporteMensal: 0, taxaJuros: 0, meta: 0, cor: "blue", acumulaSobra: false };
+    const pctCdi = caixinha?.percentualCdi ?? null;
+    return { ...base, modo: pctCdi != null ? "cdi" : "fixa", percentualCdi: pctCdi ?? 100, selic: selicInicial };
+  };
   const { f, set, errors, formError, touch, submitting, submit, reset } = useFormState(
     init,
     (f) => ({
       nome: texto(f.nome, { obrigatorio: true, max: 80, campo: "O nome" }),
       meta: f.meta >= 0 ? "" : "A meta não pode ser negativa.",
-      taxaJuros: f.taxaJuros >= 0 && f.taxaJuros <= 100 ? "" : "O rendimento vai de 0 a 100% a.a.",
+      taxaJuros: f.modo === "cdi" || (f.taxaJuros >= 0 && f.taxaJuros <= 100) ? "" : "O rendimento vai de 0 a 100% a.a.",
+      percentualCdi: f.modo !== "cdi" || (f.percentualCdi > 0 && f.percentualCdi < 1000) ? "" : "Informe quantos % do CDI (ex.: 100, 110).",
+      selic: f.modo !== "cdi" || (f.selic > 0 && f.selic <= 100) ? "" : "Informe a Selic atual (ex.: 15,00).",
     }),
     async (f) => {
-      const dto = { ...f, meta: f.meta > 0 ? f.meta : null };
+      const { modo, selic, ...resto } = f;
+      const cdi = modo === "cdi";
+      // Selic primeiro: se a caixinha falhar depois, a Selic nova já vale (é do usuário).
+      if (cdi && selic !== selicAtual) await setSelic(selic);
+      const dto = { ...resto, meta: f.meta > 0 ? f.meta : null, percentualCdi: cdi ? f.percentualCdi : null };
       if (editing) await updateCaixinha(caixinha.id, dto);
       else await addCaixinha(dto);
       close();
     }
   );
+  const taxaPrevista = taxaAnualCaixinha({ percentualCdi: f.percentualCdi }, f.selic);
+  const fmtPct = (v) => (v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   function close() { reset(); onClose(); }
 
@@ -596,10 +610,34 @@ export function CaixinhaModal({ open, onClose, caixinha }) {
             <MoneyInput name="meta" value={f.meta} onValue={(v) => set("meta", v)} />
           </Field>
         </div>
-        <Field label="Rendimento" error={errors.taxaJuros}
+        <Field label="Rendimento"
                hint="Juros compostos usados só na previsão da meta. O saldo continua vindo das movimentações.">
-          <PercentInput name="taxaJuros" value={f.taxaJuros} onValue={(v) => set("taxaJuros", v)} />
+          <Select name="modo" value={f.modo} onValue={(v) => set("modo", v)}>
+            <SelectItem value="fixa">Taxa fixa ao ano</SelectItem>
+            <SelectItem value="cdi">Percentual do CDI</SelectItem>
+          </Select>
         </Field>
+        {f.modo === "cdi" ? (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Quanto rende do CDI" error={errors.percentualCdi}>
+                <PercentInput name="percentualCdi" suffix="% do CDI" value={f.percentualCdi}
+                              onValue={(v) => set("percentualCdi", v)} placeholder="100,00" />
+              </Field>
+              <Field label="Selic atual" error={errors.selic} hint="Vale pra todas as caixinhas.">
+                <PercentInput name="selic" value={f.selic} onValue={(v) => set("selic", v)} placeholder="15,00" />
+              </Field>
+            </div>
+            <p className="tnum -mt-1 text-[13px] text-slate-500">
+              CDI ≈ {fmtPct(cdiAnual(f.selic))}% a.a. (Selic − 0,10) · rende ≈{" "}
+              <span className="font-medium text-ink">{fmtPct(taxaPrevista)}% a.a.</span>
+            </p>
+          </>
+        ) : (
+          <Field label="Taxa ao ano" error={errors.taxaJuros}>
+            <PercentInput name="taxaJuros" value={f.taxaJuros} onValue={(v) => set("taxaJuros", v)} />
+          </Field>
+        )}
         <div>
           <p className="mb-2 text-sm font-medium text-slate-200">Cor</p>
           <CorPicker cores={CORES} value={f.cor} onValue={(c) => set("cor", c)} label="Cor da caixinha" />

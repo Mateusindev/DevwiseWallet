@@ -36,7 +36,7 @@ export async function getState(userId: string, ym?: string) {
     [caixinhas, movimentacoes, doUsuario, cartoes, categorias] = await tudo();
   }
 
-  const { espacos, activeEspacoId, espacosOcultos } = doUsuario;
+  const { espacos, activeEspacoId, espacosOcultos, selic = null } = doUsuario;
   const orcamento = activeEspacoId
     ? await espacoService.getOrcamento(userId, activeEspacoId, ym)
     : null;
@@ -45,5 +45,5 @@ export async function getState(userId: string, ym?: string) {
   // (RSC): o FinanceProvider precisa saber se aquele estado é da sessão atual
   // antes de adotá-lo — logout e login com outra conta reaproveitariam a mesma
   // Promise.
-  return { userId, caixinhas, movimentacoes, espacos, activeEspacoId, espacosOcultos, cartoes, categorias, orcamento };
+  return { userId, caixinhas, movimentacoes, espacos, activeEspacoId, espacosOcultos, selic, cartoes, categorias, orcamento };
 }

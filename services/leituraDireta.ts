@@ -41,7 +41,7 @@ const FIXA = `id, espacoId:espaco_id, descricao, valor, diaVencimento:dia_vencim
 const MES = "id, espacoId:espaco_id, mes, descricao, valor, data, paga, valorPago:valor_pago, cartaoId:cartao_id, categoriaId:categoria_id, nota, abateShares:abate_shares, fitid";
 const RECEITA = "id, mes, descricao, valor, data, recorrente, mesFim:mes_fim";
 const CARTAO = "id, nome, bandeira, limite, diaFechamento:dia_fechamento, diaVencimento:dia_vencimento, cor, ordem";
-const CAIXINHA = "id, nome, tipo, aporteMensal:aporte_mensal, taxaJuros:taxa_juros, meta, saldo, cor, acumulaSobra:acumula_sobra, ordem";
+const CAIXINHA = "id, nome, tipo, aporteMensal:aporte_mensal, taxaJuros:taxa_juros, percentualCdi:percentual_cdi, meta, saldo, cor, acumulaSobra:acumula_sobra, ordem";
 
 const YM = /^\d{4}-(0[1-9]|1[0-2])$/;
 // Mesma validação de `ym` que as actions fazem com zod (422 no formato errado).
@@ -209,8 +209,8 @@ export async function getBootstrapDireto(ym?: string) {
           .order("data", { ascending: false })
       ),
       linhas<Lista>(db.from("espacos").select("id, nome, tipo, emoji").order("created_at", { ascending: true })),
-      linhas<{ activeEspacoId: string | null } | null>(
-        db.from("app_settings").select("activeEspacoId:active_espaco_id").maybeSingle()
+      linhas<{ activeEspacoId: string | null; selic: number | string | null } | null>(
+        db.from("app_settings").select("activeEspacoId:active_espaco_id, selic").maybeSingle()
       ),
       linhas<{ espacoId: string; ym: string }[]>(db.from("espaco_mes_oculto").select("espacoId:espaco_id, ym")),
       lerCartoes(db, m),
@@ -228,6 +228,7 @@ export async function getBootstrapDireto(ym?: string) {
       espacos: espacos.map((e) => espacoView(e as never)),
       activeEspacoId,
       espacosOcultos: ocultos.map((o) => ({ espacoId: o.espacoId, ym: o.ym })),
+      selic: settings?.selic != null ? Number(settings.selic) : null,
       cartoes,
       categorias: categorias.map((c) => categoriaView(c as never)),
       orcamento,

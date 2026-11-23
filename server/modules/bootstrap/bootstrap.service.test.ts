@@ -119,6 +119,7 @@ describe("getState", () => {
         "espacosOcultos",
         "movimentacoes",
         "orcamento",
+        "selic",
         "userId",
       ].sort()
     );

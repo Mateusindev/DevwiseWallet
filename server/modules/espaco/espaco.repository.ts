@@ -99,6 +99,12 @@ export const espacoRepository = {
   },
 
   // ── app_settings (uma linha por usuário; PK = user_id) ─────────────────────
+  // Linha inteira: o boot lê espaço ativo e Selic na MESMA ida ao banco.
+  async getSettings(userId: string): Promise<{ activeEspacoId: string | null; selic: number | null }> {
+    const s = await prisma.appSettings.findUnique({ where: { userId } });
+    return { activeEspacoId: s?.activeEspacoId ?? null, selic: s?.selic != null ? Number(s.selic) : null };
+  },
+
   async getActiveEspacoId(userId: string): Promise<string | null> {
     const s = await prisma.appSettings.findUnique({ where: { userId } });
     return s?.activeEspacoId ?? null;

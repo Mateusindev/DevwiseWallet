@@ -2,7 +2,7 @@
 
 import { acao, acaoValidada } from "@/server/next/action";
 import { caixinhaService } from "./caixinha.service";
-import { createCaixinhaSchema, updateCaixinhaSchema } from "./caixinha.dto";
+import { createCaixinhaSchema, updateCaixinhaSchema, selicSchema } from "./caixinha.dto";
 
 export async function listarCaixinhas() {
   return acao("caixinha:view", (user) => caixinhaService.list(user.id));
@@ -22,4 +22,10 @@ export async function atualizarCaixinha(id: string, input: unknown) {
 
 export async function removerCaixinha(id: string) {
   return acao("caixinha:manage", (user) => caixinhaService.remove(user.id, id));
+}
+
+export async function definirSelic(input: unknown) {
+  return acaoValidada("caixinha:manage", selicSchema, input, (user, dto) =>
+    caixinhaService.setSelic(user.id, dto)
+  );
 }

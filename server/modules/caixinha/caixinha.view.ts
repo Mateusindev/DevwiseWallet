@@ -10,6 +10,7 @@ export type CaixinhaLinha = {
   tipo: string | null;
   aporteMensal: Dec;
   taxaJuros: Dec;
+  percentualCdi: Dec;
   meta: Dec;
   saldo: Dec;
   cor: string;
@@ -24,6 +25,7 @@ export function toView(cx: CaixinhaLinha) {
     tipo: cx.tipo ?? null,
     aporteMensal: num(cx.aporteMensal),
     taxaJuros: num(cx.taxaJuros),
+    percentualCdi: numOrNull(cx.percentualCdi),
     meta: numOrNull(cx.meta),
     saldo: num(cx.saldo),
     cor: cx.cor,

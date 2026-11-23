@@ -26,4 +26,15 @@ export const caixinhaRepository = {
   delete(id: string) {
     return prisma.caixinha.delete({ where: { id } });
   },
+
+  // app_settings é uma linha por usuário (PK = user_id); a leitura vem junto
+  // com o espaço ativo em `espacoRepository.getSettings`.
+  async setSelic(userId: string, selic: number) {
+    await prisma.appSettings.upsert({
+      where: { userId },
+      create: { userId, selic },
+      update: { selic },
+    });
+    return selic;
+  },
 };

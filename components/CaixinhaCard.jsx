@@ -5,6 +5,7 @@ import { fmtMoney, fmtMeses } from "../lib/format.js";
 import { progresso, mesesParaMeta, faltaParaMeta, acento } from "../lib/calc.js";
 import { ReservaEmergenciaModal } from "./forms.jsx";
 import { useAuth } from "./AuthGate";
+import { useFinance } from "../store/FinanceContext.jsx";
 
 // Tipo da caixinha em palavras (a etiqueta leva o tom da própria caixinha).
 function tipoDe(c) {
@@ -18,7 +19,8 @@ export default function CaixinhaCard({ caixinha, onAporte, onDespesa, onOpen }) 
   const { can } = useAuth();
   const a = acento(caixinha.cor);
   const prog = progresso(caixinha);
-  const meses = mesesParaMeta(caixinha);
+  const { selic } = useFinance();
+  const meses = mesesParaMeta(caixinha, selic);
   const falta = faltaParaMeta(caixinha);
   const temMeta = caixinha.meta != null;
   const isEmergencia = caixinha.tipo === "emergencia";

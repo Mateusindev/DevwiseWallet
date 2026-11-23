@@ -433,8 +433,9 @@ export function Textarea({ className, rows = 2, ...rest }) {
   return <textarea rows={rows} className={cx(inputBase, "h-auto resize-y py-2.5", className)} {...rest} />;
 }
 
-// Percent input — mesma máscara de 2 casas do MoneyInput, sufixo "% a.a.".
-export function PercentInput({ value, onValue, placeholder = "0,00", ...rest }) {
+// Percent input — mesma máscara de 2 casas do MoneyInput, sufixo "% a.a." (ou
+// outro: "% do CDI").
+export function PercentInput({ value, onValue, placeholder = "0,00", suffix = "% a.a.", ...rest }) {
   const handle = (e) => {
     const digits = e.target.value.replace(/\D/g, "");
     onValue(digits ? Number(digits) / 100 : 0);
@@ -447,13 +448,13 @@ export function PercentInput({ value, onValue, placeholder = "0,00", ...rest }) 
     <div className="relative">
       <input
         inputMode="numeric"
-        className={cx(inputBase, "pr-16 tnum")}
+        className={cx(inputBase, suffix.length > 6 ? "pr-24 tnum" : "pr-16 tnum")}
         value={display}
         onChange={handle}
         placeholder={placeholder}
         {...rest}
       />
-      <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-500">% a.a.</span>
+      <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-500">{suffix}</span>
     </div>
   );
 }

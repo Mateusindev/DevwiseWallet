@@ -7,12 +7,12 @@ import {
 } from "./ui/primitives.jsx";
 import { AporteModal, DespesaVariavelModal, CaixinhaModal } from "./forms.jsx";
 import { fmtMoney, fmtMeses, fmtDate, monthKey, fmtMonthLabel } from "../lib/format.js";
-import { progresso, mesesParaMeta, faltaParaMeta, acento } from "../lib/calc.js";
+import { progresso, mesesParaMeta, faltaParaMeta, acento, taxaAnualCaixinha, cdiAnual, SELIC_PADRAO } from "../lib/calc.js";
 import { useFinance } from "../store/FinanceContext.jsx";
 import { useAuth } from "./AuthGate";
 
 export default function CaixinhaDetail({ caixinha, onBack }) {
-  const { movimentacoes, removeMovimentacao, removeCaixinha } = useFinance();
+  const { movimentacoes, removeMovimentacao, removeCaixinha, selic } = useFinance();
   const { can } = useAuth();
   const canMov = can("movimentacao:manage");
   const canEdit = can("caixinha:manage");
@@ -126,7 +126,7 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
               </p>
               <p className="tnum mt-0.5 text-[13px] text-slate-500">
                 {falta > 0
-                  ? <>Faltam {fmtMoney(falta)} · estimativa de {fmtMeses(mesesParaMeta(caixinha))}</>
+                  ? <>Faltam {fmtMoney(falta)} · estimativa de {fmtMeses(mesesParaMeta(caixinha, selic))}</>
                   : <span className="text-emerald-400">Meta atingida</span>}
               </p>
             </div>
@@ -134,8 +134,12 @@ export default function CaixinhaDetail({ caixinha, onBack }) {
 
           <dl className="mt-5 space-y-2.5 border-t border-[var(--color-line)] pt-4 text-sm">
             <Linha label="Aporte mensal" value={caixinha.aporteMensal > 0 ? fmtMoney(caixinha.aporteMensal) : "—"} />
-            {caixinha.taxaJuros > 0 && (
-              <Linha label="Rendimento" value={`${caixinha.taxaJuros.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% a.a.`} />
+            {caixinha.percentualCdi > 0 ? (
+              <Linha label="Rendimento"
+                     value={`${pct(caixinha.percentualCdi)}% do CDI · ≈ ${pct(taxaAnualCaixinha(caixinha, selic))}% a.a.`}
+                     title={`CDI ${pct(cdiAnual(selic))}% a.a. (Selic ${pct(selic ?? SELIC_PADRAO)}% − 0,10)`} />
+            ) : caixinha.taxaJuros > 0 && (
+              <Linha label="Rendimento" value={`${pct(caixinha.taxaJuros)}% a.a.`} />
             )}
             <Linha label="Total aportado" value={`+${fmtMoney(totais.entrou)}`} tone="pos" />
             <Linha label="Total retirado" value={fmtMoney(totais.saiu)} />
@@ -227,11 +231,13 @@ function tipoDe(c) {
   return "Livre";
 }
 
-function Linha({ label, value, tone }) {
+const pct = (v) => (v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+
+function Linha({ label, value, tone, title }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="text-slate-400">{label}</dt>
-      <dd className={`tnum font-medium ${tone === "pos" ? "text-emerald-400" : "text-ink"}`}>{value}</dd>
+      <dd title={title} className={`tnum text-right font-medium ${tone === "pos" ? "text-emerald-400" : "text-ink"}`}>{value}</dd>
     </div>
   );
 }
